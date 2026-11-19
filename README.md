@@ -10,13 +10,15 @@ Quando você trava o campeão, ele importa para o cliente:
 
 A janela mostra o build completo: runas, feitiços, ordem de habilidades, inícios, botas e uma tabela de itens por posição (1º, 2º, 3º…) com WR, pick rate e partidas.
 
-**Sem overlay.** A janela abre sozinha na seleção de campeões e **fecha quando a partida começa**; fora disso, só um ícone na bandeja (~10 MB de RAM, ouvindo o WebSocket do cliente).
+**Sem overlay.** A janela abre sozinha na seleção de campeões e **fecha quando a partida começa**; fora disso, só um ícone na bandeja (sem o WebView, só o processo Rust ouvindo o WebSocket do cliente).
 
 > Não afiliado à Riot Games nem ao lolalytics. O lolalytics não tem API pública: o app usa o mesmo endpoint JSON que o site usa, com cache de 6 h e no máximo uma requisição por segundo, e sempre linka a página original.
 
+**[Code signing policy](CODE_SIGNING_POLICY.md)** · Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (em andamento: veja [docs/SIGNING.md](docs/SIGNING.md)). Privacidade: o app só fala com o cliente do League no seu computador e com o lolalytics (campeão, lane e filtros; nada pessoal).
+
 ## Instalar e usar
 
-1. Baixe o instalador em *Releases* (ou compile, abaixo) e abra o app.
+1. Baixe o instalador em *Releases* (ou compile, abaixo) e abra o app. Prefira o **`.msi`** quando houver versão assinada: é ele que o Smart App Control aceita.
 2. Abra o cliente do League. O ponto verde no topo indica que o app achou o cliente.
 3. Entre numa fila. Na seleção de campeões, trave o campeão: runas, feitiços e itens entram sozinhos.
 4. Fora da seleção, use a busca para ver o build de qualquer campeão/lane.

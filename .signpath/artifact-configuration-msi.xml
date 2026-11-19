@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cópia de referência da configuração de artefato "msi" do projeto no SignPath.
+  O SignPath lê a versão cadastrada na interface web (Project → Artifact configurations, slug "msi");
+  mantenha as duas iguais.
+
+  O artefato enviado pelo GitHub Actions é um ZIP (upload-artifact) com um .msi dentro.
+  O SignPath assina o lobby-companion.exe DENTRO do MSI, remonta o MSI e assina o MSI.
+  MSI não tem desinstalador próprio (o Windows desinstala), então nada fica sem assinatura,
+  que é o que o Smart App Control exige.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <msi-file path="*.msi">
+      <pe-file path="**/lobby-companion.exe">
+        <authenticode-sign/>
+      </pe-file>
+      <authenticode-sign/>
+    </msi-file>
+  </zip-file>
+</artifact-configuration>

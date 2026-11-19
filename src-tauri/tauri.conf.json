@@ -18,7 +18,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "msi"],
+    "publisher": "nickmaglowsch",
+    "copyright": "Copyright (c) 2026 nickmaglowsch. MIT License.",
+    "shortDescription": "Runas, feitiços e conjuntos de itens do lolalytics na seleção de campeões",
+    "homepage": "https://github.com/nickmaglowsch/lobby-companion",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -29,6 +33,9 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser"
+      },
+      "wix": {
+        "language": "pt-BR"
       }
     }
   }
