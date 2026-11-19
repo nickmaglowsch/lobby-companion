@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Ícone original do Lobby Companion: moldura hexagonal dourada com um fragmento de runa.
+       Formas geométricas próprias; nenhum asset da Riot. Gere os tamanhos com `npx tauri icon app-icon.svg`. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f1e38"/>
+      <stop offset="1" stop-color="#010a13"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0e6d2"/>
+      <stop offset="0.45" stop-color="#c8aa6e"/>
+      <stop offset="1" stop-color="#785a28"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ff2e3"/>
+      <stop offset="0.5" stop-color="#0ac8b9"/>
+      <stop offset="1" stop-color="#005a82"/>
+    </linearGradient>
+  </defs>
+  <rect x="40" y="40" width="944" height="944" rx="210" fill="url(#bg)" stroke="#785a28" stroke-width="20"/>
+  <polygon points="512,150 826,331 826,693 512,874 198,693 198,331" fill="none" stroke="url(#gold)" stroke-width="56" stroke-linejoin="round"/>
+  <polygon points="512,276 710,512 512,748 314,512" fill="url(#teal)" stroke="url(#gold)" stroke-width="30" stroke-linejoin="round"/>
+  <polygon points="512,400 604,512 512,624 420,512" fill="#f0e6d2" opacity="0.92"/>
+</svg>
