@@ -1,0 +1,43 @@
+<script lang="ts">
+  import { icon, pct, num, type Assets, type ItemStat } from "./api";
+
+  let { label, items, assets, avgWr, minGames }: {
+    label: string;
+    items: ItemStat[];
+    assets: Assets | null;
+    avgWr: number;
+    minGames: number;
+  } = $props();
+
+  const known = $derived(items.filter((i) => assets?.items[i.id]).slice(0, 5));
+  const delta = (wr: number) => wr - avgWr;
+</script>
+
+{#if known.length}
+  <div class="slot">
+    <div class="label">{label}</div>
+    <div class="items">
+      {#each known as it (it.id)}
+        {@const item = assets?.items[it.id]}
+        <div class="item" class:low={it.n < minGames} title="{item?.name} · {num(it.n)} partidas">
+          <img src={icon(item?.icon)} alt={item?.name} />
+          <span class="wr" class:up={delta(it.wr) >= 1} class:down={delta(it.wr) <= -1}>{pct(it.wr)}</span>
+          <span class="pr">{pct(it.pr)}</span>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<style>
+  .slot { display: grid; grid-template-columns: 64px 1fr; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+  .label { color: var(--muted); font-size: 12px; }
+  .items { display: flex; gap: 6px; flex-wrap: wrap; }
+  .item { display: grid; justify-items: center; width: 52px; }
+  .item.low { opacity: 0.45; }
+  img { width: 36px; height: 36px; border: 1px solid var(--gold-dim); border-radius: 4px; background: var(--panel-2); }
+  .wr { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .pr { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .up { color: var(--good); }
+  .down { color: var(--bad); }
+</style>
