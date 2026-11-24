@@ -7,6 +7,13 @@
   } from "$lib/api";
   import Runes from "$lib/Runes.svelte";
   import ItemRow from "$lib/ItemRow.svelte";
+  import { firstBack, situationalItems } from "$lib/api";
+  import Trend from "$lib/Trend.svelte";
+  import DamageBar from "$lib/DamageBar.svelte";
+  import CoreBuild from "$lib/CoreBuild.svelte";
+  import SkillPaths from "$lib/SkillPaths.svelte";
+  import RuneAlternatives from "$lib/RuneAlternatives.svelte";
+  import Composition from "$lib/Composition.svelte";
 
   let snap = $state<Snapshot | null>(null);
   let assets = $state<Assets | null>(null);
@@ -14,6 +21,8 @@
   let search = $state("");
   let importing = $state(false);
   let importError = $state<string | null>(null);
+  // Itens de defesa contra o dano do time inimigo (preenchido por Composition).
+  let defHighlight = $state<number[]>([]);
 
   const build = $derived(snap?.build ?? null);
   const champ = $derived(snap && assets ? assets.champions[snap.championId] : undefined);
@@ -188,6 +197,8 @@
             <button class:active={lane === build.lane} onclick={() => changeLane(lane)}>{LANES[lane] ?? lane} {Math.round(p)}%</button>
           {/each}
         </div>
+        <Trend trend={build.trend} />
+        <DamageBar damage={build.damage} />
       </div>
     </section>
 
@@ -243,6 +254,8 @@
       {/if}
     </section>
 
+    <Composition allies={snap.allyPicks ?? []} enemies={snap.enemyPicks} {build} {assets} {minGames} bind:highlight={defHighlight} />
+
     <section class="card">
       <div class="card-head">
         <h2>Runas</h2>
@@ -252,6 +265,7 @@
         </div>
       </div>
       {#if runeSet}<Runes set={runeSet} {assets} />{:else}<p class="muted">Sem runas.</p>{/if}
+      {#if runeSet}<RuneAlternatives set={runeSet} stats={build.runeStats} {assets} {minGames} />{/if}
     </section>
 
     <section class="card row2">
@@ -279,6 +293,7 @@
             {/each}
           </div>
         {/if}
+        <SkillPaths {build} {minGames} />
       </div>
     </section>
 
@@ -293,10 +308,13 @@
           </div>
         </div>
       {/each}
-      <ItemRow label="Botas" items={build.boots} {assets} avgWr={build.wr} {minGames} />
+      <CoreBuild {build} {assets} {minGames} />
+      <ItemRow label="1ª volta" items={firstBack(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
+      <ItemRow label="Botas" items={build.boots} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {#each build.slots as slot, i (i)}
-        <ItemRow label="{i + 1}º item" items={slot} {assets} avgWr={build.wr} {minGames} />
+        <ItemRow label="{i + 1}º item" items={slot} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {/each}
+      <ItemRow label="Situac." items={situationalItems(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
       <p class="muted small">Verde/vermelho = ≥1 ponto acima/abaixo do WR do campeão. Apagado = menos de {minGames} partidas.</p>
     </section>
   {/if}

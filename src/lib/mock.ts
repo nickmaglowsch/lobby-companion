@@ -1,8 +1,8 @@
 // Dados sintéticos para ver a interface no navegador (`npm run dev`), fora do Tauri.
 // Números inventados: não redistribuímos dados do lolalytics.
-import type { Assets, Settings, Snapshot } from "./api";
+import type { Assets, Composition, Settings, Snapshot } from "./api";
 
-const item = (name: string) => ({ name, icon: "" });
+const item = (name: string, categories: string[] = []) => ({ name, icon: "", categories });
 
 export const mockAssets: Assets = {
   champions: {
@@ -11,19 +11,30 @@ export const mockAssets: Assets = {
     "876": { id: 876, name: "Lillia", alias: "Lillia" }, "99": { id: 99, name: "Lux", alias: "Lux" },
   },
   items: {
-    "1102": item("Filhote de Brasa"), "2003": item("Poção de Vida"), "3009": item("Botas da Rapidez"),
-    "3111": item("Passos de Mercúrio"), "3047": item("Botas Galvanizadas de Aço"), "3084": item("Coração de Aço"),
-    "3152": item("Cinto-foguete Hextec"), "3742": item("Couraça do Defunto"), "4401": item("Força da Natureza"),
-    "3075": item("Armadura de Espinhos"), "6665": item("Jak'Sho"), "2502": item("Égide Imperecível"),
+    "1102": item("Filhote de Brasa", ["Jungle"]), "2003": item("Poção de Vida", ["Consumable"]), "3009": item("Botas da Rapidez", ["Boots"]),
+    "3111": item("Passos de Mercúrio", ["Boots", "SpellBlock"]), "3047": item("Botas Galvanizadas de Aço", ["Armor", "Boots"]),
+    "3084": item("Coração de Aço", ["Health"]), "3152": item("Cinto-foguete Hextec", ["SpellDamage"]),
+    "3742": item("Couraça do Defunto", ["Health", "Armor"]), "4401": item("Força da Natureza", ["Health", "SpellBlock"]),
+    "3075": item("Armadura de Espinhos", ["Health", "Armor"]), "6665": item("Jak'Sho", ["Health", "Armor", "SpellBlock"]),
+    "2502": item("Égide Imperecível", ["Health", "Armor"]), "1028": item("Cristal de Rubi", ["Health"]), "1001": item("Botas", ["Boots"]),
+    "1011": item("Cinto do Gigante", ["Health"]), "3065": item("Semblante Espiritual", ["Health", "SpellBlock"]),
+    "3068": item("Égide de Fogo Solar", ["Health", "Armor"]), "3340": item("Sentinela Invisível", ["Trinket"]),
   },
-  perks: Object.fromEntries([9923, 8126, 8140, 8106, 8224, 8234, 5008, 5010, 5001, 8446, 8242, 5005, 5013].map((id) => [String(id), item(`Runa ${id}`)])),
+  perks: Object.fromEntries([9923, 8112, 8128, 8126, 8139, 8143, 8140, 8136, 8106, 8135, 8224, 8226, 8234, 8233, 8236, 8237,
+    5008, 5005, 5007, 5010, 5001, 5011, 5013, 8446, 8242].map((id) => [String(id), item(`Runa ${id}`)])),
   styles: [
-    { id: 8100, name: "Dominação", icon: "", perks: [9923, 8126, 8140, 8106] },
-    { id: 8200, name: "Feitiçaria", icon: "", perks: [8224, 8234] },
-    { id: 8400, name: "Determinação", icon: "", perks: [8446, 8242] },
+    { id: 8100, name: "Dominação", icon: "", perks: [9923, 8112, 8128, 8126, 8139, 8143, 8140, 8136, 8106, 8135],
+      slots: [[9923, 8112, 8128], [8126, 8139, 8143], [8140, 8136], [8106, 8135]] },
+    { id: 8200, name: "Feitiçaria", icon: "", perks: [8224, 8226, 8234, 8233, 8236, 8237],
+      slots: [[], [8224, 8226], [8234, 8233], [8236, 8237]] },
+    { id: 8400, name: "Determinação", icon: "", perks: [8446, 8242], slots: [[], [8446, 8242]] },
   ],
   spells: { "4": item("Flash"), "11": item("Golpear"), "6": item("Fantasma") },
+  shardSlots: [[5008, 5005, 5007], [5008, 5010, 5001], [5011, 5013, 5001]],
 };
+
+const st = (pr: number, wr: number, n: number) => ({ pr, wr, n });
+const days = Array.from({ length: 30 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`);
 
 const row = (id: number, wr: number, pr: number, n: number) => ({ id, wr, pr, n });
 
@@ -45,7 +56,8 @@ export const mockSnapshot: Snapshot = {
   },
   vsChampionId: 0,
   vsLane: null,
-  enemyPicks: [234, 122],
+  enemyPicks: [234, 122, 876, 62],
+  allyPicks: [31, 99],
   bans: {
     loading: false,
     basedOn: [{ championId: 31, lane: "jungle", me: true }, { championId: 99, lane: "middle", me: false }],
@@ -76,7 +88,48 @@ export const mockSnapshot: Snapshot = {
     ],
     lanes: [["jungle", 60], ["top", 32], ["middle", 5.5], ["support", 2]],
     vs: null,
+    core: [
+      { ids: ["3084", "3009", "3742"], wr: 56.1, pr: 9.8, n: 1370 },
+      { ids: ["3068", "3047", "2502"], wr: 57.3, pr: 6.1, n: 850 },
+      { ids: ["3152", "3111", "4401"], wr: 52.2, pr: 2.0, n: 280 },
+    ],
+    winningItems: [row(3065, 63.5, 3, 420), row(6665, 63.0, 18, 890), row(3075, 59.9, 20, 980), row(3742, 58.7, 1, 143)],
+    earlyItems: [row(1028, 53.9, 70, 9800), row(1001, 54.6, 55, 7700), row(1011, 53.6, 54, 7500), row(3340, 50.1, 90, 12000)],
+    skill6: [{ ids: ["E", "Q", "W", "E", "E", "R"], wr: 53.6, pr: 41, n: 5700 }, { ids: ["Q", "E", "W", "E", "E", "R"], wr: 55.4, pr: 12, n: 1680 }],
+    skill10: [{ ids: ["E", "Q", "W", "E", "E", "R", "E", "Q", "E", "Q"], wr: 54.0, pr: 33, n: 4600 }],
+    runeStats: {
+      primary: { "9923": st(70, 53.4, 9800), "8112": st(18, 52.1, 2500), "8128": st(12, 51.0, 1700),
+        "8126": st(55, 53.0, 7700), "8139": st(40, 55.6, 5600), "8143": st(5, 50.2, 700),
+        "8140": st(60, 53.5, 8400), "8136": st(40, 53.1, 5600), "8106": st(70, 53.3, 9800), "8135": st(30, 52.9, 4200),
+        "5008": st(60, 53.2, 8400), "5005": st(35, 53.9, 4900), "5007": st(5, 52.0, 700),
+        "5001": st(88, 53.4, 12300), "5011": st(8, 52.8, 1100), "5013": st(4, 54.0, 560) },
+      secondary: { "8224": st(30, 53.5, 4200), "8226": st(25, 53.0, 3500), "8234": st(28, 53.4, 3900),
+        "8233": st(20, 52.0, 2800), "8236": st(15, 53.2, 2100), "8237": st(2, 51.0, 280) },
+      flex: { "5008": st(80, 53.4, 11200), "5010": st(12, 53.1, 1700), "5001": st(8, 54.4, 1100) },
+    },
+    trend: {
+      dates: days,
+      wr: days.map((_, i) => 52.4 + Math.sin(i / 3) * 0.8 + i * 0.03),
+      wrs: days.map((_, i) => 52.4 + Math.sin(i / 4) * 0.4 + i * 0.03),
+      n: days.map((_, i) => (i === 29 ? 120 : 480)),
+      wrLast7: 53.4,
+      wrPeriod: 52.9,
+    },
+    damage: { physical: 3100, magic: 14200, true: 2600 },
   },
+};
+
+export const mockComposition: Composition = {
+  allies: { physical: 0, magic: 2, mixed: 0, unknown: 0, physicalShare: 0, magicShare: 1 },
+  enemies: { physical: 3, magic: 1, mixed: 0, unknown: 0, physicalShare: 0.75, magicShare: 0.25 },
+  types: { "31": "magic", "99": "magic", "234": "physical", "122": "physical", "876": "magic", "62": "physical" },
+  need: "armor",
+  items: [
+    { id: 3742, wr: 55.6, pr: 52, n: 7300, slot: "2º item" },
+    { id: 3075, wr: 52.7, pr: 12, n: 1200, slot: "3º item" },
+    { id: 6665, wr: 63.0, pr: 18, n: 890, slot: "4º item" },
+  ],
+  note: "Dano inimigo concentrado: armadura ajuda. No seu build, Couraça do Defunto tem WR 55,6%.",
 };
 
 export const mockSettings: Settings = {

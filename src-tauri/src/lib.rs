@@ -5,6 +5,7 @@ pub mod app;
 pub mod assets;
 pub mod bans;
 pub mod champselect;
+pub mod composition;
 pub mod import;
 pub mod lcu;
 pub mod lola;
@@ -180,6 +181,32 @@ async fn reimport(app: AppHandle, shared: State<'_, Arc<Shared>>) -> Result<Impo
     Ok(report)
 }
 
+/// Composição de dano dos dois times e itens defensivos do build em tela (só exibição).
+#[tauri::command]
+async fn get_composition(
+    shared: State<'_, Arc<Shared>>,
+    allies: Vec<i64>,
+    enemies: Vec<i64>,
+) -> Result<composition::Composition, String> {
+    let lcu = shared.lcu.read().await.clone();
+    let ids: Vec<i64> = allies.iter().chain(&enemies).copied().collect();
+    let types = composition::damage_types(lcu.as_ref(), &ids).await;
+    let assets = shared.assets.read().await.clone();
+    let build = shared.snapshot.lock().await.build.clone();
+    let configured = shared.settings.lock().await.min_games;
+    let min_games = build
+        .as_ref()
+        .map_or(configured, |b| b.min_games(configured));
+    Ok(composition::summarize(
+        &allies,
+        &enemies,
+        &types,
+        build.as_ref(),
+        assets.as_deref(),
+        min_games,
+    ))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -225,7 +252,8 @@ pub fn run() {
             save_settings,
             lookup,
             set_vs,
-            reimport
+            reimport,
+            get_composition
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Lobby Companion");

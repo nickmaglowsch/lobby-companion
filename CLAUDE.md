@@ -6,6 +6,7 @@ Responda **sempre em português**.
 App de desktop **leve** (Tauri 2 + Rust + SvelteKit/TS) para a **seleção de campeões** do League of Legends:
 ao travar o campeão, importa runas, feitiços e um conjunto de itens com dados do lolalytics, e mostra o win rate por item.
 Também mostra o build **contra um campeão escolhido** (confronto) e **sugere bans** pelos campeões do seu time (`bans.rs`).
+Extras só de exibição (mesma resposta do lolalytics, sem requisição a mais): núcleo de 3 itens, primeira volta, situacionais (também viram blocos do conjunto de itens), habilidades até o 6/10, WR das runas alternativas, tendência de 30 dias e perfil de dano; e a **composição** de dano dos dois times (tipo de dano do cliente, `composition.rs`) com destaque dos itens de defesa do build.
 **Sem overlay e sem nada durante a partida**: a janela abre na seleção e é destruída quando a fase vira `GameStart`/`InProgress`; o processo fica na bandeja ouvindo o WebSocket.
 
 ## Regras (obrigatórias)
@@ -23,6 +24,15 @@ Também mostra o build **contra um campeão escolhido** (confronto) e **sugere b
   - Slug = alias do cliente em minúsculas só com letras/dígitos; **única exceção `MonkeyKing` → `wukong`** (os 173 campeões conferidos).
   - `enemy` (`enemy_h` = `["id","wr","d1","d2","pr","n"]`): por lane do outro lado, o seu WR contra cada campeão e a % das suas partidas contra ele (cada lane soma 100). É a base dos bans.
 - **Confronto** (testado em 2026-11-24, página `lolalytics.com/lol/sion/vs/viego/build/?lane=jungle&vslane=jungle`): `GET https://a3.lolalytics.com/mega/?ep=build-full&v=1&c=<slug>&vs=<slug>&tier=…&queue=ranked&lane=…&vslane=…` (o `a1` responde `{"status":404}` com `vs`). Mesmo formato do build geral, **sem `enemy`/`itemSets`**, com `header.vs` (id), `vsLane`, `usualWinRate`. **A região é ignorada** (sempre global). Amostra bem menor (Sion selva × Viego: 530 partidas contra 11.959 no geral).
+- **Campos extras do `build-full`** (conferidos em 2026-11-24, Sion selva, 16.23; todos opcionais no parser):
+  - `builtBootSet3`: `[["3068_3047_2502", wr, pr, n], ...]` = 3 primeiros itens com botas, na ordem de compra (~950 linhas; guardamos 10). Vazio no confronto.
+  - `winningItem`/`popularItem`: `[[id, wr, pr, n, tempo], ...]` (o primeiro em ordem de WR, com muita amostra pequena). `earlyItem`: `[[id, wr, pr, n], ...]` (inclui berloque, sentinela, botas e componentes).
+  - `skill6`/`skill10`/`skill15`: `[[211314, wr, pr, n], ...]` (número, dígitos 1–4 = Q/W/E/R).
+  - `runes.stats`: `{"<perkId>": [[pr, wr, n], [pr, wr, n]?]}`. 1ª linha = runa na árvore primária, 2ª = na secundária (keystones só têm a 1ª; as somas de PR por fileira batem com as keystones da árvore). Fragmentos: 1 linha; a fileira do meio vem com sufixo `f` (`"5008f"`), ataque/defesa sem sufixo.
+  - `graph`: `{dates[~35], wr|wrs|pr|n|br: {all, diamond_plus, emerald, platinum, gold, silver, bronze, iron}}`. **Não tem o elo filtrado**: usamos `all` (todos os elos; a soma de `n.all` é ~15× o `header.n`). `wrs` = média móvel; o último dia vem incompleto (por isso a média é ponderada pelas partidas). Ausente no confronto.
+  - `header.damage`: `{physical, magic, true}` = dano médio por partida. Ausente no confronto.
+- **Tipo de dano dos campeões** (cliente, 2026-11-24): `champion-summary.json` não tem; `/lol-game-data/assets/v1/champions/{id}.json` → `tacticalInfo.damageType` = `kPhysical`/`kMagic`/`kMixed` (ex.: Shaco e Kog'Maw `kMixed`). Cada arquivo tem 35–95 KB: buscamos só os da seleção, com cache em memória (`composition.rs`).
+- **`items.json` do cliente** traz `categories` (estruturado): armadura = `"Armor"`, resistência mágica = `"SpellBlock"` (alguns também `"MagicResist"`), `"Boots"`, `"Consumable"`, `"Trinket"`, `"Jungle"` (pets e poções). `"Lane"` não serve para achar itens de início (a Espada Longa tem). 3111 = `Boots, SpellBlock, Tenacity`; 3047 = `Armor, Boots`.
 - LCU (schemas lidos do `/help` do cliente): `LolItemSetsItemSets {timestamp, accountId, itemSets[]}`, `ItemSet {uid, title, mode, map, type, sortrank, startedFrom, associatedChampions, associatedMaps, blocks, preferredItemSlots}`, `Block {type (= título), hideIfSummonerSpell, showIfSummonerSpell, items[{id (string), count}]}`. `perkstyles.json` traz `slots[].type` (`kKeyStone`, `kMixedRegularSplashable`, `kStatMod`).
 
 ## Ambiente deste PC

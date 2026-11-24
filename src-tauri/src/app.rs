@@ -111,6 +111,8 @@ pub struct Snapshot {
     pub vs_lane: Option<String>,
     /// Campeões já visíveis do outro time (atalhos para escolher o confronto).
     pub enemy_picks: Vec<i64>,
+    /// Campeões escolhidos ou declarados do seu time (você incluso), para a composição.
+    pub ally_picks: Vec<i64>,
     pub bans: Option<BanAdvice>,
 }
 
@@ -272,6 +274,7 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
                 s.vs_champion_id = 0;
                 s.vs_lane = None;
                 s.enemy_picks.clear();
+                s.ally_picks.clear();
                 s.bans = None;
             })
             .await;
@@ -300,6 +303,7 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
             s.in_champ_select = false;
             s.locked = false;
             s.enemy_picks.clear();
+            s.ally_picks.clear();
         })
         .await;
         return;
@@ -314,10 +318,15 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         changed
     };
     if draft_changed {
+        let allies = draft
+            .as_ref()
+            .map(|d| d.allies.iter().map(|a| a.champion_id).collect())
+            .unwrap_or_default();
         let enemies = draft.map(|d| d.enemies).unwrap_or_default();
         update(app, shared, |s| {
             s.in_champ_select = true;
             s.enemy_picks = enemies;
+            s.ally_picks = allies;
         })
         .await;
         let (app, shared) = (app.clone(), shared.clone());
