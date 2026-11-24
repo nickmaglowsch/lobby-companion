@@ -63,8 +63,30 @@ export function minGamesFor(build: Build, configured: number): number {
 
 export interface Ally { championId: number; lane: string | null; me: boolean }
 export interface BanReason { allyChampionId: number; lane: string; wr: number; baseWr: number; n: number }
-export interface BanPick { championId: number; gain: number; reasons: BanReason[] }
-export interface BanAdvice { loading: boolean; basedOn: Ally[]; picks: BanPick[]; note: string | null }
+/** Um campeão na tier list de uma lane (lolalytics `ep=list`). */
+export interface TierEntry { id: number; wr: number; pr: number; br: number; games: number; pctLane: number; defaultLane: string }
+/** `tier` só nos bans pela tier list (ninguém do time declarou ainda). */
+export interface BanPick { championId: number; gain: number; reasons: BanReason[]; tier: TierEntry | null }
+export interface BanAdvice {
+  loading: boolean; basedOn: Ally[]; picks: BanPick[]; note: string | null;
+  /** Bans pela força geral na sua lane (tier list), sem campeões declarados no time. */
+  byTier: boolean; lane: string | null; pageUrl: string | null;
+}
+
+/** Parte da nota de um pick: contra um inimigo ou com um aliado (pontos já encolhidos pela amostra). */
+export interface PickPart { kind: "counter" | "synergy"; championId: number; lane: string; delta: number; wr: number; n: number }
+export interface PickSuggestion {
+  championId: number; total: number; base: number; wr: number; games: number;
+  mastery: number | null; parts: PickPart[];
+}
+export interface PickAdvice {
+  loading: boolean; lane: string | null;
+  /** "mastery" = seu pool; "tier" = tier list da lane. */
+  pool: string;
+  suggestions: PickSuggestion[]; enemies: number[]; allies: Ally[]; note: string | null; pageUrl: string | null;
+}
+export interface SynergyLine { allyChampionId: number; lane: string; wr: number; delta: number; n: number }
+export interface SynergyAdvice { championId: number; lane: string; baseWr: number | null; lines: SynergyLine[]; pageUrl: string | null }
 
 export interface Outcome { ok: boolean; msg: string }
 export interface ImportReport { runes: Outcome | null; items: Outcome | null; spells: Outcome | null }
@@ -88,6 +110,8 @@ export interface Snapshot {
   /** Campeões escolhidos ou declarados do seu time (você incluso). */
   allyPicks: number[];
   bans: BanAdvice | null;
+  picks: PickAdvice | null;
+  synergy: SynergyAdvice | null;
 }
 
 export type DamageType = "physical" | "magic" | "mixed";
@@ -132,6 +156,8 @@ export interface Settings {
   flashSlot: number;
   closeInGame: boolean;
   suggestBans: boolean;
+  suggestPicks: boolean;
+  pickPool: "mastery" | "tier";
 }
 
 /** Fora do Tauri (navegador com `npm run dev`) a página usa dados sintéticos de `mock.ts`. */
@@ -175,6 +201,8 @@ export function championIcon(id: number): string {
 }
 
 export const pct = (x: number) => `${x.toFixed(1).replace(".", ",")}%`;
+/** Pontos com sinal: "+1,20" / "−0,35". */
+export const pts = (x: number, digits = 2) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(digits).replace(".", ",")}`;
 export const num = (x: number) => x.toLocaleString("pt-BR");
 
 export const LANES: Record<string, string> = {
@@ -268,5 +296,3 @@ export function situationalItems(build: Build, assets: Assets | null, minGames: 
     .slice(0, EXTRA_ITEMS);
 }
 
-/** `1.234` → `"+1,2"` (pontos de WR com sinal). */
-export const pts = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(1).replace(".", ",")}`;

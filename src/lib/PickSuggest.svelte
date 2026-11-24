@@ -1,0 +1,98 @@
+<script lang="ts">
+  // Cartão "Sugestão de pick": só sugestão (texto e ícones). Clicar mostra o build do campeão
+  // na janela (`lookup`), sem mudar nada no cliente: a janela só importa sozinha o build do
+  // campeão que você mesmo escolheu ou declarou (`may_apply`).
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import {
+    championIcon, pct, pts, num, LANES,
+    type Assets, type PickAdvice, type PickPart, type SynergyAdvice,
+  } from "./api";
+  import Synergy from "./Synergy.svelte";
+
+  let { advice, synergy, assets, locked, onPick }: {
+    advice: PickAdvice | null;
+    synergy: SynergyAdvice | null;
+    assets: Assets | null;
+    locked: boolean;
+    onPick: (championId: number, lane: string | null) => void;
+  } = $props();
+
+  const name = (id: number) => assets?.champions[id]?.name ?? `#${id}`;
+  const partText = (p: PickPart) =>
+    `${p.kind === "counter" ? "contra" : "com"} ${name(p.championId)} (${LANES[p.lane] ?? p.lane})`;
+  // Depois de travar, a lista fica recolhida (o que importa passa a ser a sinergia).
+  let open = $state(false);
+  const showList = $derived(!locked || open);
+</script>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Sugestão de pick</h2>
+    {#if advice?.loading}<span class="muted small">calculando…</span>{/if}
+    {#if locked && advice?.suggestions.length}
+      <button class="link small" onclick={() => (open = !open)}>{open ? "Esconder" : "Mostrar"}</button>
+    {/if}
+  </div>
+  {#if advice?.lane}
+    <div class="muted small">
+      {LANES[advice.lane] ?? advice.lane} · {advice.pool === "tier" ? "melhores da tier list da lane" : "do seu pool (maestria)"}
+      {#if advice.enemies.length || advice.allies.length}
+        · contra
+        {#each advice.enemies as id (id)}<img class="mini" src={championIcon(id)} alt={name(id)} title={name(id)} />{/each}
+        {#if advice.allies.length}
+          · com
+          {#each advice.allies as a (a.championId)}<img class="mini" src={championIcon(a.championId)} alt={name(a.championId)} title={name(a.championId)} />{/each}
+        {/if}
+      {/if}
+    </div>
+  {/if}
+  {#if showList}
+    {#each advice?.suggestions ?? [] as s (s.championId)}
+      <button class="pick" onclick={() => onPick(s.championId, advice?.lane ?? null)} title="Ver o build de {name(s.championId)} (não muda nada no cliente)">
+        <img class="pick-icon" src={championIcon(s.championId)} alt={name(s.championId)} />
+        <div class="body">
+          <div>
+            <b>{name(s.championId)}</b>
+            <span class="total" class:up={s.total >= 0} class:down={s.total < 0}>{pts(s.total)} pts</span>
+            {#if s.mastery !== null}<span class="muted small">· {num(s.mastery)} de maestria</span>{/if}
+          </div>
+          <div class="part muted small">{pts(s.base)} força na lane · {pct(s.wr)} em {num(s.games)} partidas</div>
+          {#each s.parts.slice(0, 4) as p (p.kind + p.championId)}
+            <div class="part muted small">
+              <span class:up={p.delta >= 0.5} class:down={p.delta <= -0.5}>{pts(p.delta)}</span>
+              {partText(p)} · {pct(p.wr)} · {num(p.n)} partidas
+            </div>
+          {/each}
+        </div>
+      </button>
+    {/each}
+  {/if}
+  {#if advice?.note}<p class="muted small">{advice.note}</p>{/if}
+  {#if showList && advice?.suggestions.length}
+    <p class="muted small">
+      Pts = win rate a mais (ou a menos) que a média: força na lane + cada confronto e dupla além da força geral dos dois (amostra pequena conta menos). Tendência estatística; clicar só mostra o build.
+      {#if advice.pageUrl}<button class="link small" onclick={() => openUrl(advice!.pageUrl!)}>Tier list no lolalytics ↗</button>{/if}
+    </p>
+  {/if}
+  {#if synergy}<Synergy {synergy} {assets} />{/if}
+</section>
+
+<style>
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  h2 { margin: 0 0 6px; font-size: 14px; color: var(--gold); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  p { margin: 6px 0 0; }
+  .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
+  .pick { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: start; width: 100%; text-align: left; padding: 5px 0; margin: 0;
+    border: none; border-top: 1px solid var(--line); border-radius: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+  .pick:hover .pick-icon { border-color: var(--gold); }
+  .pick-icon { width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--gold-dim); }
+  .body { display: grid; gap: 1px; }
+  .total { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .part { font-variant-numeric: tabular-nums; }
+  .up { color: var(--good); }
+  .down { color: var(--bad); }
+  button.link { border: none; background: none; color: var(--gold); cursor: pointer; padding: 0 4px; font: inherit; }
+</style>

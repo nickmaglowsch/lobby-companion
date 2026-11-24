@@ -78,7 +78,7 @@
     {#each hint as h (h.to.id)}
       <p class="small better-line">
         {perk(h.to.id)?.name ?? h.to.id} no lugar de {perk(h.from.id)?.name ?? h.from.id}:
-        {pts((h.to.stat?.wr ?? 0) - (h.from.stat?.wr ?? 0))} pts ({num(h.to.stat?.n ?? 0)} partidas)
+        {pts((h.to.stat?.wr ?? 0) - (h.from.stat?.wr ?? 0), 1)} pts ({num(h.to.stat?.n ?? 0)} partidas)
       </p>
     {/each}
     <p class="small muted">WR · PR de cada runa nesse lugar da página. Apagado = menos de {minGames} partidas. Só informação: a importação segue a aba escolhida.</p>

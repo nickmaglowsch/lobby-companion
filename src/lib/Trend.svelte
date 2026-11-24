@@ -32,7 +32,7 @@
       <polyline class="smooth" points={paths.smooth} />
     </svg>
     <span>
-      WR <b class:up={delta >= 0.5} class:down={delta <= -0.5}>{pts(delta)} pts</b>
+      WR <b class:up={delta >= 0.5} class:down={delta <= -0.5}>{pts(delta, 1)} pts</b>
       <span class="muted">nos últimos 7 dias ({pct(trend.wrLast7)}) × {trend.dates.length} ({pct(trend.wrPeriod)})</span>
     </span>
   </div>
