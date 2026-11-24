@@ -89,11 +89,37 @@ pub fn plan(pages: &Value, inventory: &Value, replace_current: bool) -> Plan {
     Plan::NoRoom
 }
 
+/// A nossa página já é igual a `body`? Devolve (id, é a atual).
+/// Evita apagar e recriar a página a cada clique na janela.
+pub fn identical_page(pages: &Value, body: &Value) -> Option<(i64, bool)> {
+    let same = |p: &Value, k: &str| p.get(k).is_some() && p.get(k) == body.get(k);
+    let page = pages.as_array()?.iter().find(|p| {
+        is_ours(p)
+            && same(p, "name")
+            && same(p, "primaryStyleId")
+            && same(p, "subStyleId")
+            && same(p, "selectedPerkIds")
+    })?;
+    let current = page
+        .get("current")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    Some((page.get("id")?.as_i64()?, current))
+}
+
 pub async fn apply(lcu: &Lcu, body: &Value, replace_current: bool) -> Result<String, String> {
     let pages = lcu
         .get("/lol-perks/v1/pages")
         .await
         .map_err(|e| e.to_string())?;
+    if let Some((id, current)) = identical_page(&pages, body) {
+        if !current {
+            lcu.put("/lol-perks/v1/currentpage", &json!(id))
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok("página já estava aplicada".to_string());
+    }
     let inventory = lcu
         .get("/lol-perks/v1/inventory")
         .await
@@ -154,6 +180,29 @@ mod tests {
                 .count()
                 <= MAX_NAME
         );
+    }
+
+    #[test]
+    fn identical_page_skips_rewrite() {
+        let body = json!({"name": "LC: Ahri Meio", "primaryStyleId": 8100, "subStyleId": 8200,
+            "selectedPerkIds": [1, 2, 3], "current": true});
+        let page = |perks: Value, current: bool| {
+            json!([{"id": 7, "name": "LC: Ahri Meio", "primaryStyleId": 8100, "subStyleId": 8200,
+                "selectedPerkIds": perks, "current": current, "isDeletable": true}])
+        };
+        assert_eq!(
+            identical_page(&page(json!([1, 2, 3]), true), &body),
+            Some((7, true))
+        );
+        assert_eq!(
+            identical_page(&page(json!([1, 2, 3]), false), &body),
+            Some((7, false))
+        );
+        assert_eq!(identical_page(&page(json!([1, 2, 9]), true), &body), None);
+        // página do usuário com as mesmas runas não conta como nossa
+        let mine = json!([{"id": 8, "name": "LC: Ahri Meio", "primaryStyleId": 8100, "subStyleId": 8200,
+            "selectedPerkIds": [1, 2, 3], "current": true, "isDeletable": false}]);
+        assert_eq!(identical_page(&mine, &body), None);
     }
 
     #[test]

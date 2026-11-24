@@ -25,7 +25,21 @@ export interface Build {
   boots: ItemStat[];
   slots: ItemStat[][];
   lanes: [string, number][];
+  /** Preenchido quando é o build contra um campeão específico. */
+  vs: VsInfo | null;
 }
+
+export interface VsInfo { championId: number; lane: string; usualWr: number }
+
+/** Mesma regra de `Build::min_games` (Rust): no confronto o corte acompanha a amostra. */
+export function minGamesFor(build: Build, configured: number): number {
+  return build.vs ? Math.min(configured, Math.max(10, Math.floor(build.n / 20))) : configured;
+}
+
+export interface Ally { championId: number; lane: string | null; me: boolean }
+export interface BanReason { allyChampionId: number; lane: string; wr: number; baseWr: number; n: number }
+export interface BanPick { championId: number; gain: number; reasons: BanReason[] }
+export interface BanAdvice { loading: boolean; basedOn: Ally[]; picks: BanPick[]; note: string | null }
 
 export interface Outcome { ok: boolean; msg: string }
 export interface ImportReport { runes: Outcome | null; items: Outcome | null; spells: Outcome | null }
@@ -43,6 +57,10 @@ export interface Snapshot {
   warning: string | null;
   error: string | null;
   import: ImportReport | null;
+  vsChampionId: number;
+  vsLane: string | null;
+  enemyPicks: number[];
+  bans: BanAdvice | null;
 }
 
 export interface Named { name: string; icon: string }
@@ -69,6 +87,7 @@ export interface Settings {
   replaceCurrentPage: boolean;
   flashSlot: number;
   closeInGame: boolean;
+  suggestBans: boolean;
 }
 
 /** Fora do Tauri (navegador com `npm run dev`) a página usa dados sintéticos de `mock.ts`. */
@@ -92,6 +111,7 @@ export const api = {
   settings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
   lookup: (championId: number, lane: string | null) => call<void>("lookup", { championId, lane }),
+  setVs: (vsChampionId: number | null, vsLane: string | null) => call<void>("set_vs", { vsChampionId, vsLane }),
   reimport: () => call<ImportReport>("reimport"),
   onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
     inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),

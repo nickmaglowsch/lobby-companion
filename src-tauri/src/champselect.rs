@@ -1,5 +1,6 @@
-//! Leitura da sessão da seleção de campeões: só o próprio jogador.
-//! Não lemos nomes nem dados de outros jogadores (regra da Riot para a seleção ranqueada).
+//! Leitura da sessão da seleção de campeões.
+//! Do próprio jogador: campeão, posição, feitiços. Dos outros: **só campeões e posições**
+//! (o que o próprio cliente mostra na tela); nunca nomes, Riot IDs ou PUUIDs (regra da Riot).
 
 use serde::Serialize;
 use serde_json::Value;
@@ -17,6 +18,27 @@ pub struct Me {
     pub spell1: i64,
     pub spell2: i64,
     pub locked: bool,
+}
+
+impl Me {
+    /// Campeão do jogador agora: o escolhido ou, antes disso, o do hover.
+    pub fn current_champion(&self) -> i64 {
+        if self.champion_id > 0 {
+            self.champion_id
+        } else {
+            self.hover_id
+        }
+    }
+}
+
+/// Uma mudança feita na janela pode ir sozinha para o cliente?
+/// Nunca durante a partida; na seleção, só se a janela mostra o campeão do próprio jogador
+/// (olhar o build de outro campeão não pode trocar as runas de quem já escolheu).
+pub fn may_apply(phase: &str, in_select: bool, me: Option<&Me>, viewed: i64) -> bool {
+    if viewed <= 0 || matches!(phase, "GameStart" | "InProgress" | "Reconnect") {
+        return false;
+    }
+    !in_select || me.is_some_and(|m| m.current_champion() == viewed)
 }
 
 fn i(v: Option<&Value>) -> i64 {
@@ -67,6 +89,97 @@ pub fn parse(session: &Value) -> Option<Me> {
     })
 }
 
+/// Um campeão do seu time (escolhido ou declarado) e a posição dele.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ally {
+    pub champion_id: i64,
+    /// Lane do lolalytics (`None` em às cegas).
+    pub lane: Option<String>,
+    pub me: bool,
+}
+
+/// O que a tela da seleção mostra dos dois times (sem nomes).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Draft {
+    pub allies: Vec<Ally>,
+    /// Campeões já visíveis do outro time.
+    pub enemies: Vec<i64>,
+    /// Banidos, escolhidos ou declarados por alguém: não faz sentido sugerir ban.
+    pub unavailable: Vec<i64>,
+}
+
+pub fn parse_draft(session: &Value) -> Option<Draft> {
+    let cell = session.get("localPlayerCellId")?.as_i64()?;
+    let team = |k: &str| -> Vec<Value> {
+        session
+            .get(k)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let mut unavailable: Vec<i64> = Vec::new();
+    let mut allies = Vec::new();
+    for m in team("myTeam") {
+        let champ = i(m.get("championId"));
+        let shown = if champ > 0 {
+            champ
+        } else {
+            i(m.get("championPickIntent"))
+        };
+        if shown <= 0 {
+            continue;
+        }
+        unavailable.push(shown);
+        allies.push(Ally {
+            champion_id: shown,
+            lane: m
+                .get("assignedPosition")
+                .and_then(Value::as_str)
+                .map(str::to_ascii_lowercase)
+                .as_deref()
+                .and_then(lolalytics_lane)
+                .map(String::from),
+            me: i(m.get("cellId")) == cell,
+        });
+    }
+    let enemies: Vec<i64> = team("theirTeam")
+        .iter()
+        .map(|m| i(m.get("championId")))
+        .filter(|c| *c > 0)
+        .collect();
+    unavailable.extend(&enemies);
+    for k in ["myTeamBans", "theirTeamBans"] {
+        unavailable.extend(
+            session
+                .pointer(&format!("/bans/{k}"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64),
+        );
+    }
+    unavailable.extend(
+        session
+            .get("actions")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_array)
+            .flatten()
+            .filter(|a| a.get("completed").and_then(Value::as_bool) == Some(true))
+            .map(|a| i(a.get("championId"))),
+    );
+    unavailable.retain(|c| *c > 0);
+    unavailable.sort_unstable();
+    unavailable.dedup();
+    Some(Draft {
+        allies,
+        enemies,
+        unavailable,
+    })
+}
+
 /// Posição do cliente → lane do lolalytics.
 pub fn lolalytics_lane(position: &str) -> Option<&'static str> {
     match position {
@@ -109,6 +222,27 @@ mod tests {
     }
 
     #[test]
+    fn window_changes_reach_the_client_only_when_safe() {
+        let me = parse(&session(true, "BAN_PICK")).unwrap();
+        // na seleção: só o próprio campeão
+        assert!(may_apply("ChampSelect", true, Some(&me), 31));
+        assert!(!may_apply("ChampSelect", true, Some(&me), 62));
+        assert!(!may_apply("ChampSelect", true, None, 31));
+        // no lobby: o que está na tela vai para o cliente
+        assert!(may_apply("Lobby", false, None, 62));
+        // durante a partida, nada
+        assert!(!may_apply("InProgress", false, None, 31));
+        assert!(!may_apply("Lobby", false, None, 0));
+        // antes de travar vale o hover
+        let hover = Me {
+            champion_id: 0,
+            hover_id: 62,
+            ..me
+        };
+        assert!(may_apply("ChampSelect", true, Some(&hover), 62));
+    }
+
+    #[test]
     fn hover_vs_locked() {
         let me = parse(&session(false, "BAN_PICK")).unwrap();
         assert_eq!(me.champion_id, 31);
@@ -116,6 +250,36 @@ mod tests {
         assert!(!me.locked);
         assert!(parse(&session(true, "BAN_PICK")).unwrap().locked);
         assert!(parse(&session(false, "FINALIZATION")).unwrap().locked);
+    }
+
+    #[test]
+    fn draft_has_champions_and_lanes_only() {
+        let mut s = session(true, "BAN_PICK");
+        s["myTeam"][0]["championId"] = json!(0);
+        s["myTeam"][0]["championPickIntent"] = json!(99);
+        s["myTeam"][0]["summonerName"] = json!("não deve aparecer");
+        s["theirTeam"] = json!([{"cellId": 5, "championId": 0}, {"cellId": 6, "championId": 64}]);
+        s["bans"] = json!({"myTeamBans": [], "theirTeamBans": [238]});
+        let d = parse_draft(&s).unwrap();
+        assert_eq!(
+            d.allies,
+            vec![
+                Ally {
+                    champion_id: 99,
+                    lane: Some("top".into()),
+                    me: false
+                },
+                Ally {
+                    champion_id: 31,
+                    lane: Some("jungle".into()),
+                    me: true
+                },
+            ]
+        );
+        assert_eq!(d.enemies, vec![64]);
+        // ban da ação (1), ban do outro time (238), escolhidos e declarados
+        assert_eq!(d.unavailable, vec![1, 31, 64, 99, 238]);
+        assert!(!format!("{d:?}").contains("não deve"));
     }
 
     #[test]

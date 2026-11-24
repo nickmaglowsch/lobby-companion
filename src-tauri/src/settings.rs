@@ -27,6 +27,8 @@ pub struct Settings {
     pub flash_slot: u8,
     /// Fecha a janela quando a partida começa (fica só o ícone na bandeja).
     pub close_in_game: bool,
+    /// Sugere bans pelos campeões do seu time (um build geral por campeão do time).
+    pub suggest_bans: bool,
 }
 
 impl Default for Settings {
@@ -44,6 +46,7 @@ impl Default for Settings {
             replace_current_page: false,
             flash_slot: 1,
             close_in_game: true,
+            suggest_bans: true,
         }
     }
 }

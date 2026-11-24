@@ -8,7 +8,10 @@ Quando você trava o campeão, ele importa para o cliente:
 - um **conjunto de itens** com o **win rate de cada item no título do bloco** (aparece na loja dentro da partida):
   `Início · WR 51,8%`, `Botas · WR 55,4% / 51,7%`, `1º item · WR 53,3% / 53,1%`… até o 5º item.
 
-A janela mostra o build completo: runas, feitiços, ordem de habilidades, inícios, botas e uma tabela de itens por posição (1º, 2º, 3º…) com WR, pick rate e partidas.
+A janela mostra o build completo: runas, feitiços, ordem de habilidades, inícios, botas e uma tabela de itens por posição (1º, 2º, 3º…) com WR, pick rate e partidas. Trocar a runa, a lane ou um filtro na janela já atualiza o cliente.
+
+- **Confronto:** escolha o campeão do outro lado (retrato do time inimigo ou busca) para ver e importar runas, feitiços e itens daquele confronto (dados globais do lolalytics, amostra menor).
+- **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um.
 
 **Sem overlay.** A janela abre sozinha na seleção de campeões e **fecha quando a partida começa**; fora disso, só um ícone na bandeja (sem o WebView, só o processo Rust ouvindo o WebSocket do cliente).
 

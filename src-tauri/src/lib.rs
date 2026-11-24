@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod assets;
+pub mod bans;
 pub mod champselect;
 pub mod import;
 pub mod lcu;
@@ -100,24 +101,42 @@ async fn save_settings(
     settings
         .save(&shared.settings_path)
         .map_err(|e| e.to_string())?;
-    let filters_changed = {
+    let (filters_changed, runes_changed, items_changed, bans_changed) = {
         let mut cur = shared.settings.lock().await;
-        let changed = cur.tier != settings.tier
-            || cur.region != settings.region
-            || cur.patch != settings.patch;
+        let changed = (
+            cur.tier != settings.tier
+                || cur.region != settings.region
+                || cur.patch != settings.patch,
+            cur.rune_choice != settings.rune_choice,
+            cur.min_games != settings.min_games,
+            cur.suggest_bans != settings.suggest_bans,
+        );
         *cur = settings;
         changed
     };
-    // Filtro mudou: recarrega o build em tela (sem importar).
-    let (champion_id, lane) = {
+    let (champion_id, lane, in_select) = {
         let s = shared.snapshot.lock().await;
-        (s.champion_id, s.lane.clone())
+        (s.champion_id, s.lane.clone(), s.in_champ_select)
     };
+    let shared = shared.inner().clone();
+    // Os bans dependem do filtro. Fora da seleção, com campeão em tela, o lookup abaixo já recalcula.
+    let lookup_redoes_bans = filters_changed && champion_id > 0 && !in_select;
+    if bans_changed || (filters_changed && !lookup_redoes_bans) {
+        let (app, shared) = (app.clone(), shared.clone());
+        tauri::async_runtime::spawn(async move { app::refresh_bans(&app, &shared).await });
+    }
+    // Filtro mudou: recarrega o build em tela, que já vai para o cliente.
     if filters_changed && champion_id > 0 {
-        let shared = shared.inner().clone();
         tauri::async_runtime::spawn(
             async move { app::lookup(&app, &shared, champion_id, lane).await },
         );
+    } else if runes_changed || items_changed {
+        let scope = app::Scope {
+            runes: runes_changed,
+            items: items_changed,
+            spells: false,
+        };
+        tauri::async_runtime::spawn(async move { app::apply_change(&app, &shared, scope).await });
     }
     Ok(())
 }
@@ -131,6 +150,21 @@ async fn lookup(
 ) -> Result<(), String> {
     let shared = shared.inner().clone();
     tauri::async_runtime::spawn(async move { app::lookup(&app, &shared, champion_id, lane).await });
+    Ok(())
+}
+
+/// Campeão do outro lado (`None` = build geral). Só muda o que a janela mostra e importa.
+#[tauri::command]
+async fn set_vs(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    vs_champion_id: Option<i64>,
+    vs_lane: Option<String>,
+) -> Result<(), String> {
+    let shared = shared.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        app::set_vs(&app, &shared, vs_champion_id, vs_lane).await
+    });
     Ok(())
 }
 
@@ -190,6 +224,7 @@ pub fn run() {
             get_settings,
             save_settings,
             lookup,
+            set_vs,
             reimport
         ])
         .build(tauri::generate_context!())
@@ -204,7 +239,7 @@ pub fn run() {
     });
 }
 
-/// Diagnóstico pelo terminal (`cargo run -- --diag` / `cargo run -- --lola chogath jungle`).
+/// Diagnóstico pelo terminal (`cargo run -- --diag` / `cargo run -- --lola chogath jungle [viego]`).
 /// Devolve `true` se tratou os argumentos (e o app não deve abrir).
 pub fn cli(args: &[String]) -> bool {
     match args.first().map(String::as_str) {
@@ -215,7 +250,8 @@ pub fn cli(args: &[String]) -> bool {
         Some("--lola") => {
             let slug = args.get(1).cloned().unwrap_or_else(|| "chogath".into());
             let lane = args.get(2).cloned();
-            tauri::async_runtime::block_on(lola_cli(slug, lane));
+            let vs = args.get(3).cloned();
+            tauri::async_runtime::block_on(lola_cli(slug, lane, vs));
             true
         }
         _ => false,
@@ -256,14 +292,16 @@ async fn diag() {
     }
 }
 
-async fn lola_cli(slug: String, lane: Option<String>) {
+async fn lola_cli(slug: String, lane: Option<String>, vs: Option<String>) {
     let s = Settings::default();
     let q = lola::Query {
         slug,
+        vs_lane: vs.as_ref().and(lane.clone()),
         lane,
         tier: s.tier,
         region: s.region,
-        patch: None,
+        vs,
+        ..Default::default()
     };
     let client = lola::Lolalytics::new(std::env::temp_dir().join("lobby-companion-cli"));
     match client
@@ -293,6 +331,31 @@ async fn lola_cli(slug: String, lane: Option<String>) {
                     .map(|x| format!("{} {:.1}% ({})", x.id, x.wr, x.n))
                     .collect();
                 println!("{}º item: {}", i + 1, top.join(" | "));
+            }
+            if let Some(v) = &b.vs {
+                println!(
+                    "confronto: contra o campeão {} ({}), WR geral {:.2}%; corte de itens {}",
+                    v.champion_id,
+                    v.lane,
+                    v.usual_wr,
+                    b.min_games(s.min_games)
+                );
+            } else {
+                let me = champselect::Ally {
+                    champion_id: 0,
+                    lane: Some(b.lane.clone()),
+                    me: true,
+                };
+                for p in bans::suggest(&[(me, &b)], &[], 5) {
+                    let r = p.reasons.first();
+                    println!(
+                        "ban: campeão {} +{:.2} pts ({})",
+                        p.champion_id,
+                        p.gain,
+                        r.map(|r| format!("{:.1}% em {} partidas, {}", r.wr, r.n, r.lane))
+                            .unwrap_or_default()
+                    );
+                }
             }
             println!("página: {}", q.page_url());
         }
