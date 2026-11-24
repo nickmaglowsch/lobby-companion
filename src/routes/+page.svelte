@@ -7,6 +7,14 @@
   } from "$lib/api";
   import Runes from "$lib/Runes.svelte";
   import ItemRow from "$lib/ItemRow.svelte";
+  import { firstBack, situationalItems } from "$lib/api";
+  import Trend from "$lib/Trend.svelte";
+  import DamageBar from "$lib/DamageBar.svelte";
+  import CoreBuild from "$lib/CoreBuild.svelte";
+  import SkillPaths from "$lib/SkillPaths.svelte";
+  import RuneAlternatives from "$lib/RuneAlternatives.svelte";
+  import Composition from "$lib/Composition.svelte";
+  import PickSuggest from "$lib/PickSuggest.svelte";
 
   let snap = $state<Snapshot | null>(null);
   let assets = $state<Assets | null>(null);
@@ -14,6 +22,8 @@
   let search = $state("");
   let importing = $state(false);
   let importError = $state<string | null>(null);
+  // Itens de defesa contra o dano do time inimigo (preenchido por Composition).
+  let defHighlight = $state<number[]>([]);
 
   const build = $derived(snap?.build ?? null);
   const champ = $derived(snap && assets ? assets.champions[snap.championId] : undefined);
@@ -141,6 +151,9 @@
         <h2>Sugestão de bans</h2>
         {#if bans.loading}<span class="muted small">calculando…</span>{/if}
       </div>
+      {#if bans.byTier}
+        <div class="based muted small">Ninguém do time declarou ainda: pela força geral na sua lane{bans.lane ? ` (${LANES[bans.lane] ?? bans.lane})` : ""}.</div>
+      {/if}
       {#if bans.basedOn.length}
         <div class="based muted small">
           {snap.inChampSelect ? "Pelo seu time:" : "Para:"}
@@ -155,6 +168,9 @@
           <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
           <div>
             <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate que o time recupera, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
+            {#if p.tier}
+              <div class="reason muted small">{pct(p.tier.wr)} na lane · pick {pct(p.tier.pr)} · ban {pct(p.tier.br)} · {num(p.tier.games)} partidas</div>
+            {/if}
             {#each p.reasons as r (r.allyChampionId + r.lane)}
               <div class="reason muted small">
                 <img class="mini" src={championIcon(r.allyChampionId)} alt={champName(r.allyChampionId)} />
@@ -165,10 +181,18 @@
         </div>
       {/each}
       {#if bans.note}<p class="muted small">{bans.note}</p>{/if}
-      {#if bans.picks.length}
+      {#if bans.picks.length && bans.byTier}
+        <p class="muted small">Pts = win rate acima da média da lane × chance de ele cair na sua lane (pick rate); amostra pequena conta menos. Troca sozinho para a conta pelo time quando alguém declarar.
+          {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>Tier list ↗</button>{/if}
+        </p>
+      {:else if bans.picks.length}
         <p class="muted small">Pts = win rate que o time recupera, em média, sem esse campeão no jogo (amostra pequena conta menos). Tendência estatística, não leitura do outro time.</p>
       {/if}
     </section>
+  {/if}
+
+  {#if snap?.inChampSelect && (snap.picks || snap.synergy)}
+    <PickSuggest advice={snap.picks} synergy={snap.synergy} {assets} locked={snap.locked} onPick={(id, lane) => api.lookup(id, lane)} />
   {/if}
 
   {#if build && snap}
@@ -188,6 +212,8 @@
             <button class:active={lane === build.lane} onclick={() => changeLane(lane)}>{LANES[lane] ?? lane} {Math.round(p)}%</button>
           {/each}
         </div>
+        <Trend trend={build.trend} />
+        <DamageBar damage={build.damage} />
       </div>
     </section>
 
@@ -243,6 +269,8 @@
       {/if}
     </section>
 
+    <Composition allies={snap.allyPicks ?? []} enemies={snap.enemyPicks} {build} {assets} {minGames} bind:highlight={defHighlight} />
+
     <section class="card">
       <div class="card-head">
         <h2>Runas</h2>
@@ -252,6 +280,7 @@
         </div>
       </div>
       {#if runeSet}<Runes set={runeSet} {assets} />{:else}<p class="muted">Sem runas.</p>{/if}
+      {#if runeSet}<RuneAlternatives set={runeSet} stats={build.runeStats} {assets} {minGames} />{/if}
     </section>
 
     <section class="card row2">
@@ -279,6 +308,7 @@
             {/each}
           </div>
         {/if}
+        <SkillPaths {build} {minGames} />
       </div>
     </section>
 
@@ -293,10 +323,13 @@
           </div>
         </div>
       {/each}
-      <ItemRow label="Botas" items={build.boots} {assets} avgWr={build.wr} {minGames} />
+      <CoreBuild {build} {assets} {minGames} />
+      <ItemRow label="1ª volta" items={firstBack(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
+      <ItemRow label="Botas" items={build.boots} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {#each build.slots as slot, i (i)}
-        <ItemRow label="{i + 1}º item" items={slot} {assets} avgWr={build.wr} {minGames} />
+        <ItemRow label="{i + 1}º item" items={slot} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {/each}
+      <ItemRow label="Situac." items={situationalItems(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
       <p class="muted small">Verde/vermelho = ≥1 ponto acima/abaixo do WR do campeão. Apagado = menos de {minGames} partidas.</p>
     </section>
   {/if}
@@ -320,6 +353,10 @@
         <label><input type="checkbox" bind:checked={settings.replaceCurrentPage} onchange={save} /> Sem espaço para página nova: substituir a página atual</label>
         <label><input type="checkbox" bind:checked={settings.closeInGame} onchange={save} /> Fechar a janela quando a partida começar</label>
         <label><input type="checkbox" bind:checked={settings.suggestBans} onchange={save} /> Sugerir bans pelos campeões do meu time</label>
+        <label><input type="checkbox" bind:checked={settings.suggestPicks} onchange={save} /> Sugerir pick para a minha posição (counter + sinergia)</label>
+        {#if settings.suggestPicks}
+          <label class="sub">Candidatos <select bind:value={settings.pickPool} onchange={save}><option value="mastery">Meu pool (maestria)</option><option value="tier">Tier list da lane</option></select></label>
+        {/if}
       </div>
     </details>
   {/if}
@@ -387,6 +424,7 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
   .grid label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
   .checks { display: grid; gap: 4px; font-size: 13px; }
+  .checks .sub { padding-left: 22px; color: var(--muted); }
   footer { text-align: center; }
   .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
   .mini.me { border-color: var(--gold); }

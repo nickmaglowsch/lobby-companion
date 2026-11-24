@@ -5,13 +5,17 @@
 
 use crate::assets::Assets;
 use crate::lcu::Lcu;
-use crate::lola::model::{Build, ItemStat};
+use crate::lola::model::{Build, Combo, ItemStat};
 use serde_json::{Value, json};
 
 pub const UID_PREFIX: &str = "lc-";
 pub const TITLE_PREFIX: &str = "LC:";
 const SR_MAP: i64 = 11;
 const CONSUMABLES: &[i64] = &[2055, 2003]; // Sentinela de Controle, Poção de Vida
+/// Categorias do cliente que não são item de build (poções, sentinelas, berloques, itens de selva).
+const NOT_BUILD: &[&str] = &["Consumable", "Trinket", "Jungle"];
+/// Quantos itens entram na primeira volta e nos situacionais.
+const EXTRA_ITEMS: usize = 4;
 
 /// `53.456` → `"53,5%"` (pt-BR).
 pub fn pct(x: f64) -> String {
@@ -38,6 +42,79 @@ fn pick_items(list: &[ItemStat], assets: &Assets, min_games: u64) -> Vec<ItemSta
         out.extend(known.first().map(|i| (*i).clone()));
     }
     out
+}
+
+/// Item conhecido do cliente que faz parte de uma build (nada de poção, sentinela, berloque).
+fn is_build_item(assets: &Assets, id: i64) -> bool {
+    assets.items.contains_key(&id) && !NOT_BUILD.iter().any(|c| assets.item_has(id, c))
+}
+
+/// Núcleo (3 itens com botas, ordem de compra) mais jogado com amostra mínima, só com itens conhecidos.
+/// Mesma regra na janela (`coreSets` em `api.ts`).
+pub fn core_set<'a>(
+    build: &'a Build,
+    assets: &Assets,
+    min_games: u64,
+) -> Option<(&'a Combo, Vec<i64>)> {
+    build
+        .core
+        .iter()
+        .filter(|c| c.n >= min_games)
+        .find_map(|c| {
+            let ids: Vec<i64> = c
+                .ids
+                .iter()
+                .filter_map(|s| s.parse().ok())
+                .filter(|id| assets.items.contains_key(id))
+                .collect();
+            (!ids.is_empty()).then_some((c, ids))
+        })
+}
+
+/// Primeira volta: os itens de `earlyItem` mais comprados com amostra mínima, sem consumíveis,
+/// berloques e o que já está nos inícios. Mesma regra na janela (`firstBack` em `api.ts`).
+pub fn first_back(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemStat> {
+    let starts: Vec<i64> = build
+        .start_sets
+        .iter()
+        .take(2)
+        .flat_map(|s| s.ids.iter().filter_map(|x| x.parse().ok()))
+        .collect();
+    build
+        .early_items
+        .iter()
+        .filter(|i| i.n >= min_games && !starts.contains(&i.id) && is_build_item(assets, i.id))
+        .take(EXTRA_ITEMS)
+        .cloned()
+        .collect()
+}
+
+/// Situacionais: os de maior WR (`winningItem`) com amostra mínima que não estão entre os mais
+/// jogados dos slots, das botas e do núcleo (botas ficam de fora: já têm bloco próprio).
+/// Mesma regra na janela (`situationalItems` em `api.ts`).
+pub fn situational(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemStat> {
+    let mut usual: Vec<i64> = build
+        .slots
+        .iter()
+        .chain(std::iter::once(&build.boots))
+        .flat_map(|slot| pick_items(slot, assets, min_games))
+        .map(|i| i.id)
+        .collect();
+    if let Some((_, ids)) = core_set(build, assets, min_games) {
+        usual.extend(ids);
+    }
+    build
+        .winning_items
+        .iter()
+        .filter(|i| {
+            i.n >= min_games
+                && !usual.contains(&i.id)
+                && is_build_item(assets, i.id)
+                && !assets.item_has(i.id, "Boots")
+        })
+        .take(EXTRA_ITEMS)
+        .cloned()
+        .collect()
 }
 
 fn wr_block(label: &str, items: &[ItemStat]) -> Option<Value> {
@@ -92,6 +169,19 @@ pub fn build_item_set(
             "items": counts.iter().map(|(id, c)| item(*id, *c)).collect::<Vec<_>>(),
         }));
     }
+    // Núcleo logo depois dos inícios: é o que a maioria compra primeiro.
+    if let Some((core, ids)) = core_set(build, assets, min_games) {
+        blocks.push(json!({
+            "type": format!("Núcleo · WR {}", pct(core.wr)),
+            "hideIfSummonerSpell": "",
+            "showIfSummonerSpell": "",
+            "items": ids.iter().map(|id| item(*id, 1)).collect::<Vec<_>>(),
+        }));
+    }
+    blocks.extend(wr_block(
+        "Primeira volta",
+        &first_back(build, assets, min_games),
+    ));
     blocks.extend(wr_block(
         "Botas",
         &pick_items(&build.boots, assets, min_games),
@@ -102,6 +192,10 @@ pub fn build_item_set(
             &pick_items(slot, assets, min_games),
         ));
     }
+    blocks.extend(wr_block(
+        "Situacionais",
+        &situational(build, assets, min_games),
+    ));
     let cons: Vec<Value> = CONSUMABLES
         .iter()
         .filter(|id| assets.items.contains_key(id))
@@ -213,6 +307,52 @@ mod tests {
         // 1º item: 3084 (9100 partidas) antes de 3152; 6664 abaixo do mínimo e desconhecido
         assert!(titles.contains(&"1º item · WR 53,5% / 53,2%"));
         assert!(titles.contains(&"Consumíveis"));
+    }
+
+    #[test]
+    fn core_first_back_and_situational_blocks() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let assets = sample_assets();
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200);
+        let blocks = set["blocks"].as_array().unwrap();
+        let titles: Vec<&str> = blocks.iter().map(|b| b["type"].as_str().unwrap()).collect();
+        // ordem: inícios, núcleo, primeira volta, botas, itens, situacionais, consumíveis
+        assert_eq!(
+            titles,
+            vec![
+                "Início · WR 51,8%",
+                "Início alt. · WR 53,6%",
+                "Núcleo · WR 57,1%",
+                "Primeira volta · WR 54,0% / 54,5% / 58,0%",
+                "Botas · WR 55,4%",
+                "1º item · WR 53,5% / 53,2%",
+                "2º item · WR 55,7%",
+                "Situacionais · WR 61,0% / 58,0%",
+                "Consumíveis",
+            ]
+        );
+        // núcleo na ordem de compra (3068 › 3047 › 2502)
+        assert_eq!(
+            blocks[2]["items"],
+            json!([{"id": "3068", "count": 1}, {"id": "3047", "count": 1}, {"id": "2502", "count": 1}])
+        );
+        // primeira volta: sem berloque (3340), sentinela (2055), pet (1102, também no início) e desconhecido
+        let fb: Vec<i64> = first_back(&b, &assets, 200).iter().map(|i| i.id).collect();
+        assert_eq!(fb, vec![1028, 1001, 3068]);
+        // situacionais (por WR): 2003 consumível, 2525 abaixo do mínimo, 3009 botas,
+        // 3742 já é o 2º item e 3152 o 1º → sobram 3075 e 3065
+        let sit: Vec<i64> = situational(&b, &assets, 200).iter().map(|i| i.id).collect();
+        assert_eq!(sit, vec![3075, 3065]);
+    }
+
+    #[test]
+    fn core_needs_min_games() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let assets = sample_assets();
+        // 1300 partidas no núcleo mais jogado: com corte 2000 ele não entra
+        assert!(core_set(&b, &assets, 2000).is_none());
+        let (c, ids) = core_set(&b, &assets, 1000).unwrap();
+        assert_eq!((c.n, ids), (1300, vec![3068, 3047, 2502]));
     }
 
     #[test]

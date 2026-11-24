@@ -16,6 +16,10 @@ pub struct Champion {
 pub struct Named {
     pub name: String,
     pub icon: String,
+    /// Só itens: `categories` do `items.json` do cliente (ex. "Armor", "SpellBlock", "Boots",
+    /// "Consumable", "Trinket"). Vazio nas runas e feitiços.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -25,6 +29,8 @@ pub struct Style {
     pub icon: String,
     /// Runas da árvore (keystones + fileiras normais), sem os fragmentos.
     pub perks: Vec<i64>,
+    /// As mesmas runas por fileira (`slots[0]` = keystones), para achar as alternativas de cada escolha.
+    pub slots: Vec<Vec<i64>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -34,6 +40,9 @@ pub struct Assets {
     pub perks: HashMap<i64, Named>,
     pub styles: Vec<Style>,
     pub spells: HashMap<i64, Named>,
+    /// Fileiras dos fragmentos (ataque, flexível, defesa), iguais em todas as árvores.
+    #[serde(rename = "shardSlots")]
+    pub shard_slots: Vec<Vec<i64>>,
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -51,6 +60,13 @@ fn named_map(list: &Value) -> HashMap<i64, Named> {
                 Named {
                     name: s(e, "name"),
                     icon: s(e, "iconPath"),
+                    categories: e
+                        .get("categories")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|c| c.as_str().map(String::from))
+                        .collect(),
                 },
             ))
         })
@@ -98,32 +114,45 @@ impl Assets {
                 })
             })
             .collect();
-        let styles = styles
+        let rows = |st: &Value, stat_mods: bool| -> Vec<Vec<i64>> {
+            st.get("slots")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|slot| {
+                    (slot.get("type").and_then(Value::as_str) == Some("kStatMod")) == stat_mods
+                })
+                .map(|slot| {
+                    slot.get("perks")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_i64)
+                        .collect()
+                })
+                .collect()
+        };
+        let style_list = styles
             .get("styles")
             .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+            .cloned()
+            .unwrap_or_default();
+        let shard_slots = style_list
+            .iter()
+            .map(|st| rows(st, true))
+            .find(|r| !r.is_empty())
+            .unwrap_or_default();
+        let styles = style_list
+            .iter()
             .filter_map(|st| {
                 let id = st.get("id")?.as_i64()?;
-                let perks = st
-                    .get("slots")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .filter(|slot| slot.get("type").and_then(Value::as_str) != Some("kStatMod"))
-                    .flat_map(|slot| {
-                        slot.get("perks")
-                            .and_then(Value::as_array)
-                            .cloned()
-                            .unwrap_or_default()
-                    })
-                    .filter_map(|p| p.as_i64())
-                    .collect();
+                let slots = rows(st, false);
                 Some(Style {
                     id,
                     name: s(st, "name"),
                     icon: s(st, "iconPath"),
-                    perks,
+                    perks: slots.iter().flatten().copied().collect(),
+                    slots,
                 })
             })
             .collect();
@@ -133,6 +162,7 @@ impl Assets {
             perks: named_map(perks),
             styles,
             spells: named_map(spells),
+            shard_slots,
         }
     }
 
@@ -178,6 +208,13 @@ impl Assets {
         self.champions.get(&id)
     }
 
+    /// O item tem essa categoria no cliente (ex. "Armor")?
+    pub fn item_has(&self, id: i64, category: &str) -> bool {
+        self.items
+            .get(&id)
+            .is_some_and(|i| i.categories.iter().any(|c| c == category))
+    }
+
     pub fn item_name(&self, id: i64) -> String {
         self.items
             .get(&id)
@@ -201,7 +238,9 @@ mod tests {
                 {"type": "kMixedRegularSplashable", "perks": [8126, 8139]},
                 {"type": "kMixedRegularSplashable", "perks": [8140, 8136]},
                 {"type": "kMixedRegularSplashable", "perks": [8106, 8135]},
-                {"type": "kStatMod", "perks": [5008, 5005]}]},
+                {"type": "kStatMod", "perks": [5008, 5005, 5007]},
+                {"type": "kStatMod", "perks": [5008, 5010, 5001]},
+                {"type": "kStatMod", "perks": [5011, 5013, 5001]}]},
             {"id": 8200, "name": "Feitiçaria", "iconPath": "", "slots": [
                 {"type": "kKeyStone", "perks": [8214]},
                 {"type": "kMixedRegularSplashable", "perks": [8224, 8226]},
@@ -214,12 +253,23 @@ mod tests {
         let champs = json!([{"id": -1, "name": "Nenhum", "alias": "None"},
             {"id": 31, "name": "Cho'Gath", "alias": "Chogath"},
             {"id": 62, "name": "Wukong", "alias": "MonkeyKing"}]);
-        let items = json!([{"id": 3084, "name": "Coração de Aço", "iconPath": "/x.png"},
-            {"id": 1102, "name": "Filhote de Brasa", "iconPath": ""},
-            {"id": 2003, "name": "Poção de Vida", "iconPath": ""},
-            {"id": 2055, "name": "Sentinela de Controle", "iconPath": ""},
-            {"id": 3009, "name": "Botas da Rapidez", "iconPath": ""},
-            {"id": 3152, "name": "Cinto-foguete Hextec", "iconPath": ""}]);
+        // Nomes e categorias no formato do cliente; 3111 fica de fora de propósito (testes de botas).
+        let items = json!([{"id": 3084, "name": "Coração de Aço", "iconPath": "/x.png", "categories": ["Health", "HealthRegen"]},
+            {"id": 1102, "name": "Filhote de Brasa", "iconPath": "", "categories": ["Jungle"]},
+            {"id": 2003, "name": "Poção de Vida", "iconPath": "", "categories": ["HealthRegen", "Consumable", "Lane", "Jungle"]},
+            {"id": 2055, "name": "Sentinela de Controle", "iconPath": "", "categories": ["Consumable", "Vision"]},
+            {"id": 3009, "name": "Botas da Rapidez", "iconPath": "", "categories": ["Boots"]},
+            {"id": 3152, "name": "Cinto-foguete Hextec", "iconPath": "", "categories": ["SpellDamage"]},
+            {"id": 3068, "name": "Égide de Fogo Solar", "iconPath": "", "categories": ["Health", "Armor", "Aura"]},
+            {"id": 3047, "name": "Botas Galvanizadas de Aço", "iconPath": "", "categories": ["Armor", "Boots"]},
+            {"id": 2502, "name": "Desespero Eterno", "iconPath": "", "categories": ["Health", "Armor"]},
+            {"id": 3742, "name": "Couraça do Defunto", "iconPath": "", "categories": ["Health", "Armor"]},
+            {"id": 3075, "name": "Armadura de Espinhos", "iconPath": "", "categories": ["Health", "Armor"]},
+            {"id": 3065, "name": "Semblante Espiritual", "iconPath": "", "categories": ["Health", "SpellBlock"]},
+            {"id": 2525, "name": "Couraça Protoplasmática", "iconPath": "", "categories": ["Health", "Tenacity"]},
+            {"id": 1028, "name": "Cristal de Rubi", "iconPath": "", "categories": ["Health"]},
+            {"id": 1001, "name": "Botas", "iconPath": "", "categories": ["Boots"]},
+            {"id": 3340, "name": "Sentinela Invisível", "iconPath": "", "categories": ["Trinket", "Vision"]}]);
         Assets::from_values(
             &champs,
             &items,
@@ -246,5 +296,11 @@ mod tests {
             !a.styles[0].perks.contains(&5008),
             "fragmentos fora da árvore"
         );
+        assert_eq!(a.styles[0].slots[1], vec![8126, 8139]);
+        assert_eq!(a.shard_slots.len(), 3);
+        assert_eq!(a.shard_slots[1], vec![5008, 5010, 5001]);
+        assert!(a.item_has(3047, "Armor"));
+        assert!(!a.item_has(3009, "Armor"));
+        assert!(a.perks.values().all(|p| p.categories.is_empty()));
     }
 }

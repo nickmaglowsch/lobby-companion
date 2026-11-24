@@ -29,6 +29,10 @@ pub struct Settings {
     pub close_in_game: bool,
     /// Sugere bans pelos campeões do seu time (um build geral por campeão do time).
     pub suggest_bans: bool,
+    /// Sugere pick para a sua posição (counter + sinergia + força na lane).
+    pub suggest_picks: bool,
+    /// Candidatos da sugestão de pick: "mastery" = seu pool (maestria); "tier" = tier list da lane.
+    pub pick_pool: String,
 }
 
 impl Default for Settings {
@@ -47,6 +51,8 @@ impl Default for Settings {
             flash_slot: 1,
             close_in_game: true,
             suggest_bans: true,
+            suggest_picks: true,
+            pick_pool: "mastery".into(),
         }
     }
 }
@@ -83,5 +89,7 @@ mod tests {
         assert_eq!(s.min_games, 200);
         assert!(s.auto_import);
         assert_eq!(s.patch_opt(), None);
+        assert!(s.suggest_picks);
+        assert_eq!(s.pick_pool, "mastery");
     }
 }
