@@ -1,8 +1,12 @@
-//! Cliente do lolalytics (endpoint não documentado `a1.lolalytics.com/mega/?ep=build-full`).
+//! Cliente do lolalytics (endpoints não documentados `a1.lolalytics.com/mega/?ep=…`):
+//! `build-full` (build do campeão, ou do confronto no `a3`), `list` (tier list de uma lane),
+//! `counter` (WR do campeão contra cada oponente de uma lane) e `build-team` (WR do campeão
+//! com cada aliado de cada lane). Formatos e significados em `extra.rs` e no CLAUDE.md.
 //!
 //! Boa vizinhança: cache em disco (6 h), no máximo 1 requisição por segundo, User-Agent próprio,
 //! cópia vencida do cache quando o site recusa (403/429/Cloudflare) e link para a página original na UI.
 
+pub mod extra;
 pub mod model;
 
 use serde_json::Value;
@@ -21,8 +25,45 @@ pub const USER_AGENT: &str = concat!(
     " (+https://github.com/nickmaglowsch/lobby-companion)"
 );
 
+/// Qual endpoint do `mega/` a consulta usa.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Ep {
+    /// Build geral (ou de confronto, com `vs`).
+    #[default]
+    BuildFull,
+    /// Tier list da `lane` (todos os campeões; `slug` vazio).
+    List,
+    /// Oponentes do `slug` (na `lane`) que jogam na `vs_lane`.
+    Counter,
+    /// Aliados do `slug` (na `lane`) em cada lane.
+    BuildTeam,
+}
+
+impl Ep {
+    fn name(self) -> &'static str {
+        match self {
+            Ep::BuildFull => "build-full",
+            Ep::List => "list",
+            Ep::Counter => "counter",
+            Ep::BuildTeam => "build-team",
+        }
+    }
+
+    /// A resposta tem os dados (e pode ir para o cache)? Erros vêm como `{"status": 404x}`.
+    fn valid(self, v: &Value) -> bool {
+        let key = match self {
+            Ep::BuildFull => "header",
+            Ep::List => "cid",
+            Ep::Counter => "counters",
+            Ep::BuildTeam => "team",
+        };
+        v.get(key).is_some()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Query {
+    pub ep: Ep,
     pub slug: String,
     /// `None` = lane mais jogada do campeão (o lolalytics escolhe).
     pub lane: Option<String>,
@@ -38,6 +79,9 @@ pub struct Query {
 
 impl Query {
     pub fn api_url(&self) -> String {
+        if self.ep != Ep::BuildFull {
+            return self.extra_api_url();
+        }
         let mut url = match &self.vs {
             None => format!(
                 "{API}?ep=build-full&v=1&c={}&tier={}&queue=ranked&region={}",
@@ -66,8 +110,73 @@ impl Query {
         url
     }
 
+    /// `list`, `counter` e `build-team`: sempre no `a1`, com região.
+    fn extra_api_url(&self) -> String {
+        let mut url = format!("{API}?ep={}&v=1", self.ep.name());
+        if self.ep != Ep::List {
+            url.push_str(&format!("&c={}", enc(&self.slug)));
+        }
+        if let Some(l) = &self.lane {
+            url.push_str(&format!("&lane={}", enc(l)));
+        }
+        if self.ep == Ep::Counter
+            && let Some(l) = &self.vs_lane
+        {
+            url.push_str(&format!("&vslane={}", enc(l)));
+        }
+        url.push_str(&format!(
+            "&tier={}&queue=ranked&region={}",
+            enc(&self.tier),
+            enc(&self.region)
+        ));
+        if let Some(p) = &self.patch {
+            url.push_str(&format!("&patch={}", enc(p)));
+        }
+        url
+    }
+
     /// Página do lolalytics para o usuário abrir (atribuição).
     pub fn page_url(&self) -> String {
+        match self.ep {
+            Ep::BuildFull => {}
+            Ep::List | Ep::Counter => {
+                let mut url = if self.ep == Ep::List {
+                    format!(
+                        "https://lolalytics.com/lol/tierlist/?tier={}",
+                        enc(&self.tier)
+                    )
+                } else {
+                    format!(
+                        "https://lolalytics.com/lol/{}/counters/?tier={}",
+                        enc(&self.slug),
+                        enc(&self.tier)
+                    )
+                };
+                if let Some(l) = &self.lane {
+                    url.push_str(&format!("&lane={}", enc(l)));
+                }
+                if self.ep == Ep::Counter
+                    && let Some(l) = &self.vs_lane
+                {
+                    url.push_str(&format!("&vslane={}", enc(l)));
+                }
+                if self.region != "all" {
+                    url.push_str(&format!("&region={}", enc(&self.region)));
+                }
+                if let Some(p) = &self.patch {
+                    url.push_str(&format!("&patch={}", enc(p)));
+                }
+                return url;
+            }
+            // A sinergia aparece na página do build do campeão.
+            Ep::BuildTeam => {
+                return Query {
+                    ep: Ep::BuildFull,
+                    ..self.clone()
+                }
+                .page_url();
+            }
+        }
         let mut url = match &self.vs {
             None => format!(
                 "https://lolalytics.com/lol/{}/build/?tier={}",
@@ -102,8 +211,18 @@ impl Query {
             None => String::new(),
             Some(v) => format!("_vs_{v}_{}", self.vs_lane.as_deref().unwrap_or("default")),
         };
+        // O build geral mantém a chave antiga (o cache de quem atualiza continua valendo).
+        let ep = match self.ep {
+            Ep::BuildFull => String::new(),
+            Ep::Counter => format!(
+                "{}_{}_",
+                self.ep.name(),
+                self.vs_lane.as_deref().unwrap_or("default")
+            ),
+            e => format!("{}_", e.name()),
+        };
         format!(
-            "{}_{}_{}_{}_{}{vs}.json",
+            "{ep}{}_{}_{}_{}_{}{vs}.json",
             self.slug,
             self.lane.as_deref().unwrap_or("default"),
             self.tier,
@@ -179,6 +298,11 @@ impl Lolalytics {
     }
 
     pub async fn build_full(&self, q: &Query) -> Result<Fetched, String> {
+        self.get(q).await
+    }
+
+    /// Qualquer endpoint: cache de 6 h, depois o site; se o site falhar, o cache vencido.
+    pub async fn get(&self, q: &Query) -> Result<Fetched, String> {
         let cached = self.read_cache(q);
         if let Some((v, age)) = &cached
             && *age < TTL
@@ -191,7 +315,7 @@ impl Lolalytics {
         match self.fetch(q).await {
             Ok(v) => {
                 // Erros "de dados" ({"status": 404x}) não vão para o cache.
-                if v.get("header").is_some() {
+                if q.ep.valid(&v) {
                     self.write_cache(q, &v);
                 }
                 Ok(Fetched {
@@ -285,5 +409,69 @@ mod tests {
         };
         assert!(!evil.api_url().contains("&b="));
         assert!(!evil.cache_key().contains('/'));
+    }
+
+    #[test]
+    fn extra_endpoint_urls() {
+        let base = Query {
+            tier: "emerald_plus".into(),
+            region: "all".into(),
+            ..Default::default()
+        };
+        let list = Query {
+            ep: Ep::List,
+            lane: Some("jungle".into()),
+            ..base.clone()
+        };
+        assert_eq!(
+            list.api_url(),
+            "https://a1.lolalytics.com/mega/?ep=list&v=1&lane=jungle&tier=emerald_plus&queue=ranked&region=all"
+        );
+        assert_eq!(
+            list.page_url(),
+            "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=jungle"
+        );
+        assert_eq!(list.cache_key(), "list__jungle_emerald_plus_all_atual.json");
+        let counter = Query {
+            ep: Ep::Counter,
+            slug: "viego".into(),
+            lane: Some("jungle".into()),
+            vs_lane: Some("middle".into()),
+            ..base.clone()
+        };
+        assert_eq!(
+            counter.api_url(),
+            "https://a1.lolalytics.com/mega/?ep=counter&v=1&c=viego&lane=jungle&vslane=middle&tier=emerald_plus&queue=ranked&region=all"
+        );
+        assert_eq!(
+            counter.page_url(),
+            "https://lolalytics.com/lol/viego/counters/?tier=emerald_plus&lane=jungle&vslane=middle"
+        );
+        assert_eq!(
+            counter.cache_key(),
+            "counter_middle_viego_jungle_emerald_plus_all_atual.json"
+        );
+        let team = Query {
+            ep: Ep::BuildTeam,
+            slug: "lux".into(),
+            lane: Some("middle".into()),
+            patch: Some("7".into()),
+            ..base
+        };
+        assert_eq!(
+            team.api_url(),
+            "https://a1.lolalytics.com/mega/?ep=build-team&v=1&c=lux&lane=middle&tier=emerald_plus&queue=ranked&region=all&patch=7"
+        );
+        assert_eq!(
+            team.page_url(),
+            "https://lolalytics.com/lol/lux/build/?tier=emerald_plus&lane=middle&patch=7"
+        );
+        // chave diferente do build geral do mesmo campeão
+        assert_eq!(
+            team.cache_key(),
+            "build-team_lux_middle_emerald_plus_all_7.json"
+        );
+        assert!(Ep::Counter.valid(&serde_json::json!({"counters": []})));
+        assert!(!Ep::List.valid(&serde_json::json!({"status": 4044})));
     }
 }

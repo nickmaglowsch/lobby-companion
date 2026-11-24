@@ -9,6 +9,8 @@ export const mockAssets: Assets = {
     "31": { id: 31, name: "Cho'Gath", alias: "Chogath" }, "62": { id: 62, name: "Wukong", alias: "MonkeyKing" },
     "234": { id: 234, name: "Viego", alias: "Viego" }, "122": { id: 122, name: "Darius", alias: "Darius" },
     "876": { id: 876, name: "Lillia", alias: "Lillia" }, "99": { id: 99, name: "Lux", alias: "Lux" },
+    "64": { id: 64, name: "Lee Sin", alias: "LeeSin" }, "60": { id: 60, name: "Elise", alias: "Elise" },
+    "19": { id: 19, name: "Warwick", alias: "Warwick" }, "14": { id: 14, name: "Sion", alias: "Sion" },
   },
   items: {
     "1102": item("Filhote de Brasa"), "2003": item("Poção de Vida"), "3009": item("Botas da Rapidez"),
@@ -50,13 +52,46 @@ export const mockSnapshot: Snapshot = {
     loading: false,
     basedOn: [{ championId: 31, lane: "jungle", me: true }, { championId: 99, lane: "middle", me: false }],
     picks: [
-      { championId: 876, gain: 0.21, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 46.1, baseWr: 53.3, n: 900 }] },
-      { championId: 62, gain: 0.12, reasons: [
+      { championId: 876, gain: 0.21, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 46.1, baseWr: 53.3, n: 900 }] },
+      { championId: 62, gain: 0.12, tier: null, reasons: [
         { allyChampionId: 31, lane: "jungle", wr: 49.0, baseWr: 53.3, n: 700 },
         { allyChampionId: 99, lane: "middle", wr: 48.2, baseWr: 51.0, n: 300 },
       ] },
     ],
     note: null,
+    byTier: false,
+    lane: null,
+    pageUrl: null,
+  },
+  picks: {
+    loading: false,
+    lane: "jungle",
+    pool: "mastery",
+    enemies: [234, 122],
+    allies: [{ championId: 99, lane: "middle", me: false }],
+    note: null,
+    pageUrl: "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=jungle",
+    suggestions: [
+      { championId: 19, total: 3.1, base: 1.4, wr: 53.1, games: 30000, mastery: 98000, parts: [
+        { kind: "counter", championId: 234, lane: "jungle", delta: 1.2, wr: 52.4, n: 1500 },
+        { kind: "synergy", championId: 99, lane: "middle", delta: 0.6, wr: 55.0, n: 300 },
+        { kind: "counter", championId: 122, lane: "top", delta: -0.1, wr: 50.2, n: 400 },
+      ] },
+      { championId: 31, total: 2.2, base: 1.9, wr: 53.5, games: 60000, mastery: 580000, parts: [
+        { kind: "synergy", championId: 99, lane: "middle", delta: 0.5, wr: 56.1, n: 420 },
+        { kind: "counter", championId: 234, lane: "jungle", delta: -0.2, wr: 50.8, n: 1200 },
+      ] },
+      { championId: 60, total: 0.4, base: 1.3, wr: 52.9, games: 39000, mastery: 12000, parts: [
+        { kind: "counter", championId: 234, lane: "jungle", delta: -0.9, wr: 49.0, n: 1700 },
+      ] },
+    ],
+  },
+  synergy: {
+    championId: 31,
+    lane: "jungle",
+    baseWr: 53.5,
+    pageUrl: "https://lolalytics.com/lol/chogath/build/?tier=emerald_plus&lane=jungle",
+    lines: [{ allyChampionId: 99, lane: "middle", wr: 55.0, delta: 0.8, n: 300 }],
   },
   build: {
     slug: "chogath", lane: "jungle", patch: "16.23", wr: 53.3, pr: 5.1, br: 7.0, n: 14000, rank: 7, rankTotal: 79,
@@ -82,5 +117,5 @@ export const mockSnapshot: Snapshot = {
 export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
-  suggestBans: true,
+  suggestBans: true, suggestPicks: true, pickPool: "mastery",
 };

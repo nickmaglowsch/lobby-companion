@@ -8,6 +8,7 @@
 //! (o seu campeão pesa 2). É tendência de estatística, não leitura do outro time.
 
 use crate::champselect::Ally;
+use crate::lola::extra::TierEntry;
 use crate::lola::model::Build;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -37,6 +38,8 @@ pub struct BanPick {
     /// Pontos de win rate que o time ganha, em média, se ele sair do jogo.
     pub gain: f64,
     pub reasons: Vec<Reason>,
+    /// Só nos bans pela tier list da lane (`picks::tier_bans`): WR, pick e ban rate dele.
+    pub tier: Option<TierEntry>,
 }
 
 pub fn suggest(inputs: &[(Ally, &Build)], unavailable: &[i64], top: usize) -> Vec<BanPick> {
@@ -80,6 +83,7 @@ pub fn suggest(inputs: &[(Ally, &Build)], unavailable: &[i64], top: usize) -> Ve
                 champion_id: id,
                 gain: score / total,
                 reasons: reasons.into_iter().take(REASONS).map(|r| r.1).collect(),
+                tier: None,
             }
         })
         .filter(|p| p.gain > 0.0)

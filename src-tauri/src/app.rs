@@ -7,8 +7,10 @@ use crate::champselect::{self, Ally, Draft, Me};
 use crate::import::{itemset, runes, spells};
 use crate::lcu::ws::{self, LcuEvent};
 use crate::lcu::{self, Lcu};
+use crate::lola::extra::{self, Counters, Team, TierList};
 use crate::lola::model::{self, Build};
-use crate::lola::{Lolalytics, Query};
+use crate::lola::{Ep, Lolalytics, Query};
+use crate::picks::{self, PickSuggestion, SynergyLine};
 use crate::settings::Settings;
 use serde::Serialize;
 use serde_json::Value;
@@ -112,6 +114,10 @@ pub struct Snapshot {
     /// Campeões já visíveis do outro time (atalhos para escolher o confronto).
     pub enemy_picks: Vec<i64>,
     pub bans: Option<BanAdvice>,
+    /// Sugestão de pick para a sua posição (só na seleção).
+    pub picks: Option<PickAdvice>,
+    /// Sinergia do seu campeão (escolhido ou declarado) com os aliados declarados.
+    pub synergy: Option<SynergyAdvice>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -122,6 +128,38 @@ pub struct BanAdvice {
     pub based_on: Vec<Ally>,
     pub picks: Vec<BanPick>,
     pub note: Option<String>,
+    /// Ninguém do time declarou: bans pela força geral na sua lane (tier list).
+    pub by_tier: bool,
+    pub lane: Option<String>,
+    pub page_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PickAdvice {
+    pub loading: bool,
+    /// Sua lane (lolalytics).
+    pub lane: Option<String>,
+    /// De onde vieram os candidatos: "mastery" (seu pool) ou "tier" (tier list da lane).
+    pub pool: String,
+    pub suggestions: Vec<PickSuggestion>,
+    /// Inimigos e aliados usados na conta.
+    pub enemies: Vec<i64>,
+    pub allies: Vec<Ally>,
+    pub note: Option<String>,
+    /// Tier list da lane no lolalytics (atribuição).
+    pub page_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SynergyAdvice {
+    pub champion_id: i64,
+    pub lane: String,
+    /// WR geral do seu campeão na lane (tier list).
+    pub base_wr: Option<f64>,
+    pub lines: Vec<SynergyLine>,
+    pub page_url: Option<String>,
 }
 
 pub struct Shared {
@@ -144,6 +182,12 @@ pub struct Shared {
     draft: Mutex<Option<Draft>>,
     /// Só a conta de bans mais nova escreve no snapshot.
     bans_gen: AtomicU64,
+    /// Idem para a sugestão de pick.
+    picks_gen: AtomicU64,
+    /// Sua lane do lolalytics (posição atribuída), atualizada antes de recalcular bans e picks.
+    my_lane: Mutex<Option<String>>,
+    /// Maestria do jogador local `[(campeão, pontos)]`, lida uma vez por seleção (GET).
+    mastery: Mutex<Option<Vec<(i64, u64)>>>,
 }
 
 impl Shared {
@@ -166,6 +210,9 @@ impl Shared {
             vs: Mutex::new(None),
             draft: Mutex::new(None),
             bans_gen: AtomicU64::new(0),
+            picks_gen: AtomicU64::new(0),
+            my_lane: Mutex::new(None),
+            mastery: Mutex::new(None),
         }
     }
 }
@@ -262,6 +309,8 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
             // Seleção nova: o confronto e os bans da anterior não valem mais.
             *shared.vs.lock().await = None;
             *shared.draft.lock().await = None;
+            *shared.my_lane.lock().await = None;
+            *shared.mastery.lock().await = None;
             update(app, shared, |s| {
                 s.phase = phase.into();
                 s.in_champ_select = true;
@@ -273,6 +322,8 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
                 s.vs_lane = None;
                 s.enemy_picks.clear();
                 s.bans = None;
+                s.picks = None;
+                s.synergy = None;
             })
             .await;
             crate::show_main(app);
@@ -305,6 +356,17 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         return;
     };
     let draft = session.as_ref().and_then(champselect::parse_draft);
+    let my_lane = me
+        .position
+        .as_deref()
+        .and_then(champselect::lolalytics_lane)
+        .map(String::from);
+    let lane_changed = {
+        let mut prev = shared.my_lane.lock().await;
+        let changed = *prev != my_lane;
+        *prev = my_lane;
+        changed
+    };
     let draft_changed = {
         let mut prev = shared.draft.lock().await;
         let changed = *prev != draft;
@@ -313,7 +375,7 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         }
         changed
     };
-    if draft_changed {
+    if draft_changed || lane_changed {
         let enemies = draft.map(|d| d.enemies).unwrap_or_default();
         update(app, shared, |s| {
             s.in_champ_select = true;
@@ -321,7 +383,10 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         })
         .await;
         let (app, shared) = (app.clone(), shared.clone());
-        tauri::async_runtime::spawn(async move { refresh_bans(&app, &shared).await });
+        tauri::async_runtime::spawn(async move {
+            refresh_bans(&app, &shared).await;
+            refresh_picks(&app, &shared).await;
+        });
     }
     {
         // A sessão muda a cada segundo (timer); só reagimos quando o NOSSO estado muda.
@@ -525,6 +590,11 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         ),
         _ => (Vec::new(), Vec::new()),
     };
+    let my_lane = shared.my_lane.lock().await.clone();
+    if let Some(lane) = my_lane.filter(|_| in_select && allies.is_empty()) {
+        bans_by_tier(app, shared, generation, &settings, lane, &unavailable).await;
+        return;
+    }
     if allies.is_empty() {
         update(app, shared, |s| {
             s.bans = in_select.then(|| BanAdvice {
@@ -536,12 +606,18 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         return;
     }
     update(app, shared, |s| {
-        let picks = s.bans.take().map(|b| b.picks).unwrap_or_default();
+        // Os da tier list não valem para a conta pelo time.
+        let picks = s
+            .bans
+            .take()
+            .filter(|b| !b.by_tier)
+            .map(|b| b.picks)
+            .unwrap_or_default();
         s.bans = Some(BanAdvice {
             loading: true,
             based_on: allies.clone(),
             picks,
-            note: None,
+            ..Default::default()
         });
     })
     .await;
@@ -580,6 +656,328 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
             based_on: allies,
             picks,
             note,
+            ..Default::default()
+        })
+    })
+    .await;
+}
+
+/// Consulta de `list`/`counter`/`build-team` com os filtros das configurações.
+fn extra_query(
+    settings: &Settings,
+    ep: Ep,
+    slug: String,
+    lane: Option<String>,
+    vs_lane: Option<String>,
+) -> Query {
+    Query {
+        ep,
+        slug,
+        lane,
+        vs_lane,
+        tier: settings.tier.clone(),
+        region: settings.region.clone(),
+        patch: settings.patch_opt(),
+        ..Default::default()
+    }
+}
+
+async fn fetch_list(shared: &Shared, q: &Query) -> Result<TierList, String> {
+    shared
+        .lola
+        .get(q)
+        .await
+        .and_then(|f| extra::parse_list(&f.data))
+}
+
+async fn fetch_counter(shared: &Shared, q: &Query) -> Result<Counters, String> {
+    shared
+        .lola
+        .get(q)
+        .await
+        .and_then(|f| extra::parse_counter(&f.data))
+}
+
+async fn fetch_team(shared: &Shared, q: &Query) -> Result<Team, String> {
+    shared
+        .lola
+        .get(q)
+        .await
+        .and_then(|f| extra::parse_build_team(&f.data))
+}
+
+/// Ninguém do seu time declarou ainda: bans pela força geral na sua lane (uma tier list, com cache).
+/// A sua lane e não todas: o oponente direto é quem mais pesa no seu jogo, e a mesma tier list
+/// já serve para a sugestão de pick (sem requisição a mais).
+async fn bans_by_tier(
+    app: &AppHandle,
+    shared: &Arc<Shared>,
+    generation: u64,
+    settings: &Settings,
+    lane: String,
+    unavailable: &[i64],
+) {
+    update(app, shared, |s| {
+        let picks = s
+            .bans
+            .take()
+            .filter(|b| b.by_tier)
+            .map(|b| b.picks)
+            .unwrap_or_default();
+        s.bans = Some(BanAdvice {
+            loading: true,
+            picks,
+            by_tier: true,
+            lane: Some(lane.clone()),
+            ..Default::default()
+        });
+    })
+    .await;
+    let q = extra_query(settings, Ep::List, String::new(), Some(lane.clone()), None);
+    let result = fetch_list(shared, &q).await;
+    if shared.bans_gen.load(Ordering::SeqCst) != generation {
+        return;
+    }
+    let advice = match result {
+        Ok(list) => BanAdvice {
+            picks: picks::tier_bans(&list, unavailable, 5),
+            by_tier: true,
+            lane: Some(lane),
+            page_url: Some(q.page_url()),
+            ..Default::default()
+        },
+        Err(e) => BanAdvice {
+            note: Some(format!("tier list indisponível: {e}")),
+            by_tier: true,
+            lane: Some(lane),
+            ..Default::default()
+        },
+    };
+    update(app, shared, |s| s.bans = Some(advice)).await;
+}
+
+/// Maestria do jogador local (só GET; uma vez por seleção).
+async fn mastery(shared: &Shared) -> Result<Vec<(i64, u64)>, String> {
+    if let Some(m) = shared.mastery.lock().await.clone() {
+        return Ok(m);
+    }
+    let lcu = shared
+        .lcu
+        .read()
+        .await
+        .clone()
+        .ok_or("cliente do League fechado")?;
+    let v = lcu
+        .get("/lol-champion-mastery/v1/local-player/champion-mastery")
+        .await
+        .map_err(|e| e.to_string())?;
+    let m = extra::parse_mastery(&v);
+    *shared.mastery.lock().await = Some(m.clone());
+    Ok(m)
+}
+
+/// Recalcula a sugestão de pick e a sinergia quando a seleção muda. Requisições ao lolalytics
+/// (cache de 6 h): a tier list da sua lane, o `build-team` do seu campeão (sinergia), um
+/// `counter` por inimigo visível (até 5) e um `build-team` por aliado com lane (até 4).
+pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
+    let generation = shared.picks_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let stale = || shared.picks_gen.load(Ordering::SeqCst) != generation;
+    let settings = shared.settings.lock().await.clone();
+    let in_select = shared.snapshot.lock().await.in_champ_select;
+    if !settings.suggest_picks || !in_select {
+        update(app, shared, |s| {
+            s.picks = None;
+            s.synergy = None;
+        })
+        .await;
+        return;
+    }
+    let Some(lane) = shared.my_lane.lock().await.clone() else {
+        update(app, shared, |s| {
+            s.picks = Some(PickAdvice {
+                note: Some("Sem posição atribuída (às cegas?): sem sugestão de pick.".into()),
+                ..Default::default()
+            });
+            s.synergy = None;
+        })
+        .await;
+        return;
+    };
+    let draft = shared.draft.lock().await.clone().unwrap_or_default();
+    let mates: Vec<Ally> = draft
+        .allies
+        .iter()
+        .filter(|a| !a.me && a.lane.is_some())
+        .take(4)
+        .cloned()
+        .collect();
+    let enemies: Vec<i64> = draft.enemies.iter().take(5).copied().collect();
+    update(app, shared, |s| {
+        let prev = s.picks.take().map(|p| p.suggestions).unwrap_or_default();
+        s.picks = Some(PickAdvice {
+            loading: true,
+            lane: Some(lane.clone()),
+            pool: settings.pick_pool.clone(),
+            suggestions: prev,
+            enemies: enemies.clone(),
+            allies: mates.clone(),
+            ..Default::default()
+        });
+    })
+    .await;
+    let assets = shared.assets.read().await.clone();
+    let slug = |id: i64| {
+        assets
+            .as_ref()
+            .and_then(|a| a.champion(id))
+            .map(|c| (lolalytics_slug(&c.alias), c.name.clone()))
+    };
+    let list_q = extra_query(&settings, Ep::List, String::new(), Some(lane.clone()), None);
+    let list = match fetch_list(shared, &list_q).await {
+        Ok(l) => l,
+        Err(e) => {
+            if !stale() {
+                update(app, shared, |s| {
+                    if let Some(p) = s.picks.as_mut() {
+                        p.loading = false;
+                        p.note = Some(format!("tier list indisponível: {e}"));
+                    }
+                })
+                .await;
+            }
+            return;
+        }
+    };
+    if stale() {
+        return;
+    }
+
+    // Sinergia do seu campeão (escolhido ou declarado) com os aliados declarados.
+    let me = draft.allies.iter().find(|a| a.me).cloned();
+    let synergy = match me
+        .as_ref()
+        .and_then(|m| Some((m.champion_id, slug(m.champion_id)?)))
+    {
+        Some((id, (my_slug, _))) if !mates.is_empty() => {
+            let q = extra_query(&settings, Ep::BuildTeam, my_slug, Some(lane.clone()), None);
+            fetch_team(shared, &q).await.ok().map(|team| SynergyAdvice {
+                champion_id: id,
+                lane: lane.clone(),
+                base_wr: list.get(id).map(|e| e.wr),
+                lines: picks::synergy_lines(&team, &mates),
+                page_url: Some(q.page_url()),
+            })
+        }
+        _ => None,
+    };
+    if stale() {
+        return;
+    }
+    update(app, shared, |s| s.synergy = synergy).await;
+
+    // Candidatos: o seu pool (maestria) ou a tier list da lane. O seu próprio campeão continua
+    // valendo (dá para ver como ele se compara); o resto do que está indisponível sai.
+    let my_champ = me.as_ref().map(|m| m.champion_id).unwrap_or(0);
+    let exclude: Vec<i64> = draft
+        .unavailable
+        .iter()
+        .copied()
+        .filter(|id| *id != my_champ)
+        .collect();
+    let mut notes: Vec<String> = Vec::new();
+    let mut pool_kind = settings.pick_pool.clone();
+    let mut owned: Vec<(i64, u64)> = Vec::new();
+    let mut candidates = Vec::new();
+    if pool_kind == "mastery" {
+        match mastery(shared).await {
+            Ok(m) => {
+                candidates = picks::pool_from_mastery(&m, &list, &exclude, picks::POOL_SIZE);
+                owned = m;
+            }
+            Err(e) => notes.push(format!("maestria indisponível ({e})")),
+        }
+        if candidates.is_empty() {
+            notes.push("nenhum campeão do seu pool joga essa lane; usando a tier list".into());
+            pool_kind = "tier".into();
+        }
+    }
+    if pool_kind != "mastery" {
+        candidates = picks::pool_from_tier(&list, &exclude, picks::POOL_SIZE);
+    }
+
+    let mut counters: Vec<(i64, String, Counters)> = Vec::new();
+    for &e in &enemies {
+        let Some((e_slug, name)) = slug(e) else {
+            continue;
+        };
+        let e_lane = picks::enemy_lane(&list, e, &lane);
+        let q = extra_query(
+            &settings,
+            Ep::Counter,
+            e_slug,
+            Some(e_lane.clone()),
+            Some(lane.clone()),
+        );
+        match fetch_counter(shared, &q).await {
+            Ok(c) => counters.push((e, e_lane, c)),
+            Err(_) => notes.push(format!("sem dados de counter de {name}")),
+        }
+        if stale() {
+            return;
+        }
+    }
+    let mut teams: Vec<(i64, String, Team)> = Vec::new();
+    for a in &mates {
+        let (Some((a_slug, name)), Some(a_lane)) = (slug(a.champion_id), a.lane.clone()) else {
+            continue;
+        };
+        let q = extra_query(&settings, Ep::BuildTeam, a_slug, Some(a_lane.clone()), None);
+        match fetch_team(shared, &q).await {
+            Ok(t) => teams.push((a.champion_id, a_lane, t)),
+            Err(_) => notes.push(format!("sem dados de sinergia de {name}")),
+        }
+        if stale() {
+            return;
+        }
+    }
+    let enemy_inputs: Vec<picks::Enemy> = counters
+        .iter()
+        .map(|(id, l, c)| picks::Enemy {
+            champion_id: *id,
+            lane: l.clone(),
+            counters: c,
+        })
+        .collect();
+    let mate_inputs: Vec<picks::Mate> = teams
+        .iter()
+        .map(|(id, l, t)| picks::Mate {
+            champion_id: *id,
+            lane: l.clone(),
+            team: t,
+        })
+        .collect();
+    let suggestions = picks::suggest(
+        &lane,
+        &list,
+        &candidates,
+        &enemy_inputs,
+        &mate_inputs,
+        &owned,
+        picks::TOP,
+    );
+    if stale() {
+        return;
+    }
+    update(app, shared, |s| {
+        s.picks = Some(PickAdvice {
+            loading: false,
+            lane: Some(lane),
+            pool: pool_kind,
+            suggestions,
+            enemies,
+            allies: mates,
+            note: (!notes.is_empty()).then(|| notes.join("; ")),
+            page_url: Some(list_q.page_url()),
         })
     })
     .await;

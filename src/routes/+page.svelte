@@ -7,6 +7,7 @@
   } from "$lib/api";
   import Runes from "$lib/Runes.svelte";
   import ItemRow from "$lib/ItemRow.svelte";
+  import PickSuggest from "$lib/PickSuggest.svelte";
 
   let snap = $state<Snapshot | null>(null);
   let assets = $state<Assets | null>(null);
@@ -141,6 +142,9 @@
         <h2>Sugestão de bans</h2>
         {#if bans.loading}<span class="muted small">calculando…</span>{/if}
       </div>
+      {#if bans.byTier}
+        <div class="based muted small">Ninguém do time declarou ainda: pela força geral na sua lane{bans.lane ? ` (${LANES[bans.lane] ?? bans.lane})` : ""}.</div>
+      {/if}
       {#if bans.basedOn.length}
         <div class="based muted small">
           {snap.inChampSelect ? "Pelo seu time:" : "Para:"}
@@ -155,6 +159,9 @@
           <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
           <div>
             <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate que o time recupera, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
+            {#if p.tier}
+              <div class="reason muted small">{pct(p.tier.wr)} na lane · pick {pct(p.tier.pr)} · ban {pct(p.tier.br)} · {num(p.tier.games)} partidas</div>
+            {/if}
             {#each p.reasons as r (r.allyChampionId + r.lane)}
               <div class="reason muted small">
                 <img class="mini" src={championIcon(r.allyChampionId)} alt={champName(r.allyChampionId)} />
@@ -165,10 +172,18 @@
         </div>
       {/each}
       {#if bans.note}<p class="muted small">{bans.note}</p>{/if}
-      {#if bans.picks.length}
+      {#if bans.picks.length && bans.byTier}
+        <p class="muted small">Pts = win rate acima da média da lane × chance de ele cair na sua lane (pick rate); amostra pequena conta menos. Troca sozinho para a conta pelo time quando alguém declarar.
+          {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>Tier list ↗</button>{/if}
+        </p>
+      {:else if bans.picks.length}
         <p class="muted small">Pts = win rate que o time recupera, em média, sem esse campeão no jogo (amostra pequena conta menos). Tendência estatística, não leitura do outro time.</p>
       {/if}
     </section>
+  {/if}
+
+  {#if snap?.inChampSelect && (snap.picks || snap.synergy)}
+    <PickSuggest advice={snap.picks} synergy={snap.synergy} {assets} locked={snap.locked} onPick={(id, lane) => api.lookup(id, lane)} />
   {/if}
 
   {#if build && snap}
@@ -320,6 +335,10 @@
         <label><input type="checkbox" bind:checked={settings.replaceCurrentPage} onchange={save} /> Sem espaço para página nova: substituir a página atual</label>
         <label><input type="checkbox" bind:checked={settings.closeInGame} onchange={save} /> Fechar a janela quando a partida começar</label>
         <label><input type="checkbox" bind:checked={settings.suggestBans} onchange={save} /> Sugerir bans pelos campeões do meu time</label>
+        <label><input type="checkbox" bind:checked={settings.suggestPicks} onchange={save} /> Sugerir pick para a minha posição (counter + sinergia)</label>
+        {#if settings.suggestPicks}
+          <label class="sub">Candidatos <select bind:value={settings.pickPool} onchange={save}><option value="mastery">Meu pool (maestria)</option><option value="tier">Tier list da lane</option></select></label>
+        {/if}
       </div>
     </details>
   {/if}
@@ -387,6 +406,7 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
   .grid label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
   .checks { display: grid; gap: 4px; font-size: 13px; }
+  .checks .sub { padding-left: 22px; color: var(--muted); }
   footer { text-align: center; }
   .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
   .mini.me { border-color: var(--gold); }

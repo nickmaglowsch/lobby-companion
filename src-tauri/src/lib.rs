@@ -8,6 +8,7 @@ pub mod champselect;
 pub mod import;
 pub mod lcu;
 pub mod lola;
+pub mod picks;
 pub mod settings;
 
 use app::{ImportReport, Shared, Snapshot};
@@ -101,7 +102,7 @@ async fn save_settings(
     settings
         .save(&shared.settings_path)
         .map_err(|e| e.to_string())?;
-    let (filters_changed, runes_changed, items_changed, bans_changed) = {
+    let (filters_changed, runes_changed, items_changed, bans_changed, picks_changed) = {
         let mut cur = shared.settings.lock().await;
         let changed = (
             cur.tier != settings.tier
@@ -110,6 +111,7 @@ async fn save_settings(
             cur.rune_choice != settings.rune_choice,
             cur.min_games != settings.min_games,
             cur.suggest_bans != settings.suggest_bans,
+            cur.suggest_picks != settings.suggest_picks || cur.pick_pool != settings.pick_pool,
         );
         *cur = settings;
         changed
@@ -119,6 +121,10 @@ async fn save_settings(
         (s.champion_id, s.lane.clone(), s.in_champ_select)
     };
     let shared = shared.inner().clone();
+    if picks_changed || filters_changed {
+        let (app, shared) = (app.clone(), shared.clone());
+        tauri::async_runtime::spawn(async move { app::refresh_picks(&app, &shared).await });
+    }
     // Os bans dependem do filtro. Fora da seleção, com campeão em tela, o lookup abaixo já recalcula.
     let lookup_redoes_bans = filters_changed && champion_id > 0 && !in_select;
     if bans_changed || (filters_changed && !lookup_redoes_bans) {
@@ -239,7 +245,8 @@ pub fn run() {
     });
 }
 
-/// Diagnóstico pelo terminal (`cargo run -- --diag` / `cargo run -- --lola chogath jungle [viego]`).
+/// Diagnóstico pelo terminal (`cargo run -- --diag` / `cargo run -- --lola chogath jungle [viego]` /
+/// `cargo run -- --picks jungle [inimigo,…] [aliado:lane,…]` / `cargo run -- --maestria`).
 /// Devolve `true` se tratou os argumentos (e o app não deve abrir).
 pub fn cli(args: &[String]) -> bool {
     match args.first().map(String::as_str) {
@@ -252,6 +259,25 @@ pub fn cli(args: &[String]) -> bool {
             let lane = args.get(2).cloned();
             let vs = args.get(3).cloned();
             tauri::async_runtime::block_on(lola_cli(slug, lane, vs));
+            true
+        }
+        Some("--picks") => {
+            let lane = args.get(1).cloned().unwrap_or_else(|| "jungle".into());
+            let list = |i: usize| -> Vec<String> {
+                args.get(i)
+                    .map(|s| {
+                        s.split(',')
+                            .filter(|x| !x.is_empty())
+                            .map(String::from)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            tauri::async_runtime::block_on(picks_cli(lane, list(2), list(3)));
+            true
+        }
+        Some("--maestria") => {
+            tauri::async_runtime::block_on(mastery_cli());
             true
         }
         _ => false,
@@ -359,5 +385,165 @@ async fn lola_cli(slug: String, lane: Option<String>, vs: Option<String>) {
             }
             println!("página: {}", q.page_url());
         }
+    }
+}
+
+/// Formato da maestria no cliente (só GET): quantos campeões, os campos e os 5 com mais pontos.
+/// Não imprime o `puuid` (é o seu, mas não precisa aparecer).
+async fn mastery_cli() {
+    let Some(client) = lcu::discover().and_then(|c| lcu::Lcu::new(&c).ok()) else {
+        println!("cliente: fechado (lockfile não encontrado)");
+        return;
+    };
+    match client
+        .get("/lol-champion-mastery/v1/local-player/champion-mastery")
+        .await
+    {
+        Err(e) => println!("maestria: erro {e}"),
+        Ok(v) => {
+            let kind = if v.is_array() { "lista" } else { "objeto" };
+            let first = v
+                .as_array()
+                .and_then(|a| a.first())
+                .or_else(|| v.pointer("/masteries/0"));
+            let mut keys: Vec<&String> = first
+                .and_then(|f| f.as_object())
+                .map(|o| o.keys().collect())
+                .unwrap_or_default();
+            keys.sort();
+            let m = lola::extra::parse_mastery(&v);
+            println!(
+                "maestria: {kind} com {} campeões; campos: {keys:?}",
+                m.len()
+            );
+            println!("5 com mais pontos (id, pontos): {:?}", &m[..m.len().min(5)]);
+        }
+    }
+}
+
+/// Sugestão de pick com dados reais, sem o cliente: candidatos da tier list, inimigos e aliados
+/// por slug (`aliado:lane`). Cada inimigo/aliado custa uma requisição (cache em
+/// `%TEMP%\lobby-companion-cli`). Sem `lane`, o lolalytics usa a lane mais jogada do inimigo.
+async fn picks_cli(lane: String, enemies: Vec<String>, allies: Vec<String>) {
+    use lola::extra;
+    use lola::{Ep, Query};
+    let s = Settings::default();
+    let q = |ep: Ep, slug: &str, lane: Option<String>, vs_lane: Option<String>| Query {
+        ep,
+        slug: slug.to_string(),
+        lane,
+        vs_lane,
+        tier: s.tier.clone(),
+        region: s.region.clone(),
+        ..Default::default()
+    };
+    let client = lola::Lolalytics::new(std::env::temp_dir().join("lobby-companion-cli"));
+    let list = match client
+        .get(&q(Ep::List, "", Some(lane.clone()), None))
+        .await
+        .and_then(|f| extra::parse_list(&f.data))
+    {
+        Ok(l) => l,
+        Err(e) => return println!("tier list: erro {e}"),
+    };
+    println!(
+        "tier list {}: {} campeões, média {:.2}%",
+        list.lane,
+        list.entries.len(),
+        list.avg_wr
+    );
+    let mut counters = Vec::new();
+    for e in &enemies {
+        let r = client
+            .get(&q(Ep::Counter, e, None, Some(lane.clone())))
+            .await
+            .and_then(|f| extra::parse_counter(&f.data));
+        match r {
+            Ok(c) => {
+                println!(
+                    "inimigo {e} (#{}) {}: WR {:.2}%, {} oponentes na lane {}",
+                    c.champion_id,
+                    c.lane,
+                    c.wr,
+                    c.rows.len(),
+                    c.vs_lane
+                );
+                counters.push(c);
+            }
+            Err(err) => println!("inimigo {e}: erro {err}"),
+        }
+    }
+    let mut teams = Vec::new();
+    for a in &allies {
+        let (slug, a_lane) = a.split_once(':').unwrap_or((a.as_str(), "middle"));
+        let r = client
+            .get(&q(Ep::BuildTeam, slug, Some(a_lane.to_string()), None))
+            .await
+            .and_then(|f| extra::parse_build_team(&f.data));
+        match r {
+            Ok(t) => {
+                println!("aliado {slug} ({a_lane}): {} lanes", t.lanes.len());
+                teams.push((a_lane.to_string(), t));
+            }
+            Err(err) => println!("aliado {slug}: erro {err}"),
+        }
+    }
+    let enemy_inputs: Vec<picks::Enemy> = counters
+        .iter()
+        .map(|c| picks::Enemy {
+            champion_id: c.champion_id,
+            lane: c.lane.clone(),
+            counters: c,
+        })
+        .collect();
+    let mate_inputs: Vec<picks::Mate> = teams
+        .iter()
+        .enumerate()
+        .map(|(i, (l, t))| picks::Mate {
+            champion_id: -(i as i64) - 1,
+            lane: l.clone(),
+            team: t,
+        })
+        .collect();
+    let candidates = picks::pool_from_tier(&list, &[], picks::POOL_SIZE);
+    for p in picks::suggest(
+        &lane,
+        &list,
+        &candidates,
+        &enemy_inputs,
+        &mate_inputs,
+        &[],
+        5,
+    ) {
+        let parts: Vec<String> = p
+            .parts
+            .iter()
+            .map(|x| {
+                format!(
+                    "{:+.2} {:?} #{} ({}, WR {:.1}%, {} partidas)",
+                    x.delta, x.kind, x.champion_id, x.lane, x.wr, x.n
+                )
+            })
+            .collect();
+        println!(
+            "pick #{}: {:+.2} (base {:+.2}, WR {:.2}% em {}) {}",
+            p.champion_id,
+            p.total,
+            p.base,
+            p.wr,
+            p.games,
+            parts.join(" | ")
+        );
+    }
+    for b in picks::tier_bans(&list, &[], 5) {
+        let t = b.tier.as_ref();
+        println!(
+            "ban pela tier list: #{} +{:.3} (WR {:.2}%, PR {:.2}%, BR {:.2}%)",
+            b.champion_id,
+            b.gain,
+            t.map(|t| t.wr).unwrap_or(0.0),
+            t.map(|t| t.pr).unwrap_or(0.0),
+            t.map(|t| t.br).unwrap_or(0.0)
+        );
     }
 }
