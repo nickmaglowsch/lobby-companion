@@ -11,7 +11,10 @@ Quando você trava o campeão, ele importa para o cliente:
 A janela mostra o build completo: runas, feitiços, ordem de habilidades, inícios, botas e uma tabela de itens por posição (1º, 2º, 3º…) com WR, pick rate e partidas. Trocar a runa, a lane ou um filtro na janela já atualiza o cliente.
 
 - **Confronto:** escolha o campeão do outro lado (retrato do time inimigo ou busca) para ver e importar runas, feitiços e itens daquele confronto (dados globais do lolalytics, amostra menor).
-- **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um.
+- **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um; antes de alguém declarar, pela força geral na sua lane (tier list).
+- **Sugestão de pick:** para a sua posição, entre os campeões do seu pool (maestria) ou da tier list, somando força na lane, counter contra os inimigos visíveis e sinergia com os aliados; só sugere, nunca escolhe.
+- **Build mais completo:** núcleo de 3 itens, primeira volta e situacionais (também no conjunto de itens), habilidades até o 6/10, WR das runas alternativas, tendência de WR e perfil de dano.
+- **Composição:** tipo de dano dos dois times e destaque dos itens de armadura/resistência mágica do seu build quando o inimigo concentra um tipo.
 
 **Sem overlay.** A janela abre sozinha na seleção de campeões e **fecha quando a partida começa**; fora disso, só um ícone na bandeja (sem o WebView, só o processo Rust ouvindo o WebSocket do cliente).
 
