@@ -2,7 +2,8 @@
 //! à seleção de campeões (buscar build → importar → avisar a janela).
 
 use crate::assets::{Assets, lolalytics_slug};
-use crate::champselect::{self, Me};
+use crate::bans::{self, BanPick};
+use crate::champselect::{self, Ally, Draft, Me};
 use crate::import::{itemset, runes, spells};
 use crate::lcu::ws::{self, LcuEvent};
 use crate::lcu::{self, Lcu};
@@ -14,6 +15,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{Mutex, RwLock, mpsc};
@@ -52,6 +54,41 @@ pub struct ImportReport {
     pub spells: Option<Outcome>,
 }
 
+impl ImportReport {
+    /// Atualiza só o que esta importação tocou (mudar a runa não apaga o aviso dos itens).
+    fn merge(&mut self, new: ImportReport) {
+        self.runes = new.runes.or(self.runes.take());
+        self.items = new.items.or(self.items.take());
+        self.spells = new.spells.or(self.spells.take());
+    }
+}
+
+/// O que uma importação deve escrever no cliente.
+#[derive(Debug, Clone, Copy)]
+pub struct Scope {
+    pub runes: bool,
+    pub items: bool,
+    pub spells: bool,
+}
+
+impl Scope {
+    pub const ALL: Self = Self {
+        runes: true,
+        items: true,
+        spells: true,
+    };
+    pub const RUNES: Self = Self {
+        runes: true,
+        items: false,
+        spells: false,
+    };
+    pub const ITEMS: Self = Self {
+        runes: false,
+        items: true,
+        spells: false,
+    };
+}
+
 /// Tudo o que a janela mostra. Vai inteiro no evento "snapshot".
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +106,22 @@ pub struct Snapshot {
     pub warning: Option<String>,
     pub error: Option<String>,
     pub import: Option<ImportReport>,
+    /// Campeão do outro lado escolhido na janela (0 = build geral).
+    pub vs_champion_id: i64,
+    pub vs_lane: Option<String>,
+    /// Campeões já visíveis do outro time (atalhos para escolher o confronto).
+    pub enemy_picks: Vec<i64>,
+    pub bans: Option<BanAdvice>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BanAdvice {
+    pub loading: bool,
+    /// Campeões do seu time usados na conta.
+    pub based_on: Vec<Ally>,
+    pub picks: Vec<BanPick>,
+    pub note: Option<String>,
 }
 
 pub struct Shared {
@@ -84,6 +137,13 @@ pub struct Shared {
     current_key: Mutex<Option<String>>,
     /// "campeão:lane" já importado nesta seleção (importa de novo só se trocar).
     auto_key: Mutex<Option<String>>,
+    /// Uma importação por vez: cliques rápidos não podem intercalar apagar/criar página.
+    import_lock: Mutex<()>,
+    /// Campeão do outro lado e a lane dele (escolhidos na janela).
+    vs: Mutex<Option<(i64, Option<String>)>>,
+    draft: Mutex<Option<Draft>>,
+    /// Só a conta de bans mais nova escreve no snapshot.
+    bans_gen: AtomicU64,
 }
 
 impl Shared {
@@ -102,6 +162,10 @@ impl Shared {
             me: Mutex::new(None),
             current_key: Mutex::new(None),
             auto_key: Mutex::new(None),
+            import_lock: Mutex::new(()),
+            vs: Mutex::new(None),
+            draft: Mutex::new(None),
+            bans_gen: AtomicU64::new(0),
         }
     }
 }
@@ -177,6 +241,7 @@ pub async fn worker(app: AppHandle) {
 async fn disconnect(app: &AppHandle, shared: &Shared) {
     let was = shared.lcu.write().await.take().is_some();
     *shared.me.lock().await = None;
+    *shared.draft.lock().await = None;
     if was || shared.snapshot.lock().await.connected {
         update(app, shared, |s| {
             s.connected = false;
@@ -194,6 +259,9 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
         "ChampSelect" => {
             *shared.auto_key.lock().await = None;
             *shared.me.lock().await = None;
+            // Seleção nova: o confronto e os bans da anterior não valem mais.
+            *shared.vs.lock().await = None;
+            *shared.draft.lock().await = None;
             update(app, shared, |s| {
                 s.phase = phase.into();
                 s.in_champ_select = true;
@@ -201,6 +269,10 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
                 s.import = None;
                 s.error = None;
                 s.warning = None;
+                s.vs_champion_id = 0;
+                s.vs_lane = None;
+                s.enemy_picks.clear();
+                s.bans = None;
             })
             .await;
             crate::show_main(app);
@@ -223,13 +295,34 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
     let Some(me) = session.as_ref().and_then(champselect::parse) else {
         *shared.me.lock().await = None;
         *shared.auto_key.lock().await = None;
+        *shared.draft.lock().await = None;
         update(app, shared, |s| {
             s.in_champ_select = false;
             s.locked = false;
+            s.enemy_picks.clear();
         })
         .await;
         return;
     };
+    let draft = session.as_ref().and_then(champselect::parse_draft);
+    let draft_changed = {
+        let mut prev = shared.draft.lock().await;
+        let changed = *prev != draft;
+        if changed {
+            prev.clone_from(&draft);
+        }
+        changed
+    };
+    if draft_changed {
+        let enemies = draft.map(|d| d.enemies).unwrap_or_default();
+        update(app, shared, |s| {
+            s.in_champ_select = true;
+            s.enemy_picks = enemies;
+        })
+        .await;
+        let (app, shared) = (app.clone(), shared.clone());
+        tauri::async_runtime::spawn(async move { refresh_bans(&app, &shared).await });
+    }
     {
         // A sessão muda a cada segundo (timer); só reagimos quando o NOSSO estado muda.
         let mut prev = shared.me.lock().await;
@@ -310,18 +403,51 @@ pub async fn load_build(
         return;
     };
     let settings = shared.settings.lock().await.clone();
+    let vs = shared.vs.lock().await.clone();
+    let vs_champ = vs.as_ref().and_then(|(id, l)| {
+        let c = assets.as_ref()?.champion(*id)?;
+        Some((lolalytics_slug(&c.alias), c.name.clone(), l.clone()))
+    });
     let mut q = Query {
         slug: lolalytics_slug(&champ.alias),
         lane,
         tier: settings.tier.clone(),
         region: settings.region.clone(),
         patch: settings.patch_opt(),
+        ..Default::default()
     };
-    let result = shared
-        .lola
-        .build_full(&q)
-        .await
-        .and_then(|f| model::parse_build_full(&f.data).map(|b| (b, f.stale_warning)));
+    let result = match &vs_champ {
+        Some((slug, vs_name, vs_lane)) if *slug != q.slug => {
+            let vq = Query {
+                vs: Some(slug.clone()),
+                // Sem lane escolhida: o oponente na mesma lane que você.
+                vs_lane: vs_lane.clone().or_else(|| q.lane.clone()),
+                ..q.clone()
+            };
+            match fetch_build(shared, &vq).await {
+                Ok((b, w)) if b.n > 0 => {
+                    q = vq;
+                    Ok((b, w))
+                }
+                _ => {
+                    let lane = vq.vs_lane.as_deref().map(champselect::lane_label);
+                    let msg = format!(
+                        "o lolalytics não tem partidas de {} contra {vs_name}{}; mostrando o build geral",
+                        champ.name,
+                        lane.map(|l| format!(" ({l})")).unwrap_or_default()
+                    );
+                    fetch_build(shared, &q).await.map(|(b, w)| {
+                        let warn = match w {
+                            Some(w) => format!("{msg}. {w}"),
+                            None => msg,
+                        };
+                        (b, Some(warn))
+                    })
+                }
+            }
+        }
+        _ => fetch_build(shared, &q).await,
+    };
     if shared.current_key.lock().await.as_deref() != Some(key.as_str()) {
         return; // trocou de campeão enquanto buscava
     }
@@ -359,10 +485,166 @@ pub async fn load_build(
         })
         .await;
     }
+    // Fora da seleção, os bans são os do campeão em tela; na seleção, vêm do time (`handle_session`).
+    if ok && !shared.snapshot.lock().await.in_champ_select {
+        refresh_bans(app, shared).await;
+    }
 }
 
-/// Importa o build em tela para o cliente, conforme as configurações.
+async fn fetch_build(shared: &Shared, q: &Query) -> Result<(Build, Option<String>), String> {
+    shared
+        .lola
+        .build_full(q)
+        .await
+        .and_then(|f| model::parse_build_full(&f.data).map(|b| (b, f.stale_warning)))
+}
+
+/// Recalcula a sugestão de bans: na seleção, pelos campeões do seu time (escolhidos ou
+/// declarados); fora dela, pelo campeão em tela. Um build geral por campeão (cache de 6 h).
+pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
+    let generation = shared.bans_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let settings = shared.settings.lock().await.clone();
+    if !settings.suggest_bans {
+        update(app, shared, |s| s.bans = None).await;
+        return;
+    }
+    let (in_select, champion_id, lane) = {
+        let s = shared.snapshot.lock().await;
+        (s.in_champ_select, s.champion_id, s.lane.clone())
+    };
+    let draft = shared.draft.lock().await.clone();
+    let (allies, unavailable) = match draft {
+        Some(d) if in_select => (d.allies, d.unavailable),
+        _ if !in_select && champion_id > 0 => (
+            vec![Ally {
+                champion_id,
+                lane,
+                me: true,
+            }],
+            vec![champion_id],
+        ),
+        _ => (Vec::new(), Vec::new()),
+    };
+    if allies.is_empty() {
+        update(app, shared, |s| {
+            s.bans = in_select.then(|| BanAdvice {
+                note: Some("Declare ou escolha um campeão para ver sugestões de ban.".into()),
+                ..Default::default()
+            })
+        })
+        .await;
+        return;
+    }
+    update(app, shared, |s| {
+        let picks = s.bans.take().map(|b| b.picks).unwrap_or_default();
+        s.bans = Some(BanAdvice {
+            loading: true,
+            based_on: allies.clone(),
+            picks,
+            note: None,
+        });
+    })
+    .await;
+    let assets = shared.assets.read().await.clone();
+    let mut builds: Vec<(Ally, Build)> = Vec::new();
+    let mut missing: Vec<String> = Vec::new();
+    for ally in allies.iter().take(5) {
+        let Some(c) = assets.as_ref().and_then(|a| a.champion(ally.champion_id)) else {
+            continue;
+        };
+        let q = Query {
+            slug: lolalytics_slug(&c.alias),
+            lane: ally.lane.clone(),
+            tier: settings.tier.clone(),
+            region: settings.region.clone(),
+            patch: settings.patch_opt(),
+            ..Default::default()
+        };
+        match fetch_build(shared, &q).await {
+            Ok((b, _)) if !b.matchups.is_empty() => builds.push((ally.clone(), b)),
+            _ => missing.push(c.name.clone()),
+        }
+        if shared.bans_gen.load(Ordering::SeqCst) != generation {
+            return; // o time mudou enquanto buscava; a conta nova assume
+        }
+    }
+    let inputs: Vec<(Ally, &Build)> = builds.iter().map(|(a, b)| (a.clone(), b)).collect();
+    let picks = bans::suggest(&inputs, &unavailable, 5);
+    let note = (!missing.is_empty()).then(|| format!("sem dados de {}", missing.join(", ")));
+    if shared.bans_gen.load(Ordering::SeqCst) != generation {
+        return;
+    }
+    update(app, shared, |s| {
+        s.bans = Some(BanAdvice {
+            loading: false,
+            based_on: allies,
+            picks,
+            note,
+        })
+    })
+    .await;
+}
+
+/// Escolhe (ou limpa) o campeão do outro lado e recarrega o build em tela.
+pub async fn set_vs(
+    app: &AppHandle,
+    shared: &Arc<Shared>,
+    vs_champion_id: Option<i64>,
+    vs_lane: Option<String>,
+) {
+    let vs = vs_champion_id.filter(|id| *id > 0);
+    *shared.vs.lock().await = vs.map(|id| (id, vs_lane.clone()));
+    let (champion_id, lane) = {
+        let s = shared.snapshot.lock().await;
+        (s.champion_id, s.lane.clone())
+    };
+    update(app, shared, |s| {
+        s.vs_champion_id = vs.unwrap_or(0);
+        s.vs_lane = vs.and(vs_lane);
+    })
+    .await;
+    if champion_id > 0 {
+        lookup(app, shared, champion_id, lane).await;
+    }
+}
+
+/// Importa tudo do build em tela para o cliente, conforme as configurações.
 pub async fn run_import(shared: &Shared) -> Result<ImportReport, String> {
+    run_import_scoped(shared, Scope::ALL).await
+}
+
+/// A janela pode mandar sozinha o que está na tela para o cliente agora?
+async fn should_auto_apply(shared: &Shared, champion_id: i64) -> bool {
+    if !shared.settings.lock().await.auto_import {
+        return false;
+    }
+    let (phase, in_select) = {
+        let s = shared.snapshot.lock().await;
+        (s.phase.clone(), s.in_champ_select)
+    };
+    let me = shared.me.lock().await.clone();
+    champselect::may_apply(&phase, in_select, me.as_ref(), champion_id)
+}
+
+/// Algo mudou na janela (runa, amostra mínima): leva a mudança para o cliente.
+pub async fn apply_change(app: &AppHandle, shared: &Arc<Shared>, scope: Scope) {
+    let (champion_id, has_build) = {
+        let s = shared.snapshot.lock().await;
+        (s.champion_id, s.build.is_some())
+    };
+    if !has_build || !should_auto_apply(shared, champion_id).await {
+        return;
+    }
+    let report = run_import_scoped(shared, scope).await;
+    update(app, shared, |s| match report {
+        Ok(r) => s.import.get_or_insert_with(Default::default).merge(r),
+        Err(e) => s.warning = Some(e),
+    })
+    .await;
+}
+
+async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport, String> {
+    let _one_at_a_time = shared.import_lock.lock().await;
     let lcu = shared
         .lcu
         .read()
@@ -400,9 +682,24 @@ pub async fn run_import(shared: &Shared) -> Result<ImportReport, String> {
         .map(|c| c.name.clone())
         .unwrap_or_default();
     let lane_label = champselect::lane_label(&build.lane);
+    // Build de confronto: "vs Viego" no nome da página e no título do conjunto.
+    let vs_name = build
+        .vs
+        .as_ref()
+        .and_then(|v| assets.champion(v.champion_id))
+        .map(|c| c.name.clone());
+    let set_label = match &vs_name {
+        Some(v) => format!("{lane_label} vs {v}"),
+        None => lane_label.to_string(),
+    };
+    // O nome da página é curto (o cliente corta): com confronto, sai a lane.
+    let page_label = match &vs_name {
+        Some(v) => format!("vs {v}"),
+        None => lane_label.to_string(),
+    };
     let mut rep = ImportReport::default();
 
-    if settings.import_runes {
+    if scope.runes && settings.import_runes {
         let set = if settings.rune_choice == "win" {
             build.runes_win.as_ref().or(build.runes_pick.as_ref())
         } else {
@@ -410,57 +707,57 @@ pub async fn run_import(shared: &Shared) -> Result<ImportReport, String> {
         };
         rep.runes = Some(match set {
             None => Outcome::fail("lolalytics sem página de runas"),
-            Some(set) => match runes::page_body(&runes::page_name(&name, lane_label), set, &assets)
-            {
-                Err(e) => Outcome::fail(e),
-                Ok(body) => {
-                    Outcome::from(runes::apply(&lcu, &body, settings.replace_current_page).await)
+            Some(set) => {
+                match runes::page_body(&runes::page_name(&name, &page_label), set, &assets) {
+                    Err(e) => Outcome::fail(e),
+                    Ok(body) => Outcome::from(
+                        runes::apply(&lcu, &body, settings.replace_current_page).await,
+                    ),
                 }
-            },
+            }
         });
     }
-    if settings.import_items {
+    if scope.items && settings.import_items {
         let set = itemset::build_item_set(
             &build,
             champion_id,
             &name,
-            lane_label,
+            &set_label,
             &assets,
-            settings.min_games,
+            build.min_games(settings.min_games),
         );
         rep.items = Some(Outcome::from(itemset::apply(&lcu, set).await));
     }
-    if settings.import_spells {
+    if scope.spells && settings.import_spells {
         let rec: Vec<i64> = build
             .spells
             .first()
             .map(|c| c.ids.iter().filter_map(|s| s.parse().ok()).collect())
             .unwrap_or_default();
-        rep.spells = Some(if rec.len() != 2 {
-            Outcome::fail("lolalytics sem feitiços")
-        } else {
-            match lcu
-                .get("/lol-champ-select/v1/session")
-                .await
-                .ok()
-                .as_ref()
-                .and_then(champselect::parse)
-            {
-                None => Outcome::fail("fora da seleção de campeões"),
-                Some(me) => {
-                    let pair = spells::arrange(
-                        (rec[0], rec[1]),
-                        (me.spell1, me.spell2),
-                        settings.flash_slot,
-                    );
-                    if pair == (me.spell1, me.spell2) {
-                        Outcome::ok("feitiços já estavam certos")
-                    } else {
-                        Outcome::from(spells::apply(&lcu, pair).await)
-                    }
-                }
+        let session = lcu
+            .get("/lol-champ-select/v1/session")
+            .await
+            .ok()
+            .as_ref()
+            .and_then(champselect::parse);
+        rep.spells = match session {
+            // Feitiços só existem na seleção, e só valem para o campeão do próprio jogador.
+            None => None,
+            Some(me) if me.current_champion() != champion_id => None,
+            Some(_) if rec.len() != 2 => Some(Outcome::fail("lolalytics sem feitiços")),
+            Some(me) => {
+                let pair = spells::arrange(
+                    (rec[0], rec[1]),
+                    (me.spell1, me.spell2),
+                    settings.flash_slot,
+                );
+                Some(if pair == (me.spell1, me.spell2) {
+                    Outcome::ok("feitiços já estavam certos")
+                } else {
+                    Outcome::from(spells::apply(&lcu, pair).await)
+                })
             }
-        });
+        };
     }
     Ok(rep)
 }
@@ -483,12 +780,14 @@ pub async fn fetch_icon(shared: &Shared, path: &str) -> Result<(Vec<u8>, String)
     Ok(got)
 }
 
-/// Busca manual (fora da seleção, ou outra lane): só mostra.
+/// Troca de campeão, lane ou filtro na janela: carrega e, quando pode, já leva para o cliente.
 pub async fn lookup(app: &AppHandle, shared: &Arc<Shared>, champion_id: i64, lane: Option<String>) {
+    let vs = shared.vs.lock().await.clone();
     let key = format!(
-        "lookup:{champion_id}:{}",
+        "lookup:{champion_id}:{}:{vs:?}",
         lane.as_deref().unwrap_or("default")
     );
     *shared.current_key.lock().await = Some(key.clone());
-    load_build(app, shared, champion_id, lane, false, key).await;
+    let apply = should_auto_apply(shared, champion_id).await;
+    load_build(app, shared, champion_id, lane, apply, key).await;
 }

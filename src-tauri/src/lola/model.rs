@@ -52,6 +52,28 @@ pub struct Combo {
     pub n: u64,
 }
 
+/// Seu win rate contra um campeão do outro time (lista `enemy` do build geral).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Matchup {
+    /// Id do campeão inimigo.
+    pub id: i64,
+    /// Seu win rate contra ele.
+    pub wr: f64,
+    /// % das suas partidas em que ele estava nessa lane do outro lado.
+    pub pr: f64,
+    pub n: u64,
+}
+
+/// Cabeçalho do build de confronto (`/vs/`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VsInfo {
+    pub champion_id: i64,
+    pub lane: String,
+    /// Seu win rate geral (sem filtrar o oponente), para comparar.
+    pub usual_wr: f64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Build {
@@ -76,6 +98,49 @@ pub struct Build {
     pub slots: Vec<Vec<ItemStat>>,
     /// Lanes do campeão com % de jogos (`nav.lanes`).
     pub lanes: Vec<(String, f64)>,
+    /// `Some` quando é o build contra um campeão específico.
+    pub vs: Option<VsInfo>,
+    /// Lane do inimigo → seu WR contra cada campeão (só no build geral; usado nos bans).
+    #[serde(skip)]
+    pub matchups: Vec<(String, Vec<Matchup>)>,
+}
+
+impl Build {
+    /// Amostra mínima para um item contar. Num confronto há bem menos partidas,
+    /// então o corte acompanha o tamanho da amostra (mesma regra na janela, `minGamesFor`).
+    pub fn min_games(&self, configured: u64) -> u64 {
+        if self.vs.is_some() {
+            configured.min((self.n / 20).max(10))
+        } else {
+            configured
+        }
+    }
+}
+
+/// `enemy: {lane: [[id, wr, d1, d2, pr, n], ...]}`.
+fn matchups(v: Option<&Value>) -> Vec<(String, Vec<Matchup>)> {
+    let Some(m) = v.and_then(Value::as_object) else {
+        return Vec::new();
+    };
+    m.iter()
+        .map(|(lane, rows)| {
+            let list = rows
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|row| {
+                    let r = row.as_array()?;
+                    Some(Matchup {
+                        id: r.first()?.as_i64()?,
+                        wr: f(r.get(1)),
+                        pr: f(r.get(4)),
+                        n: u(r.get(5)),
+                    })
+                })
+                .collect();
+            (lane.clone(), list)
+        })
+        .collect()
 }
 
 fn f(v: Option<&Value>) -> f64 {
@@ -231,6 +296,20 @@ pub fn parse_build_full(v: &Value) -> Result<Build, String> {
             .map(|i| item_list(v.get(format!("item{i}").as_str())))
             .collect(),
         lanes,
+        vs: header
+            .get("vs")
+            .and_then(Value::as_i64)
+            .filter(|id| *id > 0)
+            .map(|id| VsInfo {
+                champion_id: id,
+                lane: header
+                    .get("vsLane")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                usual_wr: f(header.get("usualWinRate")),
+            }),
+        matchups: matchups(v.get("enemy")),
     })
 }
 
@@ -257,8 +336,54 @@ pub mod tests {
             "boots": [[3009, 55.4, 58.6, 7800, 11], [3111, 51.7, 19.3, 2500, 15], [9999, 31.6, 0.9, 117, 0]],
             "item1": [[3152, 53.2, 27.4, 3600, 10], [3084, 53.5, 69.0, 9100, 11], [6664, 56.0, 0.2, 25, 11]],
             "item2": [[3742, 55.7, 51.9, 6900, 19]],
-            "item3": [], "item4": [], "item5": []
+            "item3": [], "item4": [], "item5": [],
+            "enemy_h": ["id", "wr", "d1", "d2", "pr", "n"],
+            "enemy": {
+                "jungle": [[234, 47.0, -2.0, -3.0, 9.0, 1100], [64, 55.0, 2.0, 1.0, 8.0, 1000], [28, 40.0, -9.0, -9.5, 0.1, 12]],
+                "top": [[122, 50.0, 0.0, -1.0, 6.0, 700]]
+            }
         })
+    }
+
+    /// Build de confronto: mesmo formato, sem `enemy`, com `vs`/`vsLane`/`usualWinRate` no header.
+    pub fn fixture_vs() -> Value {
+        let mut v = fixture();
+        let h = v["header"].as_object_mut().unwrap();
+        h.insert("vs".into(), json!(234));
+        h.insert("vsLane".into(), json!("jungle"));
+        h.insert("usualWinRate".into(), json!(53.4));
+        h.insert("n".into(), json!(600));
+        h.insert("wr".into(), json!(48.0));
+        v.as_object_mut().unwrap().remove("enemy");
+        v
+    }
+
+    #[test]
+    fn parses_matchup_build() {
+        let b = parse_build_full(&fixture_vs()).unwrap();
+        let vs = b.vs.as_ref().unwrap();
+        assert_eq!((vs.champion_id, vs.lane.as_str()), (234, "jungle"));
+        assert!(b.matchups.is_empty());
+        // 600 partidas: o corte cai de 200 para 30
+        assert_eq!(b.min_games(200), 30);
+        let geral = parse_build_full(&fixture()).unwrap();
+        assert!(geral.vs.is_none());
+        assert_eq!(geral.min_games(200), 200);
+        let jg = &geral
+            .matchups
+            .iter()
+            .find(|(l, _)| l == "jungle")
+            .unwrap()
+            .1;
+        assert_eq!(
+            jg[0],
+            Matchup {
+                id: 234,
+                wr: 47.0,
+                pr: 9.0,
+                n: 1100
+            }
+        );
     }
 
     #[test]

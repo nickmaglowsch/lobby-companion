@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import {
-    api, championIcon, icon, pct, num, LANES, PHASES, TIERS, REGIONS, PATCHES,
+    api, championIcon, icon, pct, num, minGamesFor, LANES, PHASES, TIERS, REGIONS, PATCHES,
     type Assets, type Settings, type Snapshot,
   } from "$lib/api";
   import Runes from "$lib/Runes.svelte";
@@ -11,7 +11,6 @@
   let snap = $state<Snapshot | null>(null);
   let assets = $state<Assets | null>(null);
   let settings = $state<Settings | null>(null);
-  let runeTab = $state<"pick" | "win">("pick");
   let search = $state("");
   let importing = $state(false);
   let importError = $state<string | null>(null);
@@ -19,9 +18,36 @@
   const build = $derived(snap?.build ?? null);
   const champ = $derived(snap && assets ? assets.champions[snap.championId] : undefined);
   const champions = $derived(assets ? Object.values(assets.champions).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) : []);
+  // A aba é a própria configuração: trocar aqui troca a página no cliente.
+  const runeTab = $derived(settings?.runeChoice ?? "pick");
   const runeSet = $derived(build ? (runeTab === "win" ? build.runesWin ?? build.runesPick : build.runesPick) : null);
-  const minGames = $derived(settings?.minGames ?? 200);
+  const minGames = $derived(build ? minGamesFor(build, settings?.minGames ?? 200) : settings?.minGames ?? 200);
   const skillLetters = ["Q", "W", "E", "R"];
+  const champName = (id: number) => assets?.champions[id]?.name ?? `#${id}`;
+  const signed = (x: number) => `+${x.toFixed(2).replace(".", ",")}`;
+
+  // Confronto: campeão do outro lado (busca ou atalho do time inimigo) e a lane dele.
+  let vsSearch = $state("");
+  let vsLaneChoice = $state<string | null>(null);
+  const vsLane = $derived(vsLaneChoice ?? snap?.vsLane ?? build?.vs?.lane ?? build?.lane ?? null);
+
+  function findChampion(text: string) {
+    const q = text.trim().toLocaleLowerCase("pt-BR");
+    if (!q) return undefined;
+    return champions.find((c) => c.name.toLocaleLowerCase("pt-BR") === q)
+      ?? champions.find((c) => c.name.toLocaleLowerCase("pt-BR").startsWith(q));
+  }
+
+  function chooseVs(id: number | null) {
+    vsSearch = "";
+    if (id === null) vsLaneChoice = null;
+    api.setVs(id, id === null ? null : vsLane);
+  }
+
+  function changeVsLane(lane: string) {
+    vsLaneChoice = lane;
+    if (snap?.vsChampionId) api.setVs(snap.vsChampionId, lane);
+  }
 
   async function refreshAssets() {
     if (!assets) assets = await api.assets();
@@ -32,9 +58,10 @@
     (async () => {
       snap = await api.snapshot();
       settings = await api.settings();
-      if (settings) runeTab = settings.runeChoice;
       await refreshAssets();
       un = await api.onSnapshot((s) => {
+        // Seleção nova: esquece a lane de confronto escolhida na anterior.
+        if (s.phase === "ChampSelect" && snap?.phase !== "ChampSelect") vsLaneChoice = null;
         snap = s;
         if (s.connected) refreshAssets();
       });
@@ -43,9 +70,7 @@
   });
 
   function pickChampion() {
-    const q = search.trim().toLocaleLowerCase("pt-BR");
-    const c = champions.find((c) => c.name.toLocaleLowerCase("pt-BR") === q)
-      ?? champions.find((c) => c.name.toLocaleLowerCase("pt-BR").startsWith(q));
+    const c = findChampion(search);
     if (c) {
       api.lookup(c.id, null);
       search = "";
@@ -70,6 +95,12 @@
 
   async function save() {
     if (settings) await api.saveSettings($state.snapshot(settings));
+  }
+
+  function chooseRunes(choice: "pick" | "win") {
+    if (!settings || settings.runeChoice === choice) return;
+    settings.runeChoice = choice;
+    save();
   }
 </script>
 
@@ -102,6 +133,43 @@
   {/if}
 
   {#if snap?.loading}<p class="msg">Buscando no lolalytics…</p>{/if}
+
+  {#if snap?.bans}
+    {@const bans = snap.bans}
+    <section class="card">
+      <div class="card-head">
+        <h2>Sugestão de bans</h2>
+        {#if bans.loading}<span class="muted small">calculando…</span>{/if}
+      </div>
+      {#if bans.basedOn.length}
+        <div class="based muted small">
+          {snap.inChampSelect ? "Pelo seu time:" : "Para:"}
+          {#each bans.basedOn as a (a.championId)}
+            <img class="mini" class:me={a.me} src={championIcon(a.championId)} alt={champName(a.championId)}
+              title="{champName(a.championId)}{a.lane ? ` (${LANES[a.lane] ?? a.lane})` : ''}{a.me ? ' · você' : ''}" />
+          {/each}
+        </div>
+      {/if}
+      {#each bans.picks as p (p.championId)}
+        <div class="ban">
+          <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
+          <div>
+            <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate que o time recupera, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
+            {#each p.reasons as r (r.allyChampionId + r.lane)}
+              <div class="reason muted small">
+                <img class="mini" src={championIcon(r.allyChampionId)} alt={champName(r.allyChampionId)} />
+                {champName(r.allyChampionId)}: {pct(r.wr)} contra ele ({LANES[r.lane] ?? r.lane}) · geral {pct(r.baseWr)} · {num(r.n)} partidas
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/each}
+      {#if bans.note}<p class="muted small">{bans.note}</p>{/if}
+      {#if bans.picks.length}
+        <p class="muted small">Pts = win rate que o time recupera, em média, sem esse campeão no jogo (amostra pequena conta menos). Tendência estatística, não leitura do outro time.</p>
+      {/if}
+    </section>
+  {/if}
 
   {#if build && snap}
     <section class="hero">
@@ -144,10 +212,43 @@
 
     <section class="card">
       <div class="card-head">
+        <h2>Confronto</h2>
+        {#if snap.vsChampionId}<button class="link" onclick={() => chooseVs(null)}>Voltar ao build geral</button>{/if}
+      </div>
+      {#if snap.enemyPicks.length}
+        <div class="picks">
+          {#each snap.enemyPicks as id (id)}
+            <button class="pick" class:active={id === snap.vsChampionId} onclick={() => chooseVs(id)} title="Build contra {champName(id)}">
+              <img src={championIcon(id)} alt={champName(id)} />
+            </button>
+          {/each}
+        </div>
+      {/if}
+      <form class="vs-form" onsubmit={(e) => { e.preventDefault(); const c = findChampion(vsSearch); if (c) chooseVs(c.id); }}>
+        <input list="champs" placeholder="Campeão do outro lado…" bind:value={vsSearch} disabled={!assets} />
+        <select value={vsLane ?? ""} onchange={(e) => changeVsLane(e.currentTarget.value)} title="Lane do campeão do outro lado">
+          {#each Object.entries(LANES) as [v, l] (v)}<option value={v}>{l}</option>{/each}
+        </select>
+      </form>
+      {#if build.vs}
+        <p class="vs-line">
+          <img class="mini" src={championIcon(build.vs.championId)} alt={champName(build.vs.championId)} />
+          Contra <b>{champName(build.vs.championId)}</b> ({LANES[build.vs.lane] ?? build.vs.lane}):
+          WR <b class:up={build.wr - build.vs.usualWr >= 1} class:down={build.wr - build.vs.usualWr <= -1}>{pct(build.wr)}</b>
+          <span class="muted">· geral {pct(build.vs.usualWr)} · {num(build.n)} partidas · região global</span>
+        </p>
+        {#if build.n < 1000}<p class="muted small">Amostra pequena: itens com menos de {minGames} partidas ficam apagados.</p>{/if}
+      {:else if !snap.vsChampionId}
+        <p class="muted small">Escolha o campeão do outro lado para ver runas, feitiços e itens desse confronto.</p>
+      {/if}
+    </section>
+
+    <section class="card">
+      <div class="card-head">
         <h2>Runas</h2>
         <div class="tabs">
-          <button class:active={runeTab === "pick"} onclick={() => (runeTab = "pick")}>Mais jogada</button>
-          <button class:active={runeTab === "win"} onclick={() => (runeTab = "win")}>Maior WR</button>
+          <button class:active={runeTab === "pick"} onclick={() => chooseRunes("pick")}>Mais jogada</button>
+          <button class:active={runeTab === "win"} onclick={() => chooseRunes("win")}>Maior WR</button>
         </div>
       </div>
       {#if runeSet}<Runes set={runeSet} {assets} />{:else}<p class="muted">Sem runas.</p>{/if}
@@ -212,12 +313,13 @@
         <label>Flash na tecla <select bind:value={settings.flashSlot} onchange={save}><option value={1}>D</option><option value={2}>F</option></select></label>
       </div>
       <div class="checks">
-        <label><input type="checkbox" bind:checked={settings.autoImport} onchange={save} /> Importar ao travar o campeão</label>
+        <label><input type="checkbox" bind:checked={settings.autoImport} onchange={save} /> Importar sozinho (ao travar e ao mudar runa, lane ou filtro)</label>
         <label><input type="checkbox" bind:checked={settings.importRunes} onchange={save} /> Página de runas</label>
         <label><input type="checkbox" bind:checked={settings.importItems} onchange={save} /> Conjunto de itens (WR no título dos blocos)</label>
         <label><input type="checkbox" bind:checked={settings.importSpells} onchange={save} /> Feitiços</label>
         <label><input type="checkbox" bind:checked={settings.replaceCurrentPage} onchange={save} /> Sem espaço para página nova: substituir a página atual</label>
         <label><input type="checkbox" bind:checked={settings.closeInGame} onchange={save} /> Fechar a janela quando a partida começar</label>
+        <label><input type="checkbox" bind:checked={settings.suggestBans} onchange={save} /> Sugerir bans pelos campeões do meu time</label>
       </div>
     </details>
   {/if}
@@ -286,4 +388,19 @@
   .grid label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
   .checks { display: grid; gap: 4px; font-size: 13px; }
   footer { text-align: center; }
+  .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
+  .mini.me { border-color: var(--gold); }
+  .based { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+  .ban { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px solid var(--line); }
+  .ban-icon { width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--bad); }
+  .gain { color: var(--good); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .reason { display: flex; align-items: center; gap: 4px; }
+  .picks { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+  .pick { padding: 0; line-height: 0; }
+  .pick img { width: 32px; height: 32px; border-radius: 3px; }
+  .vs-form { display: flex; gap: 6px; }
+  .vs-form input { flex: 1; min-width: 0; }
+  .vs-line { margin: 8px 0 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .up { color: var(--good); }
+  .down { color: var(--bad); }
 </style>

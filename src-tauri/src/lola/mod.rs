@@ -11,6 +11,8 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::Mutex;
 
 const API: &str = "https://a1.lolalytics.com/mega/";
+/// Confronto (`/lol/<c>/vs/<vs>/build/`): outro servidor, mesmo formato, sem região (sempre global).
+const API_VS: &str = "https://a3.lolalytics.com/mega/";
 const TTL: Duration = Duration::from_secs(6 * 3600);
 const MIN_GAP: Duration = Duration::from_millis(1000);
 pub const USER_AGENT: &str = concat!(
@@ -19,7 +21,7 @@ pub const USER_AGENT: &str = concat!(
     " (+https://github.com/nickmaglowsch/lobby-companion)"
 );
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Query {
     pub slug: String,
     /// `None` = lane mais jogada do campeão (o lolalytics escolhe).
@@ -28,18 +30,35 @@ pub struct Query {
     pub region: String,
     /// `None` = patch atual; também aceita "7"/"30" (últimos dias) ou "16.23".
     pub patch: Option<String>,
+    /// Campeão do outro lado (slug): build do confronto. A região é ignorada (sempre global).
+    pub vs: Option<String>,
+    /// Lane do campeão do outro lado (`None` = a mais comum dele contra você).
+    pub vs_lane: Option<String>,
 }
 
 impl Query {
     pub fn api_url(&self) -> String {
-        let mut url = format!(
-            "{API}?ep=build-full&v=1&c={}&tier={}&queue=ranked&region={}",
-            enc(&self.slug),
-            enc(&self.tier),
-            enc(&self.region)
-        );
+        let mut url = match &self.vs {
+            None => format!(
+                "{API}?ep=build-full&v=1&c={}&tier={}&queue=ranked&region={}",
+                enc(&self.slug),
+                enc(&self.tier),
+                enc(&self.region)
+            ),
+            Some(vs) => format!(
+                "{API_VS}?ep=build-full&v=1&c={}&vs={}&tier={}&queue=ranked",
+                enc(&self.slug),
+                enc(vs),
+                enc(&self.tier)
+            ),
+        };
         if let Some(l) = &self.lane {
             url.push_str(&format!("&lane={}", enc(l)));
+        }
+        if self.vs.is_some()
+            && let Some(l) = &self.vs_lane
+        {
+            url.push_str(&format!("&vslane={}", enc(l)));
         }
         if let Some(p) = &self.patch {
             url.push_str(&format!("&patch={}", enc(p)));
@@ -49,15 +68,27 @@ impl Query {
 
     /// Página do lolalytics para o usuário abrir (atribuição).
     pub fn page_url(&self) -> String {
-        let mut url = format!(
-            "https://lolalytics.com/lol/{}/build/?tier={}",
-            enc(&self.slug),
-            enc(&self.tier)
-        );
+        let mut url = match &self.vs {
+            None => format!(
+                "https://lolalytics.com/lol/{}/build/?tier={}",
+                enc(&self.slug),
+                enc(&self.tier)
+            ),
+            Some(vs) => format!(
+                "https://lolalytics.com/lol/{}/vs/{}/build/?tier={}",
+                enc(&self.slug),
+                enc(vs),
+                enc(&self.tier)
+            ),
+        };
         if let Some(l) = &self.lane {
             url.push_str(&format!("&lane={}", enc(l)));
         }
-        if self.region != "all" {
+        if self.vs.is_some() {
+            if let Some(l) = &self.vs_lane {
+                url.push_str(&format!("&vslane={}", enc(l)));
+            }
+        } else if self.region != "all" {
             url.push_str(&format!("&region={}", enc(&self.region)));
         }
         if let Some(p) = &self.patch {
@@ -67,12 +98,20 @@ impl Query {
     }
 
     fn cache_key(&self) -> String {
+        let vs = match &self.vs {
+            None => String::new(),
+            Some(v) => format!("_vs_{v}_{}", self.vs_lane.as_deref().unwrap_or("default")),
+        };
         format!(
-            "{}_{}_{}_{}_{}.json",
+            "{}_{}_{}_{}_{}{vs}.json",
             self.slug,
             self.lane.as_deref().unwrap_or("default"),
             self.tier,
-            self.region,
+            if self.vs.is_some() {
+                "all"
+            } else {
+                &self.region
+            },
             self.patch.as_deref().unwrap_or("atual")
         )
         .chars()
@@ -211,7 +250,7 @@ mod tests {
             lane: Some("jungle".into()),
             tier: "emerald_plus".into(),
             region: "all".into(),
-            patch: None,
+            ..Default::default()
         };
         assert_eq!(
             q.api_url(),
@@ -222,6 +261,24 @@ mod tests {
             "https://lolalytics.com/lol/chogath/build/?tier=emerald_plus&lane=jungle"
         );
         assert_eq!(q.cache_key(), "chogath_jungle_emerald_plus_all_atual.json");
+        let vs = Query {
+            vs: Some("viego".into()),
+            vs_lane: Some("jungle".into()),
+            region: "br".into(),
+            ..q.clone()
+        };
+        assert_eq!(
+            vs.api_url(),
+            "https://a3.lolalytics.com/mega/?ep=build-full&v=1&c=chogath&vs=viego&tier=emerald_plus&queue=ranked&lane=jungle&vslane=jungle"
+        );
+        assert_eq!(
+            vs.page_url(),
+            "https://lolalytics.com/lol/chogath/vs/viego/build/?tier=emerald_plus&lane=jungle&vslane=jungle"
+        );
+        assert_eq!(
+            vs.cache_key(),
+            "chogath_jungle_emerald_plus_all_atual_vs_viego_jungle.json"
+        );
         let evil = Query {
             slug: "a&b=../c".into(),
             ..q

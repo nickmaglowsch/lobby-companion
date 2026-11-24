@@ -5,7 +5,11 @@ import type { Assets, Settings, Snapshot } from "./api";
 const item = (name: string) => ({ name, icon: "" });
 
 export const mockAssets: Assets = {
-  champions: { "31": { id: 31, name: "Cho'Gath", alias: "Chogath" }, "62": { id: 62, name: "Wukong", alias: "MonkeyKing" } },
+  champions: {
+    "31": { id: 31, name: "Cho'Gath", alias: "Chogath" }, "62": { id: 62, name: "Wukong", alias: "MonkeyKing" },
+    "234": { id: 234, name: "Viego", alias: "Viego" }, "122": { id: 122, name: "Darius", alias: "Darius" },
+    "876": { id: 876, name: "Lillia", alias: "Lillia" }, "99": { id: 99, name: "Lux", alias: "Lux" },
+  },
   items: {
     "1102": item("Filhote de Brasa"), "2003": item("Poção de Vida"), "3009": item("Botas da Rapidez"),
     "3111": item("Passos de Mercúrio"), "3047": item("Botas Galvanizadas de Aço"), "3084": item("Coração de Aço"),
@@ -39,6 +43,21 @@ export const mockSnapshot: Snapshot = {
     items: { ok: true, msg: "conjunto gravado (9 blocos)" },
     spells: { ok: false, msg: "fora da seleção de campeões" },
   },
+  vsChampionId: 0,
+  vsLane: null,
+  enemyPicks: [234, 122],
+  bans: {
+    loading: false,
+    basedOn: [{ championId: 31, lane: "jungle", me: true }, { championId: 99, lane: "middle", me: false }],
+    picks: [
+      { championId: 876, gain: 0.21, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 46.1, baseWr: 53.3, n: 900 }] },
+      { championId: 62, gain: 0.12, reasons: [
+        { allyChampionId: 31, lane: "jungle", wr: 49.0, baseWr: 53.3, n: 700 },
+        { allyChampionId: 99, lane: "middle", wr: 48.2, baseWr: 51.0, n: 300 },
+      ] },
+    ],
+    note: null,
+  },
   build: {
     slug: "chogath", lane: "jungle", patch: "16.23", wr: 53.3, pr: 5.1, br: 7.0, n: 14000, rank: 7, rankTotal: 79,
     runesPick: { primary: [9923, 8126, 8140, 8106], secondary: [8224, 8234], shards: [5008, 5010, 5001], wr: 53.4, n: 13000 },
@@ -56,10 +75,12 @@ export const mockSnapshot: Snapshot = {
       [row(6665, 67.6, 15, 300), row(2502, 61.2, 14, 290), row(3075, 58.6, 12, 150)],
     ],
     lanes: [["jungle", 60], ["top", 32], ["middle", 5.5], ["support", 2]],
+    vs: null,
   },
 };
 
 export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
+  suggestBans: true,
 };
