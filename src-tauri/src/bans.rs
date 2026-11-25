@@ -97,6 +97,27 @@ pub fn suggest(inputs: &[(Ally, &Build)], unavailable: &[i64], top: usize) -> Ve
     out
 }
 
+/// Bans contra o **seu** pick: só os oponentes da sua lane, com a mesma conta de [`suggest`]
+/// (`pr × queda de WR × encolhimento`), ou seja, confronto ruim **e** provável de aparecer.
+/// `exclude` tira quem já está na lista do time, para as duas listas não se repetirem.
+pub fn lane_suggest(
+    me: &Ally,
+    build: &Build,
+    unavailable: &[i64],
+    exclude: &[i64],
+    top: usize,
+) -> Vec<BanPick> {
+    let lane = if build.lane.is_empty() {
+        me.lane.clone().unwrap_or_default()
+    } else {
+        build.lane.clone()
+    };
+    let mut mine = build.clone();
+    mine.matchups.retain(|(l, _)| *l == lane);
+    let skip: Vec<i64> = unavailable.iter().chain(exclude).copied().collect();
+    suggest(&[(me.clone(), &mine)], &skip, top)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +161,21 @@ mod tests {
         let team = suggest(&[(ally(31, true), &b), (ally(99, false), &other)], &[], 1)[0].gain;
         assert!((team - solo * 2.0 / 3.0).abs() < 1e-9);
         assert!(suggest(&[], &[], 5).is_empty());
+    }
+
+    #[test]
+    fn lane_list_only_has_my_lane_and_skips_the_team_list() {
+        // Fixture: selva = 234 (ruim, 9%), 64 (favorável), 28 (ruim, raro); topo = 122.
+        let b = parse_build_full(&fixture()).unwrap();
+        let me = ally(31, true);
+        let ids = |v: Vec<BanPick>| v.iter().map(|p| p.champion_id).collect::<Vec<_>>();
+        // o topo (122) fica de fora: só oponentes da sua lane
+        assert_eq!(ids(lane_suggest(&me, &b, &[], &[], 5)), vec![234, 28]);
+        // mesma conta da lista do time para o campeão em comum
+        let solo = suggest(&[(me.clone(), &b)], &[], 1)[0].gain;
+        assert!((lane_suggest(&me, &b, &[], &[], 1)[0].gain - solo).abs() < 1e-9);
+        // sem repetir o que já está na lista do time, nem indisponíveis
+        assert_eq!(ids(lane_suggest(&me, &b, &[], &[234], 5)), vec![28]);
+        assert!(lane_suggest(&me, &b, &[28], &[234], 5).is_empty());
     }
 }

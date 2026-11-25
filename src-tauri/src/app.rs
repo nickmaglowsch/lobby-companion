@@ -134,7 +134,15 @@ pub struct BanAdvice {
     pub by_tier: bool,
     pub lane: Option<String>,
     pub page_url: Option<String>,
+    /// Contra o seu pick: oponentes da sua lane com confronto ruim e pick provável
+    /// (sem repetir os de `picks`).
+    pub lane_picks: Vec<BanPick>,
+    /// Seu campeão e lane usados na lista individual.
+    pub lane_for: Option<Ally>,
+    pub lane_note: Option<String>,
 }
+
+const DECLARE_NOTE: &str = "Declare ou escolha seu campeão para ver os bans contra ele.";
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -616,16 +624,18 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
     }
     update(app, shared, |s| {
         // Os da tier list não valem para a conta pelo time.
-        let picks = s
+        let (picks, lane_picks, lane_for) = s
             .bans
             .take()
             .filter(|b| !b.by_tier)
-            .map(|b| b.picks)
+            .map(|b| (b.picks, b.lane_picks, b.lane_for))
             .unwrap_or_default();
         s.bans = Some(BanAdvice {
             loading: true,
             based_on: allies.clone(),
             picks,
+            lane_picks,
+            lane_for,
             ..Default::default()
         });
     })
@@ -655,6 +665,25 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
     }
     let inputs: Vec<(Ally, &Build)> = builds.iter().map(|(a, b)| (a.clone(), b)).collect();
     let picks = bans::suggest(&inputs, &unavailable, 5);
+    // Lista individual: só o seu campeão, oponentes da sua lane, sem repetir a do time.
+    let in_team: Vec<i64> = picks.iter().map(|p| p.champion_id).collect();
+    let mine = builds.iter().find(|(a, _)| a.me);
+    let lane_picks = mine
+        .map(|(me, b)| bans::lane_suggest(me, b, &unavailable, &in_team, 5))
+        .unwrap_or_default();
+    let lane_for = mine.map(|(me, b)| Ally {
+        lane: Some(b.lane.clone())
+            .filter(|l| !l.is_empty())
+            .or(me.lane.clone()),
+        ..me.clone()
+    });
+    let lane_note = if mine.is_none() {
+        Some(DECLARE_NOTE.to_string())
+    } else if lane_picks.is_empty() {
+        Some("Nenhum oponente provável da sua lane vai melhor contra o seu campeão (fora os da lista do time).".into())
+    } else {
+        None
+    };
     let note = (!missing.is_empty()).then(|| format!("sem dados de {}", missing.join(", ")));
     if shared.bans_gen.load(Ordering::SeqCst) != generation {
         return;
@@ -665,6 +694,9 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
             based_on: allies,
             picks,
             note,
+            lane_picks,
+            lane_for,
+            lane_note,
             ..Default::default()
         })
     })
@@ -748,17 +780,20 @@ async fn bans_by_tier(
         return;
     }
     let advice = match result {
+        // Ninguém declarou, nem você: a lista individual espera o seu campeão.
         Ok(list) => BanAdvice {
             picks: picks::tier_bans(&list, unavailable, 5),
             by_tier: true,
             lane: Some(lane),
             page_url: Some(q.page_url()),
+            lane_note: Some(DECLARE_NOTE.into()),
             ..Default::default()
         },
         Err(e) => BanAdvice {
             note: Some(format!("tier list indisponível: {e}")),
             by_tier: true,
             lane: Some(lane),
+            lane_note: Some(DECLARE_NOTE.into()),
             ..Default::default()
         },
     };
