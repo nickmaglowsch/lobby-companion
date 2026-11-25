@@ -160,7 +160,12 @@ export interface Settings {
   suggestBans: boolean;
   suggestPicks: boolean;
   pickPool: "mastery" | "tier";
+  checkUpdates: boolean;
 }
+
+/** Versão nova no GitHub Releases (`update.rs`). */
+export interface UpdateInfo { version: string; current: string; notes: string | null; url: string }
+export interface UpdateProgress { downloaded: number; total: number | null }
 
 /** Fora do Tauri (navegador com `npm run dev`) a página usa dados sintéticos de `mock.ts`. */
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -174,6 +179,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     get_settings: m.mockSettings,
     reimport: m.mockSnapshot.import,
     get_composition: m.mockComposition,
+    get_update: m.mockUpdate,
+    check_update: m.mockUpdate,
   };
   return fake[cmd] as T;
 }
@@ -189,6 +196,18 @@ export const api = {
   composition: (allies: number[], enemies: number[]) => call<Composition>("get_composition", { allies, enemies }),
   onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
     inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  /** Atualização já encontrada nesta execução (a janela é recriada a cada seleção). */
+  update: () => call<UpdateInfo | null>("get_update"),
+  /** Consulta o GitHub agora. */
+  checkUpdate: () => call<UpdateInfo | null>("check_update"),
+  /** Baixa, confere a assinatura e instala; o app fecha e o instalador o abre de novo. */
+  installUpdate: () => call<void>("install_update"),
+  onUpdate: (cb: (u: UpdateInfo) => void): Promise<UnlistenFn> =>
+    inTauri ? listen<UpdateInfo>("update-available", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  onUpdateProgress: (cb: (p: UpdateProgress) => void): Promise<UnlistenFn> =>
+    inTauri ? listen<UpdateProgress>("update-progress", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  /** Versão instalada ("dev" no navegador). */
+  version: async (): Promise<string> => (inTauri ? (await import("@tauri-apps/api/app")).getVersion() : "dev"),
 };
 
 /** Ícones servidos pelo backend a partir do cliente (protocolo `lcu`). */

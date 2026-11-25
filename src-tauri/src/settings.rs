@@ -33,6 +33,8 @@ pub struct Settings {
     pub suggest_picks: bool,
     /// Candidatos da sugestão de pick: "mastery" = seu pool (maestria); "tier" = tier list da lane.
     pub pick_pool: String,
+    /// Procura versão nova no GitHub Releases ao abrir e a cada 6 h (só avisa; instalar é no clique).
+    pub check_updates: bool,
 }
 
 impl Default for Settings {
@@ -53,6 +55,7 @@ impl Default for Settings {
             suggest_bans: true,
             suggest_picks: true,
             pick_pool: "mastery".into(),
+            check_updates: true,
         }
     }
 }
@@ -91,5 +94,6 @@ mod tests {
         assert_eq!(s.patch_opt(), None);
         assert!(s.suggest_picks);
         assert_eq!(s.pick_pool, "mastery");
+        assert!(s.check_updates);
     }
 }
