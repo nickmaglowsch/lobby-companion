@@ -74,6 +74,12 @@ export const mockSnapshot: Snapshot = {
     byTier: false,
     lane: null,
     pageUrl: null,
+    laneFor: { championId: 31, lane: "jungle", me: true },
+    lanePicks: [
+      { championId: 234, gain: 0.09, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 49.5, baseWr: 53.3, n: 1500 }] },
+      { championId: 122, gain: 0.03, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 47.0, baseWr: 53.3, n: 180 }] },
+    ],
+    laneNote: null,
   },
   picks: {
     loading: false,

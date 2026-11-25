@@ -400,15 +400,20 @@ async fn lola_cli(slug: String, lane: Option<String>, vs: Option<String>) {
                     lane: Some(b.lane.clone()),
                     me: true,
                 };
-                for p in bans::suggest(&[(me, &b)], &[], 5) {
-                    let r = p.reasons.first();
-                    println!(
-                        "ban: campeão {} +{:.2} pts ({})",
-                        p.champion_id,
-                        p.gain,
-                        r.map(|r| format!("{:.1}% em {} partidas, {}", r.wr, r.n, r.lane))
-                            .unwrap_or_default()
-                    );
+                let team = bans::suggest(&[(me.clone(), &b)], &[], 5);
+                let in_team: Vec<i64> = team.iter().map(|p| p.champion_id).collect();
+                let lane = bans::lane_suggest(&me, &b, &[], &in_team, 5);
+                for (kind, list) in [("ban (time)", team), ("ban (lane)", lane)] {
+                    for p in list {
+                        let r = p.reasons.first();
+                        println!(
+                            "{kind}: campeão {} +{:.2} pts ({})",
+                            p.champion_id,
+                            p.gain,
+                            r.map(|r| format!("{:.1}% em {} partidas, {}", r.wr, r.n, r.lane))
+                                .unwrap_or_default()
+                        );
+                    }
                 }
             }
             println!("página: {}", q.page_url());

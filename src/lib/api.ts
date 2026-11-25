@@ -71,6 +71,8 @@ export interface BanAdvice {
   loading: boolean; basedOn: Ally[]; picks: BanPick[]; note: string | null;
   /** Bans pela força geral na sua lane (tier list), sem campeões declarados no time. */
   byTier: boolean; lane: string | null; pageUrl: string | null;
+  /** Contra o seu pick: oponentes da sua lane com confronto ruim e pick provável (sem repetir `picks`). */
+  lanePicks: BanPick[]; laneFor: Ally | null; laneNote: string | null;
 }
 
 /** Parte da nota de um pick: contra um inimigo ou com um aliado (pontos já encolhidos pela amostra). */

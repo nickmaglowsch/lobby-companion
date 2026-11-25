@@ -3,7 +3,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import {
     api, championIcon, icon, pct, num, minGamesFor, LANES, PHASES, TIERS, REGIONS, PATCHES,
-    type Assets, type Settings, type Snapshot,
+    type Assets, type BanPick, type Settings, type Snapshot,
   } from "$lib/api";
   import Runes from "$lib/Runes.svelte";
   import ItemRow from "$lib/ItemRow.svelte";
@@ -151,42 +151,57 @@
         <h2>Sugestão de bans</h2>
         {#if bans.loading}<span class="muted small">calculando…</span>{/if}
       </div>
+      {#snippet banList(list: BanPick[])}
+        {#each list as p (p.championId)}
+          <div class="ban">
+            <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
+            <div>
+              <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate recuperados, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
+              {#if p.tier}
+                <div class="reason muted small">{pct(p.tier.wr)} na lane · pick {pct(p.tier.pr)} · ban {pct(p.tier.br)} · {num(p.tier.games)} partidas</div>
+              {/if}
+              {#each p.reasons as r (r.allyChampionId + r.lane)}
+                <div class="reason muted small">
+                  <img class="mini" src={championIcon(r.allyChampionId)} alt={champName(r.allyChampionId)} />
+                  {champName(r.allyChampionId)}: {pct(r.wr)} contra ele ({LANES[r.lane] ?? r.lane}) · geral {pct(r.baseWr)} · {num(r.n)} partidas
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      {/snippet}
+
+      <h3 class="ban-group">Pelo time</h3>
       {#if bans.byTier}
         <div class="based muted small">Ninguém do time declarou ainda: pela força geral na sua lane{bans.lane ? ` (${LANES[bans.lane] ?? bans.lane})` : ""}.</div>
       {/if}
       {#if bans.basedOn.length}
         <div class="based muted small">
-          {snap.inChampSelect ? "Pelo seu time:" : "Para:"}
+          {snap.inChampSelect ? "Campeões do seu time:" : "Para:"}
           {#each bans.basedOn as a (a.championId)}
             <img class="mini" class:me={a.me} src={championIcon(a.championId)} alt={champName(a.championId)}
               title="{champName(a.championId)}{a.lane ? ` (${LANES[a.lane] ?? a.lane})` : ''}{a.me ? ' · você' : ''}" />
           {/each}
         </div>
       {/if}
-      {#each bans.picks as p (p.championId)}
-        <div class="ban">
-          <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
-          <div>
-            <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate que o time recupera, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
-            {#if p.tier}
-              <div class="reason muted small">{pct(p.tier.wr)} na lane · pick {pct(p.tier.pr)} · ban {pct(p.tier.br)} · {num(p.tier.games)} partidas</div>
-            {/if}
-            {#each p.reasons as r (r.allyChampionId + r.lane)}
-              <div class="reason muted small">
-                <img class="mini" src={championIcon(r.allyChampionId)} alt={champName(r.allyChampionId)} />
-                {champName(r.allyChampionId)}: {pct(r.wr)} contra ele ({LANES[r.lane] ?? r.lane}) · geral {pct(r.baseWr)} · {num(r.n)} partidas
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/each}
+      {@render banList(bans.picks)}
       {#if bans.note}<p class="muted small">{bans.note}</p>{/if}
+
+      <h3 class="ban-group">
+        Contra o seu pick{#if bans.laneFor}: <img class="mini me" src={championIcon(bans.laneFor.championId)} alt={champName(bans.laneFor.championId)} />
+        {champName(bans.laneFor.championId)}{bans.laneFor.lane ? ` (${LANES[bans.laneFor.lane] ?? bans.laneFor.lane})` : ""}{/if}
+      </h3>
+      {#if bans.lanePicks.length}
+        <div class="based muted small">Oponentes da sua lane que vão melhor contra o seu campeão e aparecem com frequência (sem repetir os de cima).</div>
+      {/if}
+      {@render banList(bans.lanePicks)}
+      {#if bans.laneNote}<p class="muted small">{bans.laneNote}</p>{/if}
       {#if bans.picks.length && bans.byTier}
         <p class="muted small">Pts = win rate acima da média da lane × chance de ele cair na sua lane (pick rate); amostra pequena conta menos. Troca sozinho para a conta pelo time quando alguém declarar.
           {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>Tier list ↗</button>{/if}
         </p>
-      {:else if bans.picks.length}
-        <p class="muted small">Pts = win rate que o time recupera, em média, sem esse campeão no jogo (amostra pequena conta menos). Tendência estatística, não leitura do outro time.</p>
+      {:else if bans.picks.length || bans.lanePicks.length}
+        <p class="muted small">Pts = win rate recuperado, em média, sem esse campeão no jogo: frequência dele × queda do WR (amostra pequena conta menos). Tendência estatística, não leitura do outro time.</p>
       {/if}
     </section>
   {/if}
@@ -429,6 +444,8 @@
   .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
   .mini.me { border-color: var(--gold); }
   .based { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+  .ban-group { margin: 10px 0 4px; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .ban-group:first-of-type { margin-top: 0; }
   .ban { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px solid var(--line); }
   .ban-icon { width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--bad); }
   .gain { color: var(--good); font-size: 12px; font-variant-numeric: tabular-nums; }
