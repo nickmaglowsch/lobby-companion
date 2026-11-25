@@ -11,6 +11,7 @@ pub mod lcu;
 pub mod lola;
 pub mod picks;
 pub mod settings;
+pub mod update;
 
 use app::{ImportReport, Shared, Snapshot};
 use settings::Settings;
@@ -49,16 +50,43 @@ pub fn close_main(app: &AppHandle) {
     });
 }
 
-fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+/// Menu da bandeja; com versão nova, o primeiro item avisa (e abre a janela, onde fica o botão).
+fn tray_menu(app: &AppHandle, update: Option<&str>) -> tauri::Result<Menu<tauri::Wry>> {
     let open = MenuItem::with_id(app, "open", "Abrir", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit])?;
+    match update {
+        Some(v) => {
+            let label = format!("Atualizar para a v{}…", v.trim_start_matches('v'));
+            let up = MenuItem::with_id(app, "update", label, true, None::<&str>)?;
+            Menu::with_items(app, &[&up, &open, &quit])
+        }
+        None => Menu::with_items(app, &[&open, &quit]),
+    }
+}
+
+/// Mostra (ou tira) o aviso de versão nova no menu e na dica da bandeja.
+pub fn set_tray_update(app: &AppHandle, version: Option<&str>) {
+    let Some(tray) = app.tray_by_id("tray") else {
+        return;
+    };
+    if let Ok(menu) = tray_menu(app, version) {
+        let _ = tray.set_menu(Some(menu));
+    }
+    let tip = match version {
+        Some(v) => format!("Lobby Companion: v{} disponível", v.trim_start_matches('v')),
+        None => "Lobby Companion".into(),
+    };
+    let _ = tray.set_tooltip(Some(tip));
+}
+
+fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = tray_menu(app, None)?;
     let mut tray = TrayIconBuilder::with_id("tray")
         .tooltip("Lobby Companion")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
-            "open" => show_main(app),
+            "open" | "update" => show_main(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -213,10 +241,27 @@ async fn get_composition(
     ))
 }
 
+#[tauri::command]
+async fn get_update(app: AppHandle) -> Result<Option<update::UpdateInfo>, String> {
+    Ok(update::pending(&app).await)
+}
+
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<update::UpdateInfo>, String> {
+    update::check(&app).await
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    update::install(&app).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(update::Pending::default())
         .register_asynchronous_uri_scheme_protocol("lcu", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             let path = request.uri().path().to_string();
@@ -249,6 +294,7 @@ pub fn run() {
             create_tray(app.handle())?;
             show_main(app.handle());
             tauri::async_runtime::spawn(app::worker(app.handle().clone()));
+            tauri::async_runtime::spawn(update::watcher(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -259,7 +305,10 @@ pub fn run() {
             lookup,
             set_vs,
             reimport,
-            get_composition
+            get_composition,
+            get_update,
+            check_update,
+            install_update
         ])
         .build(tauri::generate_context!())
         .expect("erro ao iniciar o Lobby Companion");

@@ -20,7 +20,7 @@ A janela mostra o build completo: runas, feitiços, ordem de habilidades, iníci
 
 > Não afiliado à Riot Games nem ao lolalytics. O lolalytics não tem API pública: o app usa o mesmo endpoint JSON que o site usa, com cache de 6 h e no máximo uma requisição por segundo, e sempre linka a página original.
 
-**[Code signing policy](CODE_SIGNING_POLICY.md)** · Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (em andamento: veja [docs/SIGNING.md](docs/SIGNING.md)). Privacidade: o app só fala com o cliente do League no seu computador e com o lolalytics (campeão, lane e filtros; nada pessoal).
+**[Code signing policy](CODE_SIGNING_POLICY.md)** · Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (em andamento: veja [docs/SIGNING.md](docs/SIGNING.md)). Privacidade: o app só fala com o cliente do League no seu computador, com o lolalytics (campeão, lane e filtros; nada pessoal) e com o GitHub, para saber se há versão nova (pode desligar nas configurações).
 
 ## Instalar e usar
 
@@ -28,6 +28,7 @@ A janela mostra o build completo: runas, feitiços, ordem de habilidades, iníci
 2. Abra o cliente do League. O ponto verde no topo indica que o app achou o cliente.
 3. Entre numa fila. Na seleção de campeões, trave o campeão: runas, feitiços e itens entram sozinhos.
 4. Fora da seleção, use a busca para ver o build de qualquer campeão/lane.
+5. **Atualizações** (a partir da 0.4.0): quando sai versão nova, aparece um aviso no topo da janela e no menu do ícone da bandeja. **Atualizar agora** baixa o instalador, confere a assinatura do atualizador e instala; o app fecha e abre de novo sozinho. Nada é instalado sem o clique. Da 0.3.x para a 0.4.0 a instalação é manual (as versões antigas não têm o atualizador).
 
 Configurações (na própria janela): elo (padrão **Esmeralda+**), região (padrão **global**), período (patch atual / 7 / 30 dias), o que importar, amostra mínima por item, tecla do Flash, substituir a página atual quando não houver espaço para uma nova.
 

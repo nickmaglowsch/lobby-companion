@@ -15,6 +15,7 @@
   import RuneAlternatives from "$lib/RuneAlternatives.svelte";
   import Composition from "$lib/Composition.svelte";
   import PickSuggest from "$lib/PickSuggest.svelte";
+  import UpdateBanner from "$lib/UpdateBanner.svelte";
 
   let snap = $state<Snapshot | null>(null);
   let assets = $state<Assets | null>(null);
@@ -22,6 +23,8 @@
   let search = $state("");
   let importing = $state(false);
   let importError = $state<string | null>(null);
+  let version = $state("");
+  let updateCheck = $state<string | null>(null);
   // Itens de defesa contra o dano do time inimigo (preenchido por Composition).
   let defHighlight = $state<number[]>([]);
 
@@ -68,6 +71,7 @@
     (async () => {
       snap = await api.snapshot();
       settings = await api.settings();
+      version = await api.version();
       await refreshAssets();
       un = await api.onSnapshot((s) => {
         // Seleção nova: esquece a lane de confronto escolhida na anterior.
@@ -107,6 +111,23 @@
     if (settings) await api.saveSettings($state.snapshot(settings));
   }
 
+  async function checkUpdateNow() {
+    updateCheck = "Procurando…";
+    try {
+      // Procurar à mão mostra o aviso de novo, mesmo se você clicou em "Depois".
+      try { localStorage.removeItem("lc-update-later"); } catch { /* sem armazenamento */ }
+      const u = await api.checkUpdate();
+      updateCheck = u ? `Versão ${u.version} disponível: veja o aviso no topo.` : "Você está na versão mais nova.";
+    } catch (e) {
+      updateCheck = String(e);
+    }
+  }
+
+  async function toggleUpdates() {
+    await save();
+    if (settings?.checkUpdates) checkUpdateNow();
+  }
+
   function chooseRunes(choice: "pick" | "win") {
     if (!settings || settings.runeChoice === choice) return;
     settings.runeChoice = choice;
@@ -127,6 +148,8 @@
       </datalist>
     </form>
   </header>
+
+  <UpdateBanner inChampSelect={snap?.inChampSelect ?? false} />
 
   {#if snap?.error}<p class="msg bad">{snap.error}</p>{/if}
   {#if snap?.warning}<p class="msg warn">{snap.warning}</p>{/if}
@@ -372,6 +395,12 @@
         {#if settings.suggestPicks}
           <label class="sub">Candidatos <select bind:value={settings.pickPool} onchange={save}><option value="mastery">Meu pool (maestria)</option><option value="tier">Tier list da lane</option></select></label>
         {/if}
+        <label><input type="checkbox" bind:checked={settings.checkUpdates} onchange={toggleUpdates} /> Procurar atualizações no GitHub (só avisa; instala quando você clicar)</label>
+      </div>
+      <div class="actions version">
+        <span class="muted small">Versão {version}</span>
+        <button onclick={checkUpdateNow}>Procurar agora</button>
+        {#if updateCheck}<span class="muted small">{updateCheck}</span>{/if}
       </div>
     </details>
   {/if}
@@ -416,6 +445,7 @@
   .lanes { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
   .lanes button { padding: 1px 6px; font-size: 12px; }
   .actions { display: flex; gap: 8px; align-items: center; }
+  .version { margin-top: 8px; flex-wrap: wrap; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .chip { font-size: 12px; padding: 2px 6px; border-radius: 10px; background: var(--panel); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chip.ok { color: var(--good); }

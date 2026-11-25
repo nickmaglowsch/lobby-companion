@@ -1,6 +1,6 @@
 [package]
 name = "lobby-companion"
-version = "0.3.1"
+version = "0.4.0"
 description = "Companion leve de League of Legends para a seleção de campeões: runas, feitiços e conjuntos de itens com dados do lolalytics"
 authors = ["nickmaglowsch"]
 license = "MIT"
@@ -28,6 +28,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "nat
 tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
 native-tls = "0.2"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
 
 [profile.release]
 codegen-units = 1

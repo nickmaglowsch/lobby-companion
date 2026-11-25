@@ -1,6 +1,6 @@
 // Dados sintéticos para ver a interface no navegador (`npm run dev`), fora do Tauri.
 // Números inventados: não redistribuímos dados do lolalytics.
-import type { Assets, Composition, Settings, Snapshot } from "./api";
+import type { Assets, Composition, Settings, Snapshot, UpdateInfo } from "./api";
 
 const item = (name: string, categories: string[] = []) => ({ name, icon: "", categories });
 
@@ -176,5 +176,10 @@ export const mockComposition: Composition = {
 export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
-  suggestBans: true, suggestPicks: true, pickPool: "mastery",
+  suggestBans: true, suggestPicks: true, pickPool: "mastery", checkUpdates: true,
+};
+
+export const mockUpdate: UpdateInfo = {
+  version: "0.4.0", current: "0.3.1", notes: null,
+  url: "https://github.com/nickmaglowsch/lobby-companion/releases/tag/v0.4.0",
 };
