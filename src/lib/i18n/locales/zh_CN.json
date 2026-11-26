@@ -221,6 +221,8 @@
   "settings.importItems": "出装方案 (分组标题显示 WR)",
   "settings.replaceCurrentPage": "没有空位新建符文页时: 替换当前页",
   "settings.closeInGame": "游戏开始时关闭窗口",
+  "settings.overlay": "游戏内悬浮窗：下一件装备、每分钟补刀和水晶",
+  "settings.overlayTip": "只使用游戏官方 API，只用你自己的数据。在无边框或窗口模式下显示。",
   "settings.suggestBans": "根据我方英雄建议禁用",
   "settings.suggestPicks": "为我的位置建议英雄 (克制 + 协同)",
   "settings.pickPool": "候选",
@@ -333,5 +335,17 @@
   "metric.setting": "禁用、选用和装备的指标",
   "metric.optWpa": "WPA（胜率贡献）",
   "metric.optWr": "胜率（高于平均的点数）",
-  "metric.settingTip": "WPA：与不做这个选择相比，获胜概率变化了多少；装备则与该位置的典型装备比较。WR：高于平均水平的胜率点数（原始算法）。在英雄选择期间也可以切换。"
+  "metric.settingTip": "WPA：与不做这个选择相比，获胜概率变化了多少；装备则与该位置的典型装备比较。WR：高于平均水平的胜率点数（原始算法）。在英雄选择期间也可以切换。",
+  "overlay.next": "下一件装备",
+  "overlay.missing": "还差 {gold} 金币",
+  "overlay.ready": "可以购买：该回城了",
+  "overlay.csMin": "每分钟补刀",
+  "overlay.inhib": "{side}水晶 · {lane}",
+  "overlay.ally": "我方",
+  "overlay.enemy": "敌方",
+  "overlay.blue": "蓝色方",
+  "overlay.red": "红色方",
+  "overlay.top": "上路",
+  "overlay.mid": "中路",
+  "overlay.bot": "下路"
 }

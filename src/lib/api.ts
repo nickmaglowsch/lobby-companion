@@ -182,6 +182,8 @@ export interface Settings {
   replaceCurrentPage: boolean;
   flashSlot: number;
   closeInGame: boolean;
+  /** Overlay na partida (próximo item, CS/min, inibidores), só pela API oficial do jogo. */
+  overlay: boolean;
   suggestBans: boolean;
   suggestPicks: boolean;
   pickPool: "mastery" | "tier";
@@ -194,6 +196,19 @@ export interface Settings {
   language: string;
   /** Último locale lido do cliente (`/riotclient/region-locale`), para quando ele está fechado. */
   clientLocale: string;
+}
+
+/** Overlay da partida (`overlay.rs`): só dados do próprio jogador, da Live Client Data. */
+export interface OverlayState {
+  visible: boolean;
+  locale: string;
+  gameTime: number;
+  cs: number;
+  csPerMin: number;
+  gold: number;
+  next: { id: number; name: string; icon: string; price: number; cost: number; missing: number } | null;
+  /** `side`: "ally" | "enemy" | "blue" | "red"; `lane`: "top" | "mid" | "bot". */
+  inhibs: { side: string; lane: string; respawnIn: number }[];
 }
 
 /** Versão nova no GitHub Releases (`update.rs`). */
@@ -242,6 +257,15 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   if (["get_own_pages", "save_own_runes", "save_own_runes_page", "delete_own_runes", "choose_runes"].includes(cmd)) {
     return m.mockOwnCommand(cmd, args ?? {}) as T;
   }
+  if (cmd === "get_overlay") {
+    // Nome e ícone do item no idioma do "cliente" (CommunityDragon), como no app.
+    const a = await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets)));
+    const o: OverlayState = structuredClone(m.mockOverlay);
+    const it = o.next ? a.items[String(o.next.id)] : undefined;
+    if (o.next && it) Object.assign(o.next, { name: it.name, icon: it.icon });
+    o.locale = m.mockSnapshot.locale;
+    return o as T;
+  }
   if (cmd === "get_assets") {
     return (await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets)))) as T;
   }
@@ -279,6 +303,10 @@ export const api = {
   deleteOwnRunes: (championId: number, pageId: number) => call<OwnPage[]>("delete_own_runes", { championId, pageId }),
   /** Mais jogada / Maior WR / uma página sua no campeão em tela (o backend leva para o cliente). */
   chooseRunes: (choice: "pick" | "win" | "own", pageId: number | null) => call<OwnPage[]>("choose_runes", { choice, pageId }),
+  /** Estado do overlay da partida (depois vem no evento "overlay"). */
+  overlay: () => call<OverlayState>("get_overlay"),
+  onOverlay: (cb: (s: OverlayState) => void): Promise<UnlistenFn> =>
+    inTauri ? listen<OverlayState>("overlay", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
     inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   /** Atualização já encontrada nesta execução (a janela é recriada a cada seleção). */
@@ -294,6 +322,15 @@ export const api = {
   /** Versão instalada ("dev" no navegador). */
   version: async (): Promise<string> => (inTauri ? (await import("@tauri-apps/api/app")).getVersion() : "dev"),
 };
+
+/** Esta janela é o overlay da partida? (No navegador: `?view=overlay`.) */
+export function isOverlayWindow(): boolean {
+  if (typeof window === "undefined") return false;
+  if (!inTauri) return new URLSearchParams(location.search).get("view") === "overlay";
+  const internals = (window as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } })
+    .__TAURI_INTERNALS__;
+  return internals?.metadata?.currentWindow?.label === "overlay";
+}
 
 /** Ícones servidos pelo backend a partir do cliente (protocolo `lcu`). */
 export function icon(path: string | undefined | null): string {

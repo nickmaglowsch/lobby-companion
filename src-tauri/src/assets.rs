@@ -21,6 +21,16 @@ pub struct Named {
     /// "Consumable", "Trinket"). Vazio nas runas e feitiços.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<String>,
+    /// Só itens: preço total (`priceTotal`), para o overlay contar o ouro que falta.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub price: u32,
+    /// Só itens: componentes da receita (`from`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub from: Vec<i64>,
+}
+
+fn is_zero(x: &u32) -> bool {
+    *x == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +80,17 @@ fn named_map(list: &Value) -> HashMap<i64, Named> {
                         .into_iter()
                         .flatten()
                         .filter_map(|c| c.as_str().map(String::from))
+                        .collect(),
+                    price: e
+                        .get("priceTotal")
+                        .and_then(Value::as_u64)
+                        .map_or(0, |p| u32::try_from(p).unwrap_or(0)),
+                    from: e
+                        .get("from")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_i64)
                         .collect(),
                 },
             ))
@@ -292,15 +313,15 @@ mod tests {
             {"id": 2055, "name": "Sentinela de Controle", "iconPath": "", "categories": ["Consumable", "Vision"]},
             {"id": 3009, "name": "Botas da Rapidez", "iconPath": "", "categories": ["Boots"]},
             {"id": 3152, "name": "Cinto-foguete Hextec", "iconPath": "", "categories": ["SpellDamage"]},
-            {"id": 3068, "name": "Égide de Fogo Solar", "iconPath": "", "categories": ["Health", "Armor", "Aura"]},
-            {"id": 3047, "name": "Botas Galvanizadas de Aço", "iconPath": "", "categories": ["Armor", "Boots"]},
-            {"id": 2502, "name": "Desespero Eterno", "iconPath": "", "categories": ["Health", "Armor"]},
-            {"id": 3742, "name": "Couraça do Defunto", "iconPath": "", "categories": ["Health", "Armor"]},
+            {"id": 3068, "name": "Égide de Fogo Solar", "iconPath": "", "categories": ["Health", "Armor", "Aura"], "priceTotal": 2700, "from": [1028, 1028]},
+            {"id": 3047, "name": "Botas Galvanizadas de Aço", "iconPath": "", "categories": ["Armor", "Boots"], "priceTotal": 1100, "from": [1001]},
+            {"id": 2502, "name": "Desespero Eterno", "iconPath": "", "categories": ["Health", "Armor"], "priceTotal": 2800, "from": [1028]},
+            {"id": 3742, "name": "Couraça do Defunto", "iconPath": "", "categories": ["Health", "Armor"], "priceTotal": 2900},
             {"id": 3075, "name": "Armadura de Espinhos", "iconPath": "", "categories": ["Health", "Armor"]},
             {"id": 3065, "name": "Semblante Espiritual", "iconPath": "", "categories": ["Health", "SpellBlock"]},
             {"id": 2525, "name": "Couraça Protoplasmática", "iconPath": "", "categories": ["Health", "Tenacity"]},
-            {"id": 1028, "name": "Cristal de Rubi", "iconPath": "", "categories": ["Health"]},
-            {"id": 1001, "name": "Botas", "iconPath": "", "categories": ["Boots"]},
+            {"id": 1028, "name": "Cristal de Rubi", "iconPath": "", "categories": ["Health"], "priceTotal": 400},
+            {"id": 1001, "name": "Botas", "iconPath": "", "categories": ["Boots"], "priceTotal": 300},
             {"id": 3340, "name": "Sentinela Invisível", "iconPath": "", "categories": ["Trinket", "Vision"]}]);
         Assets::from_values(
             &champs,

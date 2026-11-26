@@ -221,6 +221,8 @@
   "settings.importItems": "Bộ trang bị (WR trong tên khối)",
   "settings.replaceCurrentPage": "Hết chỗ cho trang mới: thay trang hiện tại",
   "settings.closeInGame": "Đóng cửa sổ khi trận đấu bắt đầu",
+  "settings.overlay": "Lớp phủ trong trận: trang bị tiếp theo, CS/phút và nhà lính",
+  "settings.overlayTip": "Chỉ dùng API chính thức của trò chơi và chỉ dữ liệu của bạn. Hiển thị ở chế độ không viền hoặc cửa sổ.",
   "settings.suggestBans": "Gợi ý cấm theo tướng trong đội tôi",
   "settings.suggestPicks": "Gợi ý chọn tướng cho vị trí của tôi (khắc chế + phối hợp)",
   "settings.pickPool": "Ứng viên",
@@ -333,5 +335,17 @@
   "metric.setting": "Chỉ số cho cấm, chọn và trang bị",
   "metric.optWpa": "WPA (xác suất thắng tăng thêm)",
   "metric.optWr": "Tỉ lệ thắng (điểm trên trung bình)",
-  "metric.settingTip": "WPA: một lựa chọn thay đổi khả năng thắng bao nhiêu so với khi không chọn; với trang bị, so với trang bị điển hình ở vị trí đó. WR: điểm tỉ lệ thắng trên trung bình (cách tính ban đầu). Có thể đổi trong lúc chọn tướng."
+  "metric.settingTip": "WPA: một lựa chọn thay đổi khả năng thắng bao nhiêu so với khi không chọn; với trang bị, so với trang bị điển hình ở vị trí đó. WR: điểm tỉ lệ thắng trên trung bình (cách tính ban đầu). Có thể đổi trong lúc chọn tướng.",
+  "overlay.next": "Trang bị tiếp theo",
+  "overlay.missing": "Còn thiếu {gold} vàng",
+  "overlay.ready": "Có thể mua: đến lúc về nhà",
+  "overlay.csMin": "CS/phút",
+  "overlay.inhib": "Nhà lính {side} · {lane}",
+  "overlay.ally": "đồng minh",
+  "overlay.enemy": "địch",
+  "overlay.blue": "xanh",
+  "overlay.red": "đỏ",
+  "overlay.top": "Đường trên",
+  "overlay.mid": "Đường giữa",
+  "overlay.bot": "Đường dưới"
 }

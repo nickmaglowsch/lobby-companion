@@ -239,6 +239,8 @@
   "settings.importItems": "Set di oggetti (WR nei titoli dei blocchi)",
   "settings.replaceCurrentPage": "Nessuno spazio per una nuova pagina: sostituisci quella attuale",
   "settings.closeInGame": "Chiudi la finestra quando inizia la partita",
+  "settings.overlay": "Overlay in partita: prossimo oggetto, CS/min e inibitori",
+  "settings.overlayTip": "Usa solo l'API ufficiale del gioco e solo i tuoi dati. Visibile in modalità senza bordi o in finestra.",
   "settings.suggestBans": "Suggerisci ban in base ai campioni della mia squadra",
   "settings.suggestPicks": "Suggerisci un pick per il mio ruolo (counter + sinergia)",
   "settings.pickPool": "Candidati",
@@ -361,5 +363,17 @@
   "metric.setting": "Metrica di ban, pick e oggetti",
   "metric.optWpa": "WPA (probabilità di vittoria aggiunta)",
   "metric.optWr": "Win rate (punti sopra la media)",
-  "metric.settingTip": "WPA: quanto una scelta cambia la probabilità di vittoria rispetto a non farla; per gli oggetti, rispetto all'oggetto tipico di quella posizione. WR: punti di win rate sopra la media (il calcolo originale). Si può cambiare anche durante la selezione."
+  "metric.settingTip": "WPA: quanto una scelta cambia la probabilità di vittoria rispetto a non farla; per gli oggetti, rispetto all'oggetto tipico di quella posizione. WR: punti di win rate sopra la media (il calcolo originale). Si può cambiare anche durante la selezione.",
+  "overlay.next": "Prossimo oggetto",
+  "overlay.missing": "Mancano {gold} oro",
+  "overlay.ready": "Puoi comprarlo: è ora di tornare in base",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "Inibitore {side} · {lane}",
+  "overlay.ally": "alleato",
+  "overlay.enemy": "nemico",
+  "overlay.blue": "blu",
+  "overlay.red": "rosso",
+  "overlay.top": "Top",
+  "overlay.mid": "Mid",
+  "overlay.bot": "Bot"
 }

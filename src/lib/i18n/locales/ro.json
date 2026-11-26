@@ -257,6 +257,8 @@
   "settings.importItems": "Set de obiecte (WR în titlurile blocurilor)",
   "settings.replaceCurrentPage": "Fără loc pentru o pagină nouă: înlocuiește-o pe cea curentă",
   "settings.closeInGame": "Închide fereastra când începe meciul",
+  "settings.overlay": "Overlay în meci: următorul obiect, CS/min și inhibitori",
+  "settings.overlayTip": "Folosește doar API-ul oficial al jocului și doar datele tale. Apare în modul fără margini sau în fereastră.",
   "settings.suggestBans": "Sugerează banuri după campionii echipei mele",
   "settings.suggestPicks": "Sugerează un pick pentru rolul meu (counter + sinergie)",
   "settings.pickPool": "Candidați",
@@ -389,5 +391,17 @@
   "metric.setting": "Metrica pentru interziceri, alegeri și obiecte",
   "metric.optWpa": "WPA (probabilitate de victorie adăugată)",
   "metric.optWr": "Win rate (puncte peste medie)",
-  "metric.settingTip": "WPA: cât schimbă o alegere șansa de victorie față de a nu o face; la obiecte, față de obiectul tipic al acelei poziții. WR: puncte de win rate peste medie (calculul inițial). Se poate schimba și în timpul selecției."
+  "metric.settingTip": "WPA: cât schimbă o alegere șansa de victorie față de a nu o face; la obiecte, față de obiectul tipic al acelei poziții. WR: puncte de win rate peste medie (calculul inițial). Se poate schimba și în timpul selecției.",
+  "overlay.next": "Următorul obiect",
+  "overlay.missing": "Mai trebuie {gold} aur",
+  "overlay.ready": "Îl poți cumpăra: e timpul să te întorci la bază",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "Inhibitor {side} · {lane}",
+  "overlay.ally": "aliat",
+  "overlay.enemy": "inamic",
+  "overlay.blue": "albastru",
+  "overlay.red": "roșu",
+  "overlay.top": "Sus",
+  "overlay.mid": "Mijloc",
+  "overlay.bot": "Jos"
 }

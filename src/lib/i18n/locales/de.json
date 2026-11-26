@@ -239,6 +239,8 @@
   "settings.importItems": "Gegenstandsset (WR in den Blocktiteln)",
   "settings.replaceCurrentPage": "Kein Platz für eine neue Seite: aktuelle Seite ersetzen",
   "settings.closeInGame": "Fenster schließen, wenn das Spiel startet",
+  "settings.overlay": "Overlay im Spiel: nächster Gegenstand, CS/min und Inhibitoren",
+  "settings.overlayTip": "Nutzt nur die offizielle API des Spiels und nur deine eigenen Daten. Sichtbar im randlosen oder Fenstermodus.",
   "settings.suggestBans": "Banns nach den Champions meines Teams vorschlagen",
   "settings.suggestPicks": "Pick für meine Rolle vorschlagen (Counter + Synergie)",
   "settings.pickPool": "Kandidaten",
@@ -361,5 +363,17 @@
   "metric.setting": "Metrik für Bans, Picks und Items",
   "metric.optWpa": "WPA (hinzugefügte Siegwahrscheinlichkeit)",
   "metric.optWr": "Winrate (Punkte über dem Durchschnitt)",
-  "metric.settingTip": "WPA: wie stark eine Wahl die Siegchance verändert, verglichen damit, sie nicht zu treffen; bei Items im Vergleich zum typischen Item dieser Position. WR: Winrate-Punkte über dem Durchschnitt (die ursprüngliche Berechnung). Lässt sich auch in der Championauswahl umschalten."
+  "metric.settingTip": "WPA: wie stark eine Wahl die Siegchance verändert, verglichen damit, sie nicht zu treffen; bei Items im Vergleich zum typischen Item dieser Position. WR: Winrate-Punkte über dem Durchschnitt (die ursprüngliche Berechnung). Lässt sich auch in der Championauswahl umschalten.",
+  "overlay.next": "Nächster Gegenstand",
+  "overlay.missing": "Noch {gold} Gold",
+  "overlay.ready": "Kaufbar: Zeit für einen Recall",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "{side} Inhibitor · {lane}",
+  "overlay.ally": "Eigener",
+  "overlay.enemy": "Gegnerischer",
+  "overlay.blue": "Blauer",
+  "overlay.red": "Roter",
+  "overlay.top": "Top",
+  "overlay.mid": "Mid",
+  "overlay.bot": "Bot"
 }

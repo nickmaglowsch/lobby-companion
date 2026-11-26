@@ -19,6 +19,9 @@ pub struct Me {
     pub spell1: i64,
     pub spell2: i64,
     pub locked: bool,
+    /// Lado do seu time (`team` da sua entrada em `myTeam`: 1 = azul, 2 = vermelho; 0 = não veio).
+    /// Só o overlay usa (inibidor aliado ou inimigo). Não conferido no cliente real.
+    pub team: i64,
 }
 
 impl Me {
@@ -87,6 +90,7 @@ pub fn parse(session: &Value) -> Option<Me> {
         spell1: i(me.get("spell1Id")),
         spell2: i(me.get("spell2Id")),
         locked,
+        team: i(me.get("team")),
     })
 }
 
@@ -250,7 +254,7 @@ mod tests {
             "timer": {"phase": phase},
             "myTeam": [
                 {"cellId": 1, "championId": 99, "assignedPosition": "top"},
-                {"cellId": 2, "championId": 31, "championPickIntent": 0, "assignedPosition": "JUNGLE", "spell1Id": 4, "spell2Id": 11}
+                {"cellId": 2, "championId": 31, "championPickIntent": 0, "assignedPosition": "JUNGLE", "spell1Id": 4, "spell2Id": 11, "team": 1}
             ],
             "actions": [[{"actorCellId": 2, "type": "ban", "completed": true, "championId": 1}],
                         [{"actorCellId": 2, "type": "pick", "completed": completed, "championId": 31}]]
@@ -283,6 +287,7 @@ mod tests {
         let me = parse(&session(false, "BAN_PICK")).unwrap();
         assert_eq!(me.champion_id, 31);
         assert_eq!(me.position.as_deref(), Some("jungle"));
+        assert_eq!(me.team, 1);
         assert!(!me.locked);
         assert!(parse(&session(true, "BAN_PICK")).unwrap().locked);
         assert!(parse(&session(false, "FINALIZATION")).unwrap().locked);

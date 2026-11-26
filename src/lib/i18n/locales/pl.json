@@ -275,6 +275,8 @@
   "settings.importItems": "Zestaw przedmiotów (WR w tytułach bloków)",
   "settings.replaceCurrentPage": "Brak miejsca na nową stronę: zastąp bieżącą",
   "settings.closeInGame": "Zamknij okno, gdy gra się zaczyna",
+  "settings.overlay": "Nakładka w grze: następny przedmiot, CS/min i inhibitory",
+  "settings.overlayTip": "Używa tylko oficjalnego API gry i tylko twoich danych. Widoczna w trybie bez ramki lub w oknie.",
   "settings.suggestBans": "Proponuj bany wg bohaterów mojej drużyny",
   "settings.suggestPicks": "Proponuj pick na moją rolę (counter + synergia)",
   "settings.pickPool": "Kandydaci",
@@ -417,5 +419,17 @@
   "metric.setting": "Miara banów, picków i przedmiotów",
   "metric.optWpa": "WPA (dodane prawdopodobieństwo wygranej)",
   "metric.optWr": "Win rate (punkty powyżej średniej)",
-  "metric.settingTip": "WPA: jak bardzo wybór zmienia szansę na wygraną w porównaniu z jego brakiem; dla przedmiotów – względem typowego przedmiotu na tej pozycji. WR: punkty win rate powyżej średniej (pierwotne obliczenie). Można to też zmienić podczas wyboru bohaterów."
+  "metric.settingTip": "WPA: jak bardzo wybór zmienia szansę na wygraną w porównaniu z jego brakiem; dla przedmiotów – względem typowego przedmiotu na tej pozycji. WR: punkty win rate powyżej średniej (pierwotne obliczenie). Można to też zmienić podczas wyboru bohaterów.",
+  "overlay.next": "Następny przedmiot",
+  "overlay.missing": "Brakuje {gold} złota",
+  "overlay.ready": "Możesz kupić: czas na powrót do bazy",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "Inhibitor {side} · {lane}",
+  "overlay.ally": "sojuszniczy",
+  "overlay.enemy": "wrogi",
+  "overlay.blue": "niebieski",
+  "overlay.red": "czerwony",
+  "overlay.top": "Góra",
+  "overlay.mid": "Środek",
+  "overlay.bot": "Dół"
 }

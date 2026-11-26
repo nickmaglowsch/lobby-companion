@@ -257,6 +257,8 @@
   "settings.importItems": "Sada předmětů (WR v názvech bloků)",
   "settings.replaceCurrentPage": "Není místo na novou stránku: nahradit aktuální",
   "settings.closeInGame": "Zavřít okno, když začne hra",
+  "settings.overlay": "Overlay ve hře: další předmět, CS/min a inhibitory",
+  "settings.overlayTip": "Používá jen oficiální API hry a jen tvoje data. Zobrazí se v režimu bez okrajů nebo v okně.",
   "settings.suggestBans": "Navrhovat bany podle šampionů mého týmu",
   "settings.suggestPicks": "Navrhovat pick pro mou roli (counter + synergie)",
   "settings.pickPool": "Kandidáti",
@@ -389,5 +391,17 @@
   "metric.setting": "Metrika banů, výběrů a předmětů",
   "metric.optWpa": "WPA (přidaná pravděpodobnost výhry)",
   "metric.optWr": "Win rate (body nad průměrem)",
-  "metric.settingTip": "WPA: jak moc volba mění šanci na výhru oproti tomu, kdybys ji neudělal; u předmětů oproti typickému předmětu dané pozice. WR: body win rate nad průměrem (původní výpočet). Lze přepnout i během výběru."
+  "metric.settingTip": "WPA: jak moc volba mění šanci na výhru oproti tomu, kdybys ji neudělal; u předmětů oproti typickému předmětu dané pozice. WR: body win rate nad průměrem (původní výpočet). Lze přepnout i během výběru.",
+  "overlay.next": "Další předmět",
+  "overlay.missing": "Chybí {gold} zlata",
+  "overlay.ready": "Můžeš koupit: čas na návrat na základnu",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "{side} inhibitor · {lane}",
+  "overlay.ally": "Spojenecký",
+  "overlay.enemy": "Nepřátelský",
+  "overlay.blue": "Modrý",
+  "overlay.red": "Červený",
+  "overlay.top": "Horní",
+  "overlay.mid": "Střední",
+  "overlay.bot": "Dolní"
 }

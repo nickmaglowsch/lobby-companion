@@ -221,6 +221,8 @@
   "settings.importItems": "アイテムセット (ブロック名にWR)",
   "settings.replaceCurrentPage": "新しいページの空きがない場合: 現在のページを置き換える",
   "settings.closeInGame": "試合開始時にウィンドウを閉じる",
+  "settings.overlay": "ゲーム内オーバーレイ：次のアイテム、CS/分、インヒビター",
+  "settings.overlayTip": "ゲームの公式APIと自分のデータだけを使います。ボーダーレスまたはウィンドウモードで表示されます。",
   "settings.suggestBans": "味方チームのチャンピオンをもとにBANを提案",
   "settings.suggestPicks": "自分のロールのピックを提案 (カウンター + シナジー)",
   "settings.pickPool": "候補",
@@ -333,5 +335,17 @@
   "metric.setting": "BAN・ピック・アイテムの指標",
   "metric.optWpa": "WPA（勝率貢献）",
   "metric.optWr": "勝率（平均を上回るポイント）",
-  "metric.settingTip": "WPA：その選択をしなかった場合と比べて勝つ確率がどれだけ変わるか。アイテムでは、その位置の典型的なアイテムと比較。WR：平均を上回る勝率ポイント（従来の計算）。チャンピオン選択中にも切り替えられます。"
+  "metric.settingTip": "WPA：その選択をしなかった場合と比べて勝つ確率がどれだけ変わるか。アイテムでは、その位置の典型的なアイテムと比較。WR：平均を上回る勝率ポイント（従来の計算）。チャンピオン選択中にも切り替えられます。",
+  "overlay.next": "次のアイテム",
+  "overlay.missing": "あと{gold}ゴールド",
+  "overlay.ready": "購入可能：リコールのタイミング",
+  "overlay.csMin": "CS/分",
+  "overlay.inhib": "{side}インヒビター・{lane}",
+  "overlay.ally": "味方",
+  "overlay.enemy": "敵",
+  "overlay.blue": "ブルー",
+  "overlay.red": "レッド",
+  "overlay.top": "トップ",
+  "overlay.mid": "ミッド",
+  "overlay.bot": "ボット"
 }

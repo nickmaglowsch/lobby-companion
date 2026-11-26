@@ -239,6 +239,8 @@
   "settings.importItems": "Ensemble d'objets (WR dans le titre des blocs)",
   "settings.replaceCurrentPage": "Pas de place pour une nouvelle page : remplacer la page actuelle",
   "settings.closeInGame": "Fermer la fenêtre au début de la partie",
+  "settings.overlay": "Overlay en jeu : objet suivant, CS/min et inhibiteurs",
+  "settings.overlayTip": "Utilise uniquement l'API officielle du jeu et uniquement vos données. Visible en mode sans bordure ou fenêtré.",
   "settings.suggestBans": "Suggérer des bans selon les champions de mon équipe",
   "settings.suggestPicks": "Suggérer un pick pour mon poste (counter + synergie)",
   "settings.pickPool": "Candidats",
@@ -361,5 +363,17 @@
   "metric.setting": "Métrique des bans, picks et objets",
   "metric.optWpa": "WPA (probabilité de victoire ajoutée)",
   "metric.optWr": "Win rate (points au-dessus de la moyenne)",
-  "metric.settingTip": "WPA : à quel point un choix change les chances de victoire par rapport à ne pas le faire ; pour les objets, par rapport à l'objet typique de cette position. WR : points de win rate au-dessus de la moyenne (le calcul d'origine). Modifiable aussi pendant la sélection."
+  "metric.settingTip": "WPA : à quel point un choix change les chances de victoire par rapport à ne pas le faire ; pour les objets, par rapport à l'objet typique de cette position. WR : points de win rate au-dessus de la moyenne (le calcul d'origine). Modifiable aussi pendant la sélection.",
+  "overlay.next": "Objet suivant",
+  "overlay.missing": "Encore {gold} PO",
+  "overlay.ready": "Achat possible : c'est le moment de rentrer",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "Inhibiteur {side} · {lane}",
+  "overlay.ally": "allié",
+  "overlay.enemy": "ennemi",
+  "overlay.blue": "bleu",
+  "overlay.red": "rouge",
+  "overlay.top": "Haut",
+  "overlay.mid": "Milieu",
+  "overlay.bot": "Bas"
 }

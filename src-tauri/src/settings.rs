@@ -27,6 +27,9 @@ pub struct Settings {
     pub flash_slot: u8,
     /// Fecha a janela quando a partida começa (fica só o ícone na bandeja).
     pub close_in_game: bool,
+    /// Overlay na partida (próximo item, CS/min, inibidores), só pela Live Client Data.
+    /// Desligado por padrão até a Riot responder sobre o registro do app.
+    pub overlay: bool,
     /// Sugere bans pelos campeões do seu time (um build geral por campeão do time).
     pub suggest_bans: bool,
     /// Sugere pick para a sua posição (counter + sinergia + força na lane).
@@ -62,6 +65,7 @@ impl Default for Settings {
             replace_current_page: false,
             flash_slot: 1,
             close_in_game: true,
+            overlay: false,
             suggest_bans: true,
             suggest_picks: true,
             pick_pool: "mastery".into(),
@@ -127,6 +131,7 @@ mod tests {
         assert_eq!(s.metric, "wpa");
         assert_eq!(s.language, "");
         assert_eq!(s.client_locale, "");
+        assert!(!s.overlay);
     }
 
     #[test]

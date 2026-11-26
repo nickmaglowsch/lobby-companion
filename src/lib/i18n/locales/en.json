@@ -239,6 +239,8 @@
   "settings.importItems": "Item set (WR in block titles)",
   "settings.replaceCurrentPage": "No room for a new page: replace the current one",
   "settings.closeInGame": "Close the window when the game starts",
+  "settings.overlay": "In-game overlay: next item, CS/min and inhibitors",
+  "settings.overlayTip": "Uses only the game's official API and only your own data. Shows in borderless or windowed mode.",
   "settings.suggestBans": "Suggest bans based on my team's champions",
   "settings.suggestPicks": "Suggest a pick for my role (counter + synergy)",
   "settings.pickPool": "Candidates",
@@ -361,5 +363,17 @@
   "metric.setting": "Metric for bans, picks and items",
   "metric.optWpa": "WPA (win probability added)",
   "metric.optWr": "Win rate (points above average)",
-  "metric.settingTip": "WPA: how much a choice changes the chance to win versus not making it; for items, versus the typical item for that slot. WR: win rate points above average (the original calculation). You can also switch it during champ select."
+  "metric.settingTip": "WPA: how much a choice changes the chance to win versus not making it; for items, versus the typical item for that slot. WR: win rate points above average (the original calculation). You can also switch it during champ select.",
+  "overlay.next": "Next item",
+  "overlay.missing": "{gold} gold to go",
+  "overlay.ready": "You can buy it: time to recall",
+  "overlay.csMin": "CS/min",
+  "overlay.inhib": "{side} inhibitor · {lane}",
+  "overlay.ally": "Ally",
+  "overlay.enemy": "Enemy",
+  "overlay.blue": "Blue",
+  "overlay.red": "Red",
+  "overlay.top": "Top",
+  "overlay.mid": "Mid",
+  "overlay.bot": "Bot"
 }
