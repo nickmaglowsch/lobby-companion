@@ -111,6 +111,8 @@ export interface Snapshot {
   /** Na seleção, ainda há ban por fazer. */
   banning: boolean;
   locked: boolean;
+  /** É a sua vez de banir: clicar numa sugestão de ban bane no cliente. */
+  canBan: boolean;
   championId: number;
   lane: string | null;
   loading: boolean;
@@ -186,6 +188,7 @@ export interface UpdateProgress { downloaded: number; total: number | null }
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 let mockAssetsWithIcons: Promise<Assets> | undefined;
+let mockBanTurnSet = false;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri) return invoke<T>(cmd, args);
@@ -195,6 +198,15 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   if (q.get("layout")) m.mockSettings.layout = q.get("layout")!;
   const fase = q.get("fase");
   if (fase) Object.assign(m.mockSnapshot, { banning: fase === "bans", locked: fase === "build" });
+  // Primeira consulta com ?fase=bans: é a sua vez de banir (depois o mock segue o clique).
+  if (fase === "bans" && !mockBanTurnSet) {
+    mockBanTurnSet = true;
+    m.mockSnapshot.canBan = true;
+  }
+  if (cmd === "ban_champion") {
+    m.mockSnapshot.canBan = false;
+    return undefined as T;
+  }
   if (["get_own_pages", "save_own_runes", "delete_own_runes", "choose_runes"].includes(cmd)) {
     return m.mockOwnCommand(cmd, args ?? {}) as T;
   }
@@ -222,6 +234,8 @@ export const api = {
   setVs: (vsChampionId: number | null, vsLane: string | null) => call<void>("set_vs", { vsChampionId, vsLane }),
   reimport: () => call<ImportReport>("reimport"),
   composition: (allies: number[], enemies: number[]) => call<Composition>("get_composition", { allies, enemies }),
+  /** Na sua vez de banir: marca e trava o ban desse campeão no cliente. */
+  banChampion: (championId: number) => call<void>("ban_champion", { championId }),
   /** Páginas de runas próprias (todas). */
   ownPages: () => call<OwnPage[]>("get_own_pages"),
   /** Lê a página atual do cliente (só GET) e guarda como a sua para o campeão e lane. */

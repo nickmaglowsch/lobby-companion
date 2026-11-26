@@ -32,6 +32,9 @@ class AppState {
   ownPages = $state<OwnPage[]>([]);
   ownBusy = $state(false);
   ownError = $state<string | null>(null);
+  /** Campeão sendo banido agora (clique na sugestão) e o erro do último ban. */
+  banBusy = $state<number | null>(null);
+  banError = $state<string | null>(null);
   private compSeq = 0;
   private compKey = "";
 
@@ -164,6 +167,22 @@ class AppState {
     if (own) own.active = choice === "mine";
     if (choice !== "mine") this.settings.runeChoice = choice;
     await this.ownCall(api.chooseRunes(choice));
+  }
+
+  /** Clique numa sugestão de ban na sua vez: bane no cliente (marca e trava). */
+  async ban(championId: number) {
+    if (!this.snap?.canBan || this.banBusy !== null) return;
+    this.banBusy = championId;
+    this.banError = null;
+    try {
+      await api.banChampion(championId);
+      // O cliente confirma pelo WebSocket; até lá, nada de segundo clique.
+      if (this.snap) this.snap.canBan = false;
+    } catch (e) {
+      this.banError = `Ban não feito: ${e}`;
+    } finally {
+      this.banBusy = null;
+    }
   }
 
   /** Guarda a página atual do cliente como a sua para o campeão e a lane em tela. */

@@ -6,6 +6,8 @@
     [
       app.snap?.error ? { kind: "bad", text: app.snap.error } : null,
       app.importError ? { kind: "bad", text: app.importError } : null,
+      app.banError ? { kind: "bad", text: app.banError } : null,
+      app.snap?.canBan ? { kind: "turn", text: "Sua vez de banir: clique numa sugestão de ban para banir no cliente." } : null,
       app.snap?.warning ? { kind: "warn", text: app.snap.warning } : null,
       app.snap?.loading ? { kind: "info", text: "Buscando no lolalytics…" } : null,
     ].filter((x): x is { kind: string; text: string } => !!x),
@@ -23,4 +25,5 @@
   .bad { color: var(--bad); }
   .warn { color: var(--warn); }
   .info { color: var(--muted); }
+  .turn { color: var(--gold); }
 </style>

@@ -86,9 +86,12 @@
         <h2>Sugestão de bans</h2>
         {#if bans.loading}<span class="muted small">calculando…</span>{/if}
       </div>
+      {#if snap.canBan}<p class="turn small">Sua vez de banir: clique numa sugestão para banir no cliente.</p>{/if}
+      {#if app.banError}<p class="msg bad">{app.banError}</p>{/if}
       {#snippet banList(list: BanPick[])}
         {#each list as p (p.championId)}
-          <div class="ban">
+          <svelte:element this={snap?.canBan ? "button" : "div"} class="ban" class:act={snap?.canBan} role={snap?.canBan ? undefined : "listitem"}
+            onclick={() => snap?.canBan && app.ban(p.championId)} title={snap?.canBan ? `Clique para banir ${champName(p.championId)}` : undefined}>
             <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
             <div>
               <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate recuperados, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
@@ -102,7 +105,7 @@
                 </div>
               {/each}
             </div>
-          </div>
+          </svelte:element>
         {/each}
       {/snippet}
 
@@ -350,6 +353,10 @@
   .based { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
   .ban-group { margin: 10px 0 4px; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .ban-group:first-of-type { margin-top: 0; }
+  button.ban { font: inherit; color: inherit; text-align: left; background: none; border: none; border-top: 1px solid var(--line); border-radius: 0; padding: 5px 0; width: 100%; }
+  .ban.act { cursor: pointer; }
+  .ban.act:hover .ban-icon { box-shadow: 0 0 0 2px var(--bad); }
+  .turn { color: var(--gold); margin: 0 0 6px; }
   .ban { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px solid var(--line); }
   .ban-icon { width: 36px; height: 36px; border-radius: 4px; border: 1px solid var(--bad); }
   .gain { color: var(--good); font-size: 12px; font-variant-numeric: tabular-nums; }

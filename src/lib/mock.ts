@@ -52,6 +52,7 @@ export const mockSnapshot: Snapshot = {
   inChampSelect: true,
   banning: false,
   locked: true,
+  canBan: false,
   championId: 31,
   lane: "jungle",
   loading: false,

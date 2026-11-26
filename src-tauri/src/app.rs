@@ -4,7 +4,7 @@
 use crate::assets::{Assets, lolalytics_slug};
 use crate::bans::{self, BanPick};
 use crate::champselect::{self, Ally, Draft, Me};
-use crate::import::{itemset, runes, spells};
+use crate::import::{ban, itemset, runes, spells};
 use crate::lcu::ws::{self, LcuEvent};
 use crate::lcu::{self, Lcu};
 use crate::lola::extra::{self, Counters, Team, TierList};
@@ -102,6 +102,8 @@ pub struct Snapshot {
     /// Na seleção, ainda há ban por fazer (layout "Por fase": mostra os bans).
     pub banning: bool,
     pub locked: bool,
+    /// É a sua vez de banir: clicar numa sugestão de ban bane no cliente.
+    pub can_ban: bool,
     pub champion_id: i64,
     /// Lane do lolalytics (`None` = a mais jogada do campeão).
     pub lane: Option<String>,
@@ -314,6 +316,7 @@ async fn disconnect(app: &AppHandle, shared: &Shared) {
             s.phase = "None".into();
             s.in_champ_select = false;
             s.banning = false;
+            s.can_ban = false;
             s.locked = false;
         })
         .await;
@@ -354,6 +357,7 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
                 s.phase = phase.into();
                 s.in_champ_select = false;
                 s.banning = false;
+                s.can_ban = false;
             })
             .await;
             if close_in_game {
@@ -372,6 +376,7 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         update(app, shared, |s| {
             s.in_champ_select = false;
             s.banning = false;
+            s.can_ban = false;
             s.locked = false;
             s.enemy_picks.clear();
             s.ally_picks.clear();
@@ -380,6 +385,14 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         return;
     };
     let draft = session.as_ref().and_then(champselect::parse_draft);
+    // Vez de banir: só avisa a janela quando muda (a sessão chega a cada segundo).
+    let can_ban = session
+        .as_ref()
+        .and_then(champselect::my_ban_action)
+        .is_some();
+    if shared.snapshot.lock().await.can_ban != can_ban {
+        update(app, shared, |s| s.can_ban = can_ban).await;
+    }
     let my_lane = me
         .position
         .as_deref()
@@ -1386,4 +1399,15 @@ pub async fn choose_runes(
         tauri::async_runtime::spawn(async move { apply_change(&app, &shared, Scope::RUNES).await });
     }
     Ok(list)
+}
+
+/// Bane o campeão clicado na sugestão de ban, se for a sua vez (sessão lida de novo agora).
+pub async fn ban_champion(shared: &Shared, champion_id: i64) -> Result<(), String> {
+    let lcu = shared
+        .lcu
+        .read()
+        .await
+        .clone()
+        .ok_or("cliente do League fechado")?;
+    ban::apply(&lcu, champion_id).await
 }

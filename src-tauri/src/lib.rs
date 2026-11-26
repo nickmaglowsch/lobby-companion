@@ -265,6 +265,12 @@ async fn get_composition(
     ))
 }
 
+/// Clique numa sugestão de ban na sua vez: marca e trava o ban no cliente.
+#[tauri::command]
+async fn ban_champion(shared: State<'_, Arc<Shared>>, champion_id: i64) -> Result<(), String> {
+    app::ban_champion(&shared, champion_id).await
+}
+
 /// Páginas de runas próprias (todas, para a janela e as configurações).
 #[tauri::command]
 async fn get_own_pages(shared: State<'_, Arc<Shared>>) -> Result<Vec<own_runes::OwnEntry>, String> {
@@ -367,6 +373,7 @@ pub fn run() {
             set_vs,
             reimport,
             get_composition,
+            ban_champion,
             get_own_pages,
             save_own_runes,
             delete_own_runes,
