@@ -40,6 +40,11 @@ pub struct Settings {
     pub check_updates: bool,
     /// Layout da janela: "phase" (por fase), "grid" (grade), "tabs" (abas) ou "classic" (lista com rolagem).
     pub layout: String,
+    /// Idioma: "" = automático (do cliente do League); senão um locale do cliente ("pt_BR").
+    pub language: String,
+    /// Último locale lido do cliente (`GET /riotclient/region-locale`): o app abre sem o cliente
+    /// e precisa lembrar o idioma.
+    pub client_locale: String,
 }
 
 impl Default for Settings {
@@ -63,6 +68,8 @@ impl Default for Settings {
             metric: "wpa".into(),
             check_updates: true,
             layout: "phase".into(),
+            language: String::new(),
+            client_locale: String::new(),
         }
     }
 }
@@ -91,6 +98,11 @@ impl Settings {
         }
     }
 
+    /// Idioma em uso: a configuração, senão o do cliente, senão o do sistema, senão inglês.
+    pub fn locale(&self, system: Option<&str>) -> &'static str {
+        crate::i18n::resolve(&self.language, &self.client_locale, system)
+    }
+
     pub fn patch_opt(&self) -> Option<String> {
         let p = self.patch.trim();
         (!p.is_empty()).then(|| p.to_string())
@@ -113,5 +125,22 @@ mod tests {
         assert!(s.check_updates);
         assert_eq!(s.layout, "phase");
         assert_eq!(s.metric, "wpa");
+        assert_eq!(s.language, "");
+        assert_eq!(s.client_locale, "");
+    }
+
+    #[test]
+    fn locale_comes_from_setting_then_client() {
+        let mut s = Settings {
+            client_locale: "ko_KR".into(),
+            ..Default::default()
+        };
+        assert_eq!(s.locale(Some("pt-BR")), "ko_KR");
+        s.language = "ar_AE".into();
+        assert_eq!(s.locale(Some("pt-BR")), "ar_AE");
+        s.language.clear();
+        s.client_locale.clear();
+        assert_eq!(s.locale(Some("pt-BR")), "pt_BR");
+        assert_eq!(s.locale(None), "en_US");
     }
 }

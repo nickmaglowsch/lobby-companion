@@ -4,6 +4,7 @@
 use crate::assets::Assets;
 use crate::lcu::Lcu;
 use crate::lola::model::RuneSet;
+use crate::own_runes::OwnPage;
 use serde_json::{Value, json};
 
 pub const PREFIX: &str = "LC:";
@@ -21,21 +22,36 @@ pub fn page_name(champion: &str, lane_label: &str) -> String {
 
 pub fn page_body(name: &str, set: &RuneSet, assets: &Assets) -> Result<Value, String> {
     if !set.is_complete() {
-        return Err("página de runas incompleta no lolalytics".into());
+        return Err(crate::t!("runes.incomplete"));
     }
     let primary = assets
         .style_of_perk(set.primary[0], None)
-        .ok_or("árvore primária desconhecida (cliente desatualizado?)")?;
+        .ok_or_else(|| crate::t!("runes.unknownPrimary"))?;
     let sub = assets
         .secondary_style(&set.secondary, primary)
-        .ok_or("árvore secundária desconhecida")?;
-    Ok(json!({
+        .ok_or_else(|| crate::t!("runes.unknownSecondary"))?;
+    Ok(body(name, primary, sub, set.selected_perk_ids()))
+}
+
+/// A página própria do jogador (`own_runes`): as árvores vêm salvas junto, sem deduzir.
+pub fn own_page_body(name: &str, page: &OwnPage, assets: &Assets) -> Result<Value, String> {
+    page.check(assets)?;
+    Ok(body(
+        name,
+        page.primary_style,
+        page.sub_style,
+        page.perks.clone(),
+    ))
+}
+
+fn body(name: &str, primary: i64, sub: i64, perks: Vec<i64>) -> Value {
+    json!({
         "name": name,
         "primaryStyleId": primary,
         "subStyleId": sub,
-        "selectedPerkIds": set.selected_perk_ids(),
+        "selectedPerkIds": perks,
         "current": true,
-    }))
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -118,7 +134,7 @@ pub async fn apply(lcu: &Lcu, body: &Value, replace_current: bool) -> Result<Str
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        return Ok("página já estava aplicada".to_string());
+        return Ok(crate::t!("runes.already"));
     }
     let inventory = lcu
         .get("/lol-perks/v1/inventory")
@@ -126,17 +142,19 @@ pub async fn apply(lcu: &Lcu, body: &Value, replace_current: bool) -> Result<Str
         .map_err(|e| e.to_string())?;
     let msg = match plan(&pages, &inventory, replace_current) {
         Plan::ReplaceOurs(id) => {
-            lcu.delete(&format!("/lol-perks/v1/pages/{id}")).await.map_err(|e| e.to_string())?;
-            "página atualizada"
+            lcu.delete(&format!("/lol-perks/v1/pages/{id}"))
+                .await
+                .map_err(|e| e.to_string())?;
+            crate::t!("runes.updated")
         }
-        Plan::Create => "página criada",
+        Plan::Create => crate::t!("runes.created"),
         Plan::ReplaceCurrent(id) => {
-            lcu.delete(&format!("/lol-perks/v1/pages/{id}")).await.map_err(|e| e.to_string())?;
-            "página atual substituída"
+            lcu.delete(&format!("/lol-perks/v1/pages/{id}"))
+                .await
+                .map_err(|e| e.to_string())?;
+            crate::t!("runes.replaced")
         }
-        Plan::NoRoom => {
-            return Err("sem espaço para página de runas: apague uma página ou ative \"substituir a página atual\"".into())
-        }
+        Plan::NoRoom => return Err(crate::t!("runes.noRoom")),
     };
     let created = lcu
         .post("/lol-perks/v1/pages", body)
@@ -169,6 +187,28 @@ mod tests {
         assert_eq!(body["selectedPerkIds"].as_array().unwrap().len(), 9);
         let win = page_body("x", b.runes_win.as_ref().unwrap(), &sample_assets()).unwrap();
         assert_eq!(win["subStyleId"], 8400);
+    }
+
+    #[test]
+    fn own_body_keeps_saved_styles() {
+        let own = OwnPage {
+            id: 1,
+            name: "Full AP".into(),
+            primary_style: 8100,
+            sub_style: 8200,
+            perks: vec![9923, 8126, 8140, 8106, 8224, 8234, 5008, 5010, 5011],
+            saved_at: 0,
+        };
+        let body = own_page_body("LC: Cho'Gath Minha", &own, &sample_assets()).unwrap();
+        assert_eq!(body["primaryStyleId"], 8100);
+        assert_eq!(body["subStyleId"], 8200);
+        assert_eq!(body["selectedPerkIds"], json!(own.perks));
+        assert_eq!(body["current"], true);
+        let stale = OwnPage {
+            perks: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ..own
+        };
+        assert!(own_page_body("x", &stale, &sample_assets()).is_err());
     }
 
     #[test]

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { icon, pct, num, pts, type Assets, type PerkStat, type RuneSet, type RuneStats } from "./api";
+  import { icon, pct, pts, type Assets, type PerkStat, type RuneSet, type RuneStats } from "./api";
+  import { t } from "./i18n/index.svelte";
 
   // WR de cada runa escolhida e das alternativas da mesma fileira. Só exibição: não muda a importação.
   let { set, stats, assets, minGames, open = false }: {
@@ -55,11 +56,11 @@
 
 {#if rows.length}
   <details class="alts" {open}>
-    <summary>WR de cada runa e alternativas{#if hint.length}<span class="flag">&nbsp;· {hint.length} com WR maior</span>{/if}</summary>
+    <summary>{t("runeAlternatives.summary")}{#if hint.length}<span class="flag">&nbsp;· {t("runeAlternatives.betterCount", { count: hint.length })}</span>{/if}</summary>
     <div class="grid">
       {#each rows as r, i (i)}
         <div class="row">
-          <div class="chosen" title="{perk(r.id)?.name}{r.stat ? ` · ${num(r.stat.n)} partidas` : ''}">
+          <div class="chosen" title="{perk(r.id)?.name}{r.stat ? ` · ${t('common.games', { count: r.stat.n })}` : ''}">
             <img src={icon(perk(r.id)?.icon)} alt={perk(r.id)?.name} />
             <span class="wr">{r.stat ? pct(r.stat.wr) : "—"}</span>
             <span class="pr">{r.stat ? pct(r.stat.pr) : ""}</span>
@@ -67,7 +68,7 @@
           <div class="others">
             {#each r.alts as a (a.id)}
               <div class="alt" class:better={a.better} class:low={(a.stat?.n ?? 0) < minGames}
-                title="{perk(a.id)?.name} · {num(a.stat?.n ?? 0)} partidas{a.better ? ' · WR claramente maior' : ''}">
+                title="{perk(a.id)?.name} · {t('common.games', { count: a.stat?.n ?? 0 })}{a.better ? ` · ${t('runeAlternatives.clearlyBetter')}` : ''}">
                 <img src={icon(perk(a.id)?.icon)} alt={perk(a.id)?.name} />
                 <span class="wr">{pct(a.stat?.wr ?? 0)}</span>
                 <span class="pr">{pct(a.stat?.pr ?? 0)}</span>
@@ -79,11 +80,15 @@
     </div>
     {#each hint as h (h.to.id)}
       <p class="small better-line">
-        {perk(h.to.id)?.name ?? h.to.id} no lugar de {perk(h.from.id)?.name ?? h.from.id}:
-        {pts((h.to.stat?.wr ?? 0) - (h.from.stat?.wr ?? 0), 1)} pts ({num(h.to.stat?.n ?? 0)} partidas)
+        {t("runeAlternatives.hint", {
+          to: perk(h.to.id)?.name ?? String(h.to.id),
+          from: perk(h.from.id)?.name ?? String(h.from.id),
+          delta: pts((h.to.stat?.wr ?? 0) - (h.from.stat?.wr ?? 0), 1),
+          count: h.to.stat?.n ?? 0,
+        })}
       </p>
     {/each}
-    <p class="small muted">WR · PR de cada runa nesse lugar da página. Apagado = menos de {minGames} partidas. Só informação: a importação segue a aba escolhida.</p>
+    <p class="small muted">{t("runeAlternatives.footnote", { count: minGames })}</p>
   </details>
 {/if}
 

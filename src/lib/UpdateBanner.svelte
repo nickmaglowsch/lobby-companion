@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type UpdateInfo, type UpdateProgress } from "$lib/api";
+  import { t } from "$lib/i18n/index.svelte";
 
   // `floating`: nos layouts de uma tela, o aviso fica por cima, no canto de baixo.
   let { inChampSelect = false, floating = false }: { inChampSelect?: boolean; floating?: boolean } = $props();
@@ -71,24 +72,24 @@
 {#if info && !hidden}
   <section class="update" class:floating role="status">
     <p>
-      <strong>Versão {info.version} disponível</strong>
-      <span class="muted">(você tem a {info.current})</span>
+      <strong>{t("updateBanner.available", { version: info.version })}</strong>
+      <span class="muted">{t("updateBanner.current", { current: info.current })}</span>
     </p>
     {#if installing}
       <p class="muted small">
-        {#if percent !== null}Baixando… {percent}%{:else}Baixando…{/if}
-        O app fecha, instala e abre de novo sozinho.
+        {percent !== null ? t("updateBanner.downloadingPct", { percent }) : t("updateBanner.downloading")}
+        {t("updateBanner.restartNote")}
       </p>
       {#if percent !== null}<div class="bar"><span style="width: {percent}%"></span></div>{/if}
     {:else}
       <div class="row">
         <button class="primary" onclick={install} disabled={inChampSelect}
-          title={inChampSelect ? "Na seleção de campeões, atualize depois: o app fecha durante a instalação." : ""}>Atualizar agora</button>
-        <button class="link" onclick={() => openUrl(info!.url)}>Novidades ↗</button>
-        <button class="link later" onclick={later}>Depois</button>
+          title={inChampSelect ? t("updateBanner.champSelect") : ""}>{t("updateBanner.install")}</button>
+        <button class="link" onclick={() => openUrl(info!.url)}>{t("updateBanner.notes")}</button>
+        <button class="link later" onclick={later}>{t("updateBanner.later")}</button>
       </div>
       {#if inChampSelect && !floating}
-        <p class="muted small">Na seleção de campeões, atualize depois: o app fecha durante a instalação.</p>
+        <p class="muted small">{t("updateBanner.champSelect")}</p>
       {/if}
     {/if}
     {#if error}<p class="bad small">{error}</p>{/if}
@@ -97,7 +98,7 @@
 
 <style>
   .update { border: 1px solid var(--gold); border-radius: 6px; background: var(--panel); padding: 8px 10px; display: grid; gap: 6px; }
-  .update.floating { position: fixed; right: 12px; bottom: 52px; z-index: 10; width: 300px; padding: 6px 10px; gap: 4px; font-size: 13px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.6); }
+  .update.floating { position: fixed; inset-inline-end: 12px; bottom: 52px; z-index: 10; width: 300px; padding: 6px 10px; gap: 4px; font-size: 13px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.6); }
   p { margin: 0; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   button { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }
@@ -105,7 +106,7 @@
   button:disabled { opacity: 0.5; cursor: default; }
   button.primary { background: #1e282d; border-color: var(--gold); color: var(--gold); font-weight: 600; }
   button.link { border: none; background: none; color: var(--gold); padding: 4px 6px; }
-  .later { margin-left: auto; color: var(--muted); }
+  .later { margin-inline-start: auto; color: var(--muted); }
   button.later { color: var(--muted); }
   .muted { color: var(--muted); }
   .small { font-size: 12px; }

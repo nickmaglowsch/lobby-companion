@@ -30,7 +30,7 @@ pub struct ItemStat {
     pub n: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RuneSet {
     pub primary: Vec<i64>,
@@ -445,13 +445,11 @@ pub fn skill_order_letters(id: &Value) -> Option<String> {
 /// Erros do lolalytics vêm como `{"status": 4042}` (campeão inválido) / `4044` (lane inválida).
 pub fn parse_build_full(v: &Value) -> Result<Build, String> {
     if let Some(code) = v.get("status").and_then(Value::as_i64) {
-        return Err(format!(
-            "lolalytics sem dados para essa combinação (status {code})"
-        ));
+        return Err(crate::t!("lola.noData", code = code));
     }
     let header = v
         .get("header")
-        .ok_or("resposta do lolalytics sem 'header'")?;
+        .ok_or_else(|| crate::t!("lola.missing", field = "header"))?;
     let pick = v.pointer("/summary/pick");
     let win = v.pointer("/summary/win");
     let lanes = v

@@ -1,6 +1,6 @@
 // Dados sintéticos para ver a interface no navegador (`npm run dev`), fora do Tauri.
 // Números inventados: não redistribuímos dados do lolalytics.
-import type { Assets, Composition, Settings, Snapshot, UpdateInfo } from "./api";
+import type { Assets, Composition, OwnPage, Settings, Snapshot, UpdateInfo } from "./api";
 
 const item = (name: string, categories: string[] = []) => ({ name, icon: "", categories });
 
@@ -29,13 +29,15 @@ export const mockAssets: Assets = {
     "3068": item("Égide de Fogo Solar", ["Health", "Armor"]), "3340": item("Sentinela Invisível", ["Trinket"]),
   },
   perks: Object.fromEntries([9923, 8112, 8128, 8126, 8139, 8143, 8140, 8136, 8106, 8135, 8224, 8226, 8234, 8233, 8236, 8237,
-    5008, 5005, 5007, 5010, 5001, 5011, 5013, 8446, 8242].map((id) => [String(id), item(`Runa ${id}`)])),
+    5008, 5005, 5007, 5010, 5001, 5011, 5013, 8446, 8242, 8214, 8229, 8230, 8275, 8210, 8232, 8437, 8439, 8465, 8463, 8401,
+    8429, 8444, 8473, 8451, 8453].map((id) => [String(id), item(`Runa ${id}`)])),
   styles: [
     { id: 8100, name: "Dominação", icon: "", perks: [9923, 8112, 8128, 8126, 8139, 8143, 8140, 8136, 8106, 8135],
       slots: [[9923, 8112, 8128], [8126, 8139, 8143], [8140, 8136], [8106, 8135]] },
-    { id: 8200, name: "Feitiçaria", icon: "", perks: [8224, 8226, 8234, 8233, 8236, 8237],
-      slots: [[], [8224, 8226], [8234, 8233], [8236, 8237]] },
-    { id: 8400, name: "Determinação", icon: "", perks: [8446, 8242], slots: [[], [8446, 8242]] },
+    { id: 8200, name: "Feitiçaria", icon: "", perks: [8214, 8229, 8230, 8224, 8226, 8275, 8210, 8234, 8233, 8237, 8232, 8236],
+      slots: [[8214, 8229, 8230], [8224, 8226, 8275], [8210, 8234, 8233], [8237, 8232, 8236]] },
+    { id: 8400, name: "Determinação", icon: "", perks: [8437, 8439, 8465, 8446, 8463, 8401, 8429, 8444, 8473, 8451, 8453, 8242],
+      slots: [[8437, 8439, 8465], [8446, 8463, 8401], [8429, 8444, 8473], [8451, 8453, 8242]] },
   ],
   spells: { "4": item("Flash"), "11": item("Golpear"), "6": item("Fantasma") },
   shardSlots: [[5008, 5005, 5007], [5008, 5010, 5001], [5011, 5013, 5001]],
@@ -52,6 +54,7 @@ export const mockSnapshot: Snapshot = {
   inChampSelect: true,
   banning: false,
   locked: true,
+  canBan: false,
   championId: 31,
   lane: "jungle",
   loading: false,
@@ -63,6 +66,7 @@ export const mockSnapshot: Snapshot = {
     items: { ok: true, msg: "conjunto gravado (9 blocos)" },
     spells: { ok: false, msg: "fora da seleção de campeões" },
   },
+  locale: "pt_BR",
   vsChampionId: 0,
   vsLane: null,
   enemyPicks: [234, 122, 876, 62],
@@ -200,9 +204,76 @@ export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
   suggestBans: true, suggestPicks: true, pickPool: "mastery", metric: "wpa", checkUpdates: true, layout: "phase",
+  language: "", clientLocale: "pt_BR",
 };
+
+// Mensagens que no app vêm traduzidas pelo Rust: no navegador, dos mesmos arquivos do backend.
+const rustLocales = import.meta.glob<Record<string, string>>("../../src-tauri/locales/*.json", { import: "default" });
+
+/** `?lang=xx_YY`: janela e mensagens "do backend" nesse idioma (padrão: pt_BR). */
+export async function mockLanguage(locale: string) {
+  const { fileFor } = await import("./i18n/index.svelte");
+  const load = rustLocales[`../../src-tauri/locales/${fileFor(locale)}.json`];
+  const d = load ? await load() : {};
+  const tr = (key: string, args: Record<string, string | number> = {}) =>
+    Object.entries(args).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), d[key] ?? key);
+  const pct = (x: number) => tr("fmt.percent", { n: x.toFixed(1).replace(".", d["fmt.decimal"] ?? ".") });
+  mockSnapshot.locale = locale;
+  mockSnapshot.import = {
+    runes: { ok: true, msg: tr("runes.created") },
+    items: { ok: true, msg: tr("items.saved_other", { count: 9 }) },
+    spells: { ok: false, msg: tr("ban.notInSelect") },
+  };
+  for (const it of mockComposition.items) it.slot = tr("itemset.itemN", { n: Number(it.slot[0]) });
+  mockComposition.note = tr("comp.armorItem", { item: mockAssets.items["3742"]?.name ?? "", wr: pct(55.6) });
+}
 
 export const mockUpdate: UpdateInfo = {
   version: "0.4.0", current: "0.3.1", notes: null,
   url: "https://github.com/nickmaglowsch/lobby-companion/releases/tag/v0.4.0",
 };
+
+/** "Página atual do cliente" que "Copiar do cliente" lê no navegador (runas da `mockAssets`). */
+const mockClientPage = { name: "Cho AP", primaryStyle: 8100, subStyle: 8200, perks: [9923, 8139, 8140, 8135, 8226, 8234, 5005, 5008, 5001] };
+
+// Com `?own=0` a janela começa sem páginas próprias (para ver os botões de criar).
+const startEmpty = typeof location !== "undefined" && new URLSearchParams(location.search).get("own") === "0";
+let mockOwnPages: OwnPage[] = startEmpty ? [] : [
+  { championId: 31, id: 1, name: "Tanque", primaryStyle: 8100, subStyle: 8200, perks: [9923, 8139, 8140, 8135, 8226, 8234, 5005, 5008, 5001],
+    active: true, savedAt: 1795608000 },
+  { championId: 31, id: 2, name: "Contra AD", primaryStyle: 8100, subStyle: 8400, perks: [9923, 8126, 8136, 8106, 8429, 8242, 5008, 5008, 5011],
+    active: false, savedAt: 1795560000 },
+];
+
+/** Comandos das páginas próprias no navegador (mesma regra do backend, sem cliente). */
+export function mockOwnCommand(cmd: string, args: Record<string, unknown>): OwnPage[] {
+  const champ = (args.championId as number | undefined) ?? mockSnapshot.championId;
+  const mine = () => mockOwnPages.filter((p) => p.championId === champ);
+  const upsert = (pageId: number | null, name: string, page: { primaryStyle: number; subStyle: number; perks: number[] }) => {
+    const existing = mine().find((p) => p.id === pageId);
+    const id = existing?.id ?? Math.max(0, ...mine().map((p) => p.id)) + 1;
+    // Mesma limpeza do `clean_name` (Rust): espaços, prefixo LC:, até 20 letras.
+    const clean = name.trim().replace(/^LC:/, "").split(/\s+/).filter(Boolean).join(" ").slice(0, 20).trim();
+    const entry: OwnPage = {
+      championId: champ, id, name: clean || existing?.name || `Página ${mine().length + 1}`,
+      primaryStyle: page.primaryStyle, subStyle: page.subStyle, perks: [...page.perks],
+      active: true, savedAt: Math.floor(Date.now() / 1000),
+    };
+    mockOwnPages = [...mockOwnPages.filter((p) => !(p.championId === champ && p.id === id)), entry]
+      .map((p) => (p.championId === champ ? { ...p, active: p.id === id } : p));
+  };
+  if (cmd === "save_own_runes") {
+    upsert((args.pageId as number | null) ?? null, (args.name as string | null) ?? mockClientPage.name, mockClientPage);
+  } else if (cmd === "save_own_runes_page") {
+    upsert((args.pageId as number | null) ?? null, args.name as string, args as unknown as { primaryStyle: number; subStyle: number; perks: number[] });
+  } else if (cmd === "delete_own_runes") {
+    mockOwnPages = mockOwnPages.filter((p) => !(p.championId === champ && p.id === args.pageId));
+  } else if (cmd === "choose_runes") {
+    const choice = args.choice as string;
+    const id = choice === "own" ? (args.pageId as number) : null;
+    if (id !== null && !mine().some((p) => p.id === id)) throw "essa página não existe mais";
+    mockOwnPages = mockOwnPages.map((p) => (p.championId === champ ? { ...p, active: p.id === id } : p));
+    if (choice === "pick" || choice === "win") mockSettings.runeChoice = choice;
+  }
+  return structuredClone(mockOwnPages).sort((a, b) => a.championId - b.championId || a.id - b.id);
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { coreSets, icon, pct, num, type Assets, type Build } from "./api";
+  import { t } from "./i18n/index.svelte";
   import { app } from "./app.svelte";
   import { comboWpa, pp } from "./metric";
 
@@ -17,17 +18,17 @@
 
 {#if sets.length}
   <div class="core">
-    <div class="label">Núcleo</div>
+    <div class="label">{t("common.core")}</div>
     <div class="list">
       {#each sets as { combo, ids }, i (combo.ids.join())}
         {@const sc = scoreOf(combo.ids)}
-        <div class="row" class:first={i === 0} title="{num(combo.n)} partidas{i === 0 ? ' · vai para o conjunto de itens' : ''}">
+        <div class="row" class:first={i === 0} title="{t('common.games', { count: combo.n })}{i === 0 ? ` · ${t('coreBuild.toItemSet')}` : ''}">
           {#each ids as id, j (j)}
             {#if j > 0}<span class="arrow">›</span>{/if}
             <img src={icon(assets?.items[id]?.icon)} alt={assets?.items[id]?.name} title={assets?.items[id]?.name} />
           {/each}
           {#if sc !== undefined}
-            <span class="wr" class:up={sc >= 0.5} class:down={sc <= -0.5} title="WR {pct(combo.wr)}">{pp(sc)} pp</span>
+            <span class="wr" class:up={sc >= 0.5} class:down={sc <= -0.5} title="WR {pct(combo.wr)}">{t("metric.pointsPp", { value: pp(sc) })}</span>
           {:else}
             <span class="wr" class:up={combo.wr - build.wr >= 1} class:down={combo.wr - build.wr <= -1}>{pct(combo.wr)}</span>
           {/if}
@@ -46,7 +47,8 @@
   .row.first { opacity: 1; }
   img { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--gold-dim); background: var(--panel-2); }
   .arrow { color: var(--muted); }
-  .wr { margin-left: 4px; font-size: 13px; }
+  .arrow:dir(rtl) { display: inline-block; transform: scaleX(-1); }
+  .wr { margin-inline-start: 4px; font-size: 13px; }
   .muted { color: var(--muted); }
   .up { color: var(--good); }
   .down { color: var(--bad); }

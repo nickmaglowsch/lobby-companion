@@ -2,6 +2,7 @@
 //! Do próprio jogador: campeão, posição, feitiços. Dos outros: **só campeões e posições**
 //! (o que o próprio cliente mostra na tela); nunca nomes, Riot IDs ou PUUIDs (regra da Riot).
 
+use crate::i18n::Lang;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -194,6 +195,26 @@ pub fn parse_draft(session: &Value) -> Option<Draft> {
     })
 }
 
+/// Id da sua ação de ban em andamento (`isInProgress`, não concluída), se for a sua vez de banir.
+/// Só `type == "ban"` do `localPlayerCellId`: a vez de escolher nunca entra aqui.
+pub fn my_ban_action(session: &Value) -> Option<i64> {
+    let cell = session.get("localPlayerCellId")?.as_i64()?;
+    session
+        .get("actions")?
+        .as_array()?
+        .iter()
+        .filter_map(Value::as_array)
+        .flatten()
+        .find(|a| {
+            a.get("actorCellId").and_then(Value::as_i64) == Some(cell)
+                && a.get("type").and_then(Value::as_str) == Some("ban")
+                && a.get("isInProgress").and_then(Value::as_bool) == Some(true)
+                && a.get("completed").and_then(Value::as_bool) != Some(true)
+        })?
+        .get("id")?
+        .as_i64()
+}
+
 /// Posição do cliente → lane do lolalytics.
 pub fn lolalytics_lane(position: &str) -> Option<&'static str> {
     match position {
@@ -206,14 +227,15 @@ pub fn lolalytics_lane(position: &str) -> Option<&'static str> {
     }
 }
 
-pub fn lane_label(lane: &str) -> &'static str {
-    match lane {
-        "top" => "Topo",
-        "jungle" => "Selva",
-        "middle" => "Meio",
-        "bottom" => "Atirador",
-        "support" => "Suporte",
-        _ => "",
+/// Lanes do lolalytics.
+pub const LANES: &[&str] = &["top", "jungle", "middle", "bottom", "support"];
+
+/// Nome da lane no idioma do app ("jungle" → "Selva"); vazio se a lane não existe.
+pub fn lane_label(lang: Lang, lane: &str) -> String {
+    if LANES.contains(&lane) {
+        lang.t(&format!("lane.{lane}"))
+    } else {
+        String::new()
     }
 }
 
@@ -317,9 +339,24 @@ mod tests {
     }
 
     #[test]
+    fn my_ban_turn_only() {
+        let mut s = session(false, "BAN_PICK");
+        assert_eq!(my_ban_action(&s), None, "ban já concluído");
+        s["actions"][0][0] = json!({"id": 4, "actorCellId": 2, "type": "ban", "isInProgress": true, "completed": false});
+        assert_eq!(my_ban_action(&s), Some(4));
+        s["actions"][0][0]["actorCellId"] = json!(1);
+        assert_eq!(my_ban_action(&s), None, "vez de outro jogador");
+        s["actions"][0][0] = json!({"id": 5, "actorCellId": 2, "type": "pick", "isInProgress": true, "completed": false});
+        assert_eq!(my_ban_action(&s), None, "vez de escolher não conta");
+    }
+
+    #[test]
     fn lanes() {
         assert_eq!(lolalytics_lane("utility"), Some("support"));
         assert_eq!(lolalytics_lane(""), None);
-        assert_eq!(lane_label("jungle"), "Selva");
+        let pt = Lang { locale: "pt_BR" };
+        assert_eq!(lane_label(pt, "jungle"), "Selva");
+        assert!(!lane_label(Lang { locale: "ja_JP" }, "jungle").is_empty());
+        assert_eq!(lane_label(pt, "aram"), "");
     }
 }

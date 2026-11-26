@@ -1,28 +1,29 @@
 //! Dados estáticos lidos do próprio cliente (nomes em pt-BR, ícones), sem Data Dragon.
 
 use crate::lcu::{Lcu, LcuError};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::Path;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Champion {
     pub id: i64,
     pub name: String,
     pub alias: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Named {
     pub name: String,
     pub icon: String,
     /// Só itens: `categories` do `items.json` do cliente (ex. "Armor", "SpellBlock", "Boots",
     /// "Consumable", "Trinket"). Vazio nas runas e feitiços.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Style {
     pub id: i64,
     pub name: String,
@@ -33,7 +34,10 @@ pub struct Style {
     pub slots: Vec<Vec<i64>>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+/// Cópia em disco (`assets.json` na pasta de cache) da última vez que o cliente respondeu: com ela
+/// a janela mostra campeões e runas, busca builds e monta a sua página de runas sem o cliente aberto.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Assets {
     pub champions: HashMap<i64, Champion>,
     pub items: HashMap<i64, Named>,
@@ -204,6 +208,34 @@ impl Assets {
             })
     }
 
+    /// Cópia salva da última conexão (`None` se nunca houve, ou se o arquivo não serve).
+    pub fn load_cached(path: &Path) -> Option<Self> {
+        let a: Self = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+        (!a.champions.is_empty() && !a.styles.is_empty()).then_some(a)
+    }
+
+    pub fn save_cached(&self, path: &Path) -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(
+            &tmp,
+            serde_json::to_vec(self).map_err(std::io::Error::other)?,
+        )?;
+        std::fs::rename(&tmp, path)
+    }
+
+    /// Ícones das runas e das árvores (os que o editor de página precisa sem o cliente).
+    pub fn rune_icons(&self) -> Vec<String> {
+        self.perks
+            .values()
+            .map(|p| p.icon.clone())
+            .chain(self.styles.iter().map(|s| s.icon.clone()))
+            .filter(|i| !i.is_empty())
+            .collect()
+    }
+
     pub fn champion(&self, id: i64) -> Option<&Champion> {
         self.champions.get(&id)
     }
@@ -219,7 +251,7 @@ impl Assets {
         self.items
             .get(&id)
             .map(|n| n.name.clone())
-            .unwrap_or_else(|| format!("item {id}"))
+            .unwrap_or_else(|| crate::t!("item.unknown", id = id))
     }
 }
 
@@ -277,6 +309,26 @@ mod tests {
             &styles,
             &json!([{"id": 4, "name": "Flash"}]),
         )
+    }
+
+    #[test]
+    fn cached_copy_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("lc-assets-{}", std::process::id()));
+        let path = dir.join("assets.json");
+        assert!(Assets::load_cached(&path).is_none());
+        let a = sample();
+        a.save_cached(&path).unwrap();
+        let b = Assets::load_cached(&path).unwrap();
+        assert_eq!(b.champions.len(), a.champions.len());
+        assert_eq!(b.styles[0].slots, a.styles[0].slots);
+        assert_eq!(b.shard_slots, a.shard_slots);
+        assert!(b.item_has(3047, "Armor"));
+        std::fs::write(&path, b"{}").unwrap();
+        assert!(
+            Assets::load_cached(&path).is_none(),
+            "cópia vazia não serve"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

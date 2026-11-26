@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { icon, pct, num, type Assets, type ItemStat } from "./api";
+  import { icon, pct, type Assets, type ItemStat } from "./api";
+  import { t } from "./i18n/index.svelte";
   import { app } from "./app.svelte";
   import { itemWpa, pp } from "./metric";
 
@@ -30,7 +31,7 @@
         {@const item = assets?.items[it.id]}
         {@const sc = scores?.get(it.id)}
         <div class="item" class:low={it.n < minGames} class:def={highlight.includes(it.id)}
-          title="{item?.name} · {pct(it.wr)} · {num(it.n)} partidas{highlight.includes(it.id) ? ' · defesa contra o time inimigo' : ''}">
+          title="{item?.name} · {t('common.games', { count: it.n })}{highlight.includes(it.id) ? ` · ${t('itemRow.defense')}` : ''}">
           <img src={icon(item?.icon)} alt={item?.name} />
           {#if sc !== undefined}
             <span class="wr" class:up={sc >= 0.5} class:down={sc <= -0.5}>{pp(sc)}</span>

@@ -3,7 +3,8 @@
   // (WPA: ≥0,5 pp acima/abaixo do típico); apagado = amostra pequena; contorno verde = defesa
   // contra o dano do time inimigo. `from` = a lista de onde ele veio (para o WPA); `slot` = uma
   // linha por partida (posição, botas) ou várias (1ª volta, situacionais).
-  import { icon, pct, num, type ItemStat } from "$lib/api";
+  import { icon, pct, type ItemStat } from "$lib/api";
+  import { t } from "$lib/i18n/index.svelte";
   import { app } from "$lib/app.svelte";
   import { itemWpa, pp } from "$lib/metric";
 
@@ -17,7 +18,8 @@
 </script>
 
 <div class="it" class:low={it.n < app.minGames} class:def style="--s: {size}px"
-  title="{item?.name} · {pct(it.wr)}{score !== undefined ? ` · ${pp(score)} pp (${slot ? 'contra o típico da posição' : 'contra o WR do campeão'})` : ''} · pick {pct(it.pr)} · {num(it.n)} partidas{def ? ' · defesa contra o time inimigo' : ''}">
+  title={t(def ? "item.tipDefense" : "item.tip", { name: item?.name ?? "", wr: pct(it.wr), pr: pct(it.pr), count: it.n })
+    + (score !== undefined ? ` · ${t(slot ? "metric.vsSlot" : "metric.vsChampion", { value: t("metric.pointsPp", { value: pp(score) }) })}` : "")}>
   <img src={icon(item?.icon)} alt={item?.name} />
   <span class:up class:down>{score !== undefined ? pp(score) : pct(it.wr)}</span>
 </div>

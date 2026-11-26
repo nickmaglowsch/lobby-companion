@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { icon, pct, num, type Assets, type RuneSet } from "./api";
+  import { icon, pct, type Assets, type RuneSet } from "./api";
+  import { t } from "./i18n/index.svelte";
 
   let { set, assets }: { set: RuneSet; assets: Assets | null } = $props();
 
@@ -26,7 +27,8 @@
       <img class="shard" src={icon(perk(id)?.icon)} alt={perk(id)?.name} title={perk(id)?.name} />
     {/each}
   </div>
-  <div class="meta">WR {pct(set.wr)} · {num(set.n)} partidas</div>
+  <!-- Página própria (n = 0): sem WR de página; o cartão mostra a diferença runa a runa. -->
+  {#if set.n > 0}<div class="meta">WR {pct(set.wr)} · {t("common.games", { count: set.n })}</div>{/if}
 </div>
 
 <style>

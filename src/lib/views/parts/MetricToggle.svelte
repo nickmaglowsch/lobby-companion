@@ -2,13 +2,14 @@
   // Troca a métrica das sugestões (WPA ↔ WR) direto na seleção; grava nas configurações e o
   // backend recalcula bans e picks com o que já está em cache.
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import { METRICS } from "$lib/metric";
 </script>
 
 {#if app.settings}
-  <span class="toggle" role="group" aria-label="Métrica das sugestões">
+  <span class="toggle" role="group" aria-label={t("metric.toggleLabel")}>
     {#each METRICS as [v, label, help] (v)}
-      <button class:on={app.metric === v} title={help} aria-pressed={app.metric === v} onclick={() => app.setMetric(v)}>{label}</button>
+      <button class:on={app.metric === v} title={t(help)} aria-pressed={app.metric === v} onclick={() => app.setMetric(v)}>{label}</button>
     {/each}
   </span>
 {/if}

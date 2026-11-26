@@ -1,39 +1,37 @@
 // Métrica das sugestões de ban e pick e dos itens (`metric.rs`): textos, unidade e a conta dos itens.
+// No modo WR os textos são os mesmos de antes (chaves já existentes); os do WPA ficam em `metric.*`.
 import type { Combo, ItemStat } from "./api";
+import { pct, pts, t } from "./i18n/index.svelte";
+
 export type Metric = "wpa" | "wr";
 
+/** Valor, rótulo do botão e chave da explicação (tooltip). */
 export const METRICS: [Metric, string, string][] = [
-  ["wpa", "WPA", "Probabilidade de vitória adicionada: quanto a escolha muda a chance de vitória do time em relação ao que aconteceria sem ela (o campeão típico da lane, ou a vaga sem o banido), no draft atual. Nos itens: o item contra o item típico daquela posição da build."],
-  ["wr", "WR", "Pontos de win rate acima da média (a conta original): força na lane e cada confronto/dupla além da força geral, × a frequência nos bans."],
+  ["wpa", "WPA", "metric.wpaHelp"],
+  ["wr", "WR", "metric.wrHelp"],
 ];
 
-/** Unidade curta dos pontos: "pp" = pontos percentuais de chance de vitória; "pts" = de win rate. */
-export const unit = (m: Metric | undefined) => (m === "wr" ? "pts" : "pp");
+/** Pontos com sinal e a unidade da métrica: "+0,21 pp" / "+0,21 pts". */
+export const gainText = (m: Metric | undefined, value: string) =>
+  m === "wr" ? t("lib.points", { value }) : t("metric.pointsPp", { value });
 
-/** Rodapé dos bans. */
-export function banExplain(m: Metric | undefined, byTier: boolean): string {
-  if (m === "wr") {
-    return byTier
-      ? "Pts = win rate acima da média da lane × chance de ele cair na sua lane (pick rate); amostra pequena conta menos."
-      : "Pts = win rate recuperado, em média, sem esse campeão no jogo: frequência dele × queda do WR (amostra pequena conta menos).";
-  }
-  return byTier
-    ? "pp (WPA) = quanto a chance de vitória sobe se a vaga do oponente na sua lane ficar com os outros campeões (pelo pick rate de cada um); amostra pequena conta menos."
-    : "pp (WPA) = quanto a chance de vitória do time sobe sem ele: a vaga dele fica com os outros campeões daquela lane, na proporção do pick rate (amostra pequena conta menos).";
-}
+/** Rodapé dos bans (o do WR é o texto de antes). */
+export const banExplain = (m: Metric | undefined, byTier: boolean) =>
+  m === "wr"
+    ? t(byTier ? "vClassic.ptsTierHint" : "vClassic.ptsTeamHint")
+    : t(byTier ? "metric.banTierWpa" : "metric.banTeamWpa");
+
+/** Rodapé curto dos bans (layout Abas). */
+export const banShort = (m: Metric | undefined) => t(m === "wr" ? "vTabs.ptsHint" : "metric.banShortWpa");
 
 /** Rodapé das sugestões de pick. */
-export function pickExplain(m: Metric | undefined): string {
-  return m === "wr"
-    ? "Pts = win rate a mais (ou a menos) que a média: força na lane + cada confronto e dupla além da força geral dos dois (amostra pequena conta menos)."
-    : "pp (WPA) = chance de vitória com ele menos a chance com o campeão típico da lane, neste draft; cada confronto e dupla mostra quanto a chance cai sem ele (amostra pequena conta menos).";
-}
+export const pickExplain = (m: Metric | undefined) => t(m === "wr" ? "pickSuggest.footnote" : "metric.pickWpa");
 
 // ---- Itens (mesma conta de `metric::list_wpa` e `itemset.rs`) ----
 
 const ITEM_SHRINK = 300;
-const logit = (pct: number) => {
-  const p = Math.min(0.99, Math.max(0.01, pct / 100));
+const logit = (p100: number) => {
+  const p = Math.min(0.99, Math.max(0.01, p100 / 100));
   return Math.log(p / (1 - p));
 };
 const prob = (x: number) => 100 / (1 + Math.exp(-x));
@@ -66,18 +64,16 @@ export function itemWpa(list: ItemStat[], champWr: number, onePerGame: boolean):
 /** WPA de cada combinação (inícios, núcleos), na ordem da lista. */
 export const comboWpa = (list: Combo[], champWr: number) => listWpa(list, champWr, true);
 
-/** "+0,8" / "−0,4" (uma casa: cabe embaixo do ícone). */
-export const pp = (x: number) => {
-  const r = Math.round(x * 10) / 10;
-  return `${r < 0 ? "−" : "+"}${Math.abs(r).toFixed(1).replace(".", ",")}`;
-};
+/** "+0,8" / "−0,4" no formato do idioma (uma casa: cabe embaixo do ícone). */
+export const pp = (x: number) => pts(Math.round(x * 10) / 10 || 0, 1);
 
 /** Número de um item ou combinação na métrica escolhida: "53,5%" ou "+0,8 pp". */
 export const scoreText = (m: Metric, wr: number, wpa: number | undefined) =>
-  m === "wpa" && wpa !== undefined ? `${pp(wpa)} pp` : `${wr.toFixed(1).replace(".", ",")}%`;
+  m === "wpa" && wpa !== undefined ? t("metric.pointsPp", { value: pp(wpa) }) : pct(wr);
 
-/** Legenda das cores dos itens. */
+/** Legenda das cores dos itens (layout Clássico). */
 export const itemLegend = (m: Metric, minGames: number) =>
-  m === "wpa"
-    ? `WPA = chance de vitória com o item menos a com o item típico daquela posição (1ª volta e situacionais: menos o WR do campeão); verde/vermelho = ≥0,5 pp. Não desconta quem compra porque já está ganhando. Apagado = menos de ${minGames} partidas.`
-    : `Verde/vermelho = ≥1 ponto acima/abaixo do WR do campeão. Apagado = menos de ${minGames} partidas.`;
+  m === "wpa" ? t("metric.itemLegendWpa", { min: minGames }) : t("vClassic.itemLegend", { count: minGames });
+
+/** Subtítulo da seção de itens (layout Clássico). */
+export const itemsSub = (m: Metric) => t(m === "wpa" ? "metric.itemsSubWpa" : "vClassic.itemsSub");

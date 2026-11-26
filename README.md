@@ -5,7 +5,7 @@ Companion **leve** de League of Legends para a **seleção de campeões**, com d
 
 Quando você trava o campeão, ele importa para o cliente:
 
-- a **página de runas** (a mais jogada ou a de maior win rate);
+- a **página de runas** (a mais jogada, a de maior win rate ou a **sua**, se você salvou uma para o campeão);
 - os **feitiços de invocador** (mantendo o Flash na tecla que você usa);
 - um **conjunto de itens** com o **win rate de cada item no título do bloco** (aparece na loja dentro da partida):
   `Início · WR 51,8%`, `Botas · WR 55,4% / 51,7%`, `1º item · WR 53,3% / 53,1%`… até o 5º item.
@@ -13,11 +13,13 @@ Quando você trava o campeão, ele importa para o cliente:
 A janela mostra o build completo: runas, feitiços, ordem de habilidades, inícios, botas e uma tabela de itens por posição (1º, 2º, 3º…) com WR, pick rate e partidas. Trocar a runa, a lane ou um filtro na janela já atualiza o cliente.
 
 - **Confronto:** escolha o campeão do outro lado (retrato do time inimigo ou busca) para ver e importar runas, feitiços e itens daquele confronto (dados globais do lolalytics, amostra menor).
-- **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um; antes de alguém declarar, pela força geral na sua lane (tier list).
+- **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um; antes de alguém declarar, pela força geral na sua lane (tier list). **Na sua vez de banir, clicar numa sugestão bane esse campeão no cliente** (marca e trava; só com o seu clique).
 - **Sugestão de pick:** para a sua posição, entre os campeões do seu pool (maestria) ou da tier list, somando força na lane, counter contra os inimigos visíveis e sinergia com os aliados; só sugere, nunca escolhe.
 - **Métrica das sugestões:** **WPA** (padrão, *win probability added*: quanto a escolha muda a chance de vitória em relação ao campeão típico da lane, ou à vaga sem o banido, no draft atual) ou **WR** (pontos de win rate acima da média, a conta original). Vale também para os itens: em WPA, cada item mostra quanto ganha a mais (ou a menos) que o item típico daquela posição da build, inclusive no título dos blocos da loja, e os situacionais são escolhidos por ele. Dá para trocar no botão **WPA | WR** ao lado dos bans, dos picks e dos itens, durante a seleção.
 - **Build mais completo:** núcleo de 3 itens, primeira volta e situacionais (também no conjunto de itens), habilidades até o 6/10, WR das runas alternativas, tendência de WR e perfil de dano.
+- **Runas próprias (OTP):** quantas páginas quiser por campeão, cada uma com um nome. No cartão de runas, *+ Nova página* abre um editor na própria janela, que funciona **até sem o cliente do League aberto** (o app guarda uma cópia dos dados das runas da última vez que achou o cliente); *Copiar do cliente* pega a página atual do cliente com o nome que ela tem lá. Todas aparecem pelo nome ao lado de Mais jogada e Maior WR; a escolhida vai para o cliente, com o que cada runa diferente da mais jogada muda em pontos de WR (e a amostra). Fica guardada em `rune-pages.json`, na pasta de configuração do app; dá para editar (runas e nome) ou apagar no cartão de runas, e apagar nas configurações.
 - **Composição:** tipo de dano dos dois times e destaque dos itens de armadura/resistência mágica do seu build quando o inimigo concentra um tipo.
+- **Idiomas:** a janela, a bandeja e o que vai para o cliente (nome da página de runas, títulos dos blocos do conjunto de itens) seguem **o idioma do cliente do League** sozinhos, em todos os 28 que ele oferece (português, inglês, espanhol, francês, alemão, italiano, polonês, romeno, grego, húngaro, tcheco, russo, turco, japonês, coreano, chinês simplificado e tradicional, tailandês, vietnamita, indonésio e árabe, com as variantes regionais). Dá para fixar um em ⚙ → *Idioma*. Sem o cliente aberto, vale o último idioma visto; na primeira vez, o do sistema (senão inglês). Nomes de campeões, itens e runas vêm do próprio cliente.
 
 **Sem overlay.** A janela abre sozinha na seleção de campeões e **fecha quando a partida começa**; fora disso, só um ícone na bandeja (sem o WebView, só o processo Rust ouvindo o WebSocket do cliente).
 
@@ -33,11 +35,11 @@ A janela mostra o build completo: runas, feitiços, ordem de habilidades, iníci
 4. Fora da seleção, use a busca para ver o build de qualquer campeão/lane.
 5. **Atualizações** (a partir da 0.4.0): quando sai versão nova, aparece um aviso no topo da janela e no menu do ícone da bandeja. **Atualizar agora** baixa o instalador, confere a assinatura do atualizador e instala; o app fecha e abre de novo sozinho. Nada é instalado sem o clique. Da 0.3.x para a 0.4.0 a instalação é manual (as versões antigas não têm o atualizador).
 
-Configurações (na própria janela, ⚙): **layout** (Por fase, padrão: a janela mostra só a etapa da seleção, bans → escolha → build; Grade: três colunas; Abas; Clássico: a lista completa com rolagem), elo (padrão **Esmeralda+**), região (padrão **global**), período (patch atual / 7 / 30 dias), o que importar, amostra mínima por item, métrica dos bans, picks e itens (WPA ou WR), tecla do Flash, substituir a página atual quando não houver espaço para uma nova.
+Configurações (na própria janela, ⚙): **idioma** (automático, pelo cliente, ou um fixo), **layout** (Por fase, padrão: a janela mostra só a etapa da seleção, bans → escolha → build; Grade: três colunas; Abas; Clássico: a lista completa com rolagem), elo (padrão **Esmeralda+**), região (padrão **global**), período (patch atual / 7 / 30 dias), o que importar, amostra mínima por item, métrica dos bans, picks e itens (WPA ou WR), tecla do Flash, substituir a página atual quando não houver espaço para uma nova.
 
-O app **nunca** escolhe, bane, aceita fila nem lê nomes de outros jogadores. Ele só escreve em:
-`/lol-perks/v1/pages`, `/lol-perks/v1/currentpage`, `/lol-item-sets/v1/item-sets/{id}/sets` e `/lol-champ-select/v1/session/my-selection`.
-A página de runas criada se chama `LC: <Campeão> <Lane>`; o conjunto de itens, `LC: …`. Os seus conjuntos e páginas ficam intactos.
+O app **nunca** escolhe campeão, aceita fila, age sozinho nem lê nomes de outros jogadores. O único ban é o que você clica na sua vez. Ele só escreve em:
+`/lol-perks/v1/pages`, `/lol-perks/v1/currentpage`, `/lol-item-sets/v1/item-sets/{id}/sets`, `/lol-champ-select/v1/session/my-selection` e, para o ban no clique, `/lol-champ-select/v1/session/actions/{id}` (só a sua ação de ban em andamento).
+A página de runas criada se chama `LC: <Campeão> <Lane>` (`LC: <Campeão> <nome da página>` quando é uma página sua; a lane no idioma do app); o conjunto de itens, `LC: …`. O idioma do cliente é lido com um GET (`/riotclient/region-locale`). Salvar a sua página só lê a página atual do cliente. Os seus conjuntos e páginas ficam intactos.
 
 ## Desenvolvimento
 
@@ -46,15 +48,17 @@ Pré-requisitos (Windows): [Rust](https://rustup.rs), Visual Studio Build Tools 
 ```bash
 npm install
 npm run tauri dev        # app com recarga
-npm run dev              # só a interface no navegador, com dados sintéticos
+npm run dev              # só a interface no navegador, com dados sintéticos (?lang=ja_JP etc. para cada idioma)
 npm run tauri build      # instalador NSIS em src-tauri/target/release/bundle/
 ```
+
+**Versões:** cada merge na `main` gera e publica uma versão nova sozinho (`.github/workflows/auto-release.yml`): sobe o último número (label `minor` ou `major` no PR sobe os outros), cria a tag (a versão nova fica só na tag; a `main` exige o CI verde e os PRs entram por auto-merge), roda os testes, gera o instalador e publica a release com o SHA-256; o app avisa os usuários. Mudanças só no site, na documentação ou nos workflows não geram versão.
 
 Diagnóstico pelo terminal (sem abrir janela):
 
 ```bash
 cd src-tauri
-cargo run -- --diag                 # cliente: porta, fase, inventário de runas, seleção atual
+cargo run -- --diag                 # cliente: porta, fase, idioma, inventário de runas, seleção atual
 cargo run -- --lola chogath jungle  # build do lolalytics resumido
 cargo test
 ```
@@ -66,8 +70,11 @@ Estrutura:
 | `src-tauri/src/lcu/` | credenciais (lockfile), cliente HTTP com lista de escritas permitidas, WebSocket (WAMP) |
 | `src-tauri/src/lola/` | cliente do lolalytics (cache, ritmo) e parser do `build-full` |
 | `src-tauri/src/import/` | runas, conjunto de itens, feitiços |
+| `src-tauri/src/own_runes.rs` | páginas de runas próprias (`rune-pages.json`) |
 | `src-tauri/src/champselect.rs` | leitura da seleção (só o próprio jogador) |
 | `src-tauri/src/app.rs` | estado e laço de eventos |
+| `src-tauri/src/i18n.rs`, `src-tauri/locales/` | idioma (detecção, mapeamento dos locales) e textos do backend |
+| `src/lib/i18n/` | textos e formatação de números da janela, um JSON por idioma |
 | `src/` | interface (SvelteKit + TypeScript) |
 
 ## Licença

@@ -38,9 +38,7 @@ fn s(v: Option<&Value>) -> String {
 
 fn status_error(v: &Value) -> Result<(), String> {
     match v.get("status").and_then(Value::as_i64) {
-        Some(code) => Err(format!(
-            "lolalytics sem dados para essa combinação (status {code})"
-        )),
+        Some(code) => Err(crate::t!("lola.noData", code = code)),
         None => Ok(()),
     }
 }
@@ -84,7 +82,7 @@ pub fn parse_list(v: &Value) -> Result<TierList, String> {
     let cid = v
         .get("cid")
         .and_then(Value::as_object)
-        .ok_or("tier list do lolalytics sem 'cid'")?;
+        .ok_or_else(|| crate::t!("lola.missing", field = "cid"))?;
     let mut lane = String::new();
     let entries: HashMap<i64, TierEntry> = cid
         .iter()
@@ -151,7 +149,7 @@ pub fn parse_counter(v: &Value) -> Result<Counters, String> {
     let rows = v
         .get("counters")
         .and_then(Value::as_array)
-        .ok_or("resposta do lolalytics sem 'counters'")?
+        .ok_or_else(|| crate::t!("lola.missing", field = "counters"))?
         .iter()
         .filter_map(|r| {
             Some(PairStat {
@@ -204,7 +202,7 @@ pub fn parse_build_team(v: &Value) -> Result<Team, String> {
     let team = v
         .get("team")
         .and_then(Value::as_object)
-        .ok_or("resposta do lolalytics sem 'team'")?;
+        .ok_or_else(|| crate::t!("lola.missing", field = "team"))?;
     // Posição das colunas pelo cabeçalho (padrão: id, wr, d1, d2, pr, n).
     let header: Vec<String> = v
         .get("team_h")

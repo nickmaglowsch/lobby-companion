@@ -4,6 +4,7 @@
 //! lemos, trocamos só os nossos (uid `lc-`/título `LC:`) e regravamos o resto intacto.
 
 use crate::assets::Assets;
+use crate::i18n::Lang;
 use crate::lcu::Lcu;
 use crate::lola::model::{Build, Combo, ItemStat};
 use crate::metric::{self, Metric};
@@ -19,16 +20,12 @@ const NOT_BUILD: &[&str] = &["Consumable", "Trinket", "Jungle"];
 /// Quantos itens entram na primeira volta e nos situacionais.
 const EXTRA_ITEMS: usize = 4;
 
-/// `53.456` → `"53,5%"` (pt-BR).
-pub fn pct(x: f64) -> String {
-    format!("{:.1}%", x).replace('.', ",")
-}
-
-/// `0.84` → `"+0,8"`, `-0.4` → `"-0,4"` (pontos percentuais; hífen comum, que a loja mostra bem).
-pub fn pp(x: f64) -> String {
+/// `0.84` → `"+0,8"`, `-0.4` → `"-0.4"` (uma casa, separador decimal do idioma; hífen comum,
+/// que a loja mostra bem).
+pub fn pp(lang: Lang, x: f64) -> String {
     let r = (x * 10.0).round() / 10.0;
     let sign = if r < 0.0 { "-" } else { "+" };
-    format!("{sign}{:.1}", r.abs()).replace('.', ",")
+    format!("{sign}{:.1}", r.abs()).replace('.', &lang.t("fmt.decimal"))
 }
 
 /// WPA (pp) de cada item de uma lista do build (`metric::list_wpa`).
@@ -46,16 +43,16 @@ pub fn combo_wpa(list: &[Combo], champ_wr: f64) -> Vec<f64> {
     metric::list_wpa(&rows, champ_wr, true)
 }
 
-/// Texto do título do bloco: `WR 53,5% / 53,2%` ou `+0,8 / -0,4 pp`.
-fn tag(metric: Metric, values: &[(f64, f64)]) -> String {
+/// Texto do título do bloco: `WR 53,5% / 53,2%` ou `+0,8 / -0,4 pp` (unidade traduzida).
+fn tag(lang: Lang, metric: Metric, values: &[(f64, f64)]) -> String {
     match metric {
         Metric::Wr => {
-            let v: Vec<String> = values.iter().map(|(wr, _)| pct(*wr)).collect();
+            let v: Vec<String> = values.iter().map(|(wr, _)| lang.pct(*wr)).collect();
             format!("WR {}", v.join(" / "))
         }
         Metric::Wpa => {
-            let v: Vec<String> = values.iter().map(|(_, w)| pp(*w)).collect();
-            format!("{} pp", v.join(" / "))
+            let v: Vec<String> = values.iter().map(|(_, w)| pp(lang, *w)).collect();
+            format!("{} {}", v.join(" / "), lang.t("metric.pp"))
         }
     }
 }
@@ -179,6 +176,7 @@ pub fn situational(
 
 /// Bloco com o WR (ou o WPA de `scores`) de cada item, na mesma ordem dos ícones.
 fn wr_block(
+    lang: Lang,
     label: &str,
     items: &[ItemStat],
     scores: &HashMap<i64, f64>,
@@ -192,13 +190,14 @@ fn wr_block(
         .map(|i| (i.wr, scores.get(&i.id).copied().unwrap_or(0.0)))
         .collect();
     Some(json!({
-        "type": format!("{label} · {}", tag(metric, &values)),
+        "type": format!("{label} · {}", tag(lang, metric, &values)),
         "hideIfSummonerSpell": "",
         "showIfSummonerSpell": "",
         "items": items.iter().map(|i| item(i.id, 1)).collect::<Vec<_>>(),
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_item_set(
     build: &Build,
     champion_id: i64,
@@ -206,6 +205,7 @@ pub fn build_item_set(
     lane_label: &str,
     assets: &Assets,
     min_games: u64,
+    lang: Lang,
     metric: Metric,
 ) -> Value {
     let mut blocks: Vec<Value> = Vec::new();
@@ -233,9 +233,13 @@ pub fn build_item_set(
         if counts.is_empty() {
             continue;
         }
-        let label = if i == 0 { "Início" } else { "Início alt." };
+        let label = lang.t(if i == 0 {
+            "itemset.start"
+        } else {
+            "itemset.startAlt"
+        });
         blocks.push(json!({
-            "type": format!("{label} · {}", tag(metric, &[(start.wr, wpa)])),
+            "type": format!("{label} · {}", tag(lang, metric, &[(start.wr, wpa)])),
             "hideIfSummonerSpell": "",
             "showIfSummonerSpell": "",
             "items": counts.iter().map(|(id, c)| item(*id, *c)).collect::<Vec<_>>(),
@@ -250,7 +254,7 @@ pub fn build_item_set(
             .and_then(|k| combo_wpa(&build.core, champ).get(k).copied())
             .unwrap_or(0.0);
         blocks.push(json!({
-            "type": format!("Núcleo · {}", tag(metric, &[(core.wr, wpa)])),
+            "type": format!("{} · {}", lang.t("itemset.core"), tag(lang, metric, &[(core.wr, wpa)])),
             "hideIfSummonerSpell": "",
             "showIfSummonerSpell": "",
             "items": ids.iter().map(|id| item(*id, 1)).collect::<Vec<_>>(),
@@ -259,27 +263,31 @@ pub fn build_item_set(
     // Primeira volta e situacionais: vários por partida, contra o WR do campeão; botas e
     // posições: contra o item típico da posição.
     blocks.extend(wr_block(
-        "Primeira volta",
+        lang,
+        &lang.t("itemset.firstBack"),
         &first_back(build, assets, min_games),
         &item_wpa(&build.early_items, champ, false),
         metric,
     ));
     blocks.extend(wr_block(
-        "Botas",
+        lang,
+        &lang.t("itemset.boots"),
         &pick_items(&build.boots, assets, min_games),
         &item_wpa(&build.boots, champ, true),
         metric,
     ));
     for (i, slot) in build.slots.iter().enumerate() {
         blocks.extend(wr_block(
-            &format!("{}º item", i + 1),
+            lang,
+            &lang.tf("itemset.itemN", &[("n", &(i + 1))]),
             &pick_items(slot, assets, min_games),
             &item_wpa(slot, champ, true),
             metric,
         ));
     }
     blocks.extend(wr_block(
-        "Situacionais",
+        lang,
+        &lang.t("itemset.situational"),
         &situational(build, assets, min_games, metric),
         &item_wpa(&build.winning_items, champ, false),
         metric,
@@ -290,7 +298,7 @@ pub fn build_item_set(
         .map(|id| item(*id, 1))
         .collect();
     if !cons.is_empty() {
-        blocks.push(json!({"type": "Consumíveis", "hideIfSummonerSpell": "", "showIfSummonerSpell": "", "items": cons}));
+        blocks.push(json!({"type": lang.t("itemset.consumables"), "hideIfSummonerSpell": "", "showIfSummonerSpell": "", "items": cons}));
     }
     let patch = if build.patch.is_empty() {
         String::new()
@@ -348,7 +356,7 @@ pub async fn apply(lcu: &Lcu, new_set: Value) -> Result<String, String> {
     let sid = me
         .get("summonerId")
         .and_then(Value::as_u64)
-        .ok_or("summonerId ausente")?;
+        .ok_or_else(|| crate::t!("items.noSummoner"))?;
     let path = format!("/lol-item-sets/v1/item-sets/{sid}/sets");
     let existing = lcu.get(&path).await.map_err(|e| e.to_string())?;
     let now = std::time::SystemTime::now()
@@ -362,7 +370,7 @@ pub async fn apply(lcu: &Lcu, new_set: Value) -> Result<String, String> {
     lcu.put(&path, &merge(&existing, new_set, now))
         .await
         .map_err(|e| e.to_string())?;
-    Ok(format!("conjunto gravado ({n_blocks} blocos)"))
+    Ok(crate::t!("items.saved", count = n_blocks))
 }
 
 #[cfg(test)]
@@ -371,9 +379,34 @@ mod tests {
     use crate::assets::sample_assets;
     use crate::lola::model::{parse_build_full, tests::fixture};
 
+    const PT: Lang = Lang { locale: "pt_BR" };
+
     #[test]
-    fn pct_ptbr() {
-        assert_eq!(pct(53.456), "53,5%");
+    fn block_titles_follow_the_language() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let en = Lang { locale: "en_US" };
+        let set = build_item_set(
+            &b,
+            31,
+            "Cho'Gath",
+            "Jungle",
+            &sample_assets(),
+            200,
+            en,
+            Metric::Wr,
+        );
+        let titles: Vec<&str> = set["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["type"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles[0], "Start · WR 51.8%");
+        assert!(titles.contains(&"Item 1 · WR 53.5% / 53.2%"));
+        assert!(titles.contains(&"Consumables"));
+        // O prefixo técnico não muda com o idioma: é por ele que achamos o nosso conjunto.
+        assert_eq!(set["title"], "LC: Cho'Gath Jungle · 16.23");
+        assert_eq!(set["uid"], "lc-31");
     }
 
     #[test]
@@ -386,6 +419,7 @@ mod tests {
             "Selva",
             &sample_assets(),
             200,
+            PT,
             Metric::Wr,
         );
         assert_eq!(set["uid"], "lc-31");
@@ -409,7 +443,7 @@ mod tests {
     fn core_first_back_and_situational_blocks() {
         let b = parse_build_full(&fixture()).unwrap();
         let assets = sample_assets();
-        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, Metric::Wr);
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, PT, Metric::Wr);
         let blocks = set["blocks"].as_array().unwrap();
         let titles: Vec<&str> = blocks.iter().map(|b| b["type"].as_str().unwrap()).collect();
         // ordem: inícios, núcleo, primeira volta, botas, itens, situacionais, consumíveis
@@ -448,7 +482,7 @@ mod tests {
     fn wpa_titles_and_situational() {
         let b = parse_build_full(&fixture()).unwrap();
         let assets = sample_assets();
-        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, Metric::Wpa);
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, PT, Metric::Wpa);
         let titles: Vec<String> = set["blocks"]
             .as_array()
             .unwrap()
@@ -457,7 +491,11 @@ mod tests {
             .collect();
         // mesmos blocos e itens; o número é o WPA em pp contra o típico da posição
         let slot1 = item_wpa(&b.slots[0], b.wr, true);
-        let want = format!("1º item · {} / {} pp", pp(slot1[&3084]), pp(slot1[&3152]));
+        let want = format!(
+            "1º item · {} / {} pp",
+            pp(PT, slot1[&3084]),
+            pp(PT, slot1[&3152])
+        );
         assert!(titles.contains(&want), "{titles:?}");
         assert!(
             titles
@@ -471,8 +509,8 @@ mod tests {
         assert!(sit.iter().all(|i| score[&i.id] > 0.0));
         assert!(sit.windows(2).all(|w| score[&w[0].id] >= score[&w[1].id]));
         assert!(sit.iter().all(|i| ![3152, 3742, 3009].contains(&i.id)));
-        assert_eq!(pp(-0.04), "+0,0");
-        assert_eq!(pp(-0.36), "-0,4");
+        assert_eq!(pp(PT, -0.04), "+0,0");
+        assert_eq!(pp(PT, -0.36), "-0,4");
     }
 
     #[test]

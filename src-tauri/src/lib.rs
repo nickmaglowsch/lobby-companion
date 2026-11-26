@@ -6,10 +6,12 @@ pub mod assets;
 pub mod bans;
 pub mod champselect;
 pub mod composition;
+pub mod i18n;
 pub mod import;
 pub mod lcu;
 pub mod lola;
 pub mod metric;
+pub mod own_runes;
 pub mod picks;
 pub mod settings;
 pub mod update;
@@ -73,11 +75,11 @@ pub fn close_main(app: &AppHandle) {
 
 /// Menu da bandeja; com versão nova, o primeiro item avisa (e abre a janela, onde fica o botão).
 fn tray_menu(app: &AppHandle, update: Option<&str>) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "open", "Abrir", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", t!("tray.open"), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", t!("tray.quit"), true, None::<&str>)?;
     match update {
         Some(v) => {
-            let label = format!("Atualizar para a v{}…", v.trim_start_matches('v'));
+            let label = t!("tray.update", version = v.trim_start_matches('v'));
             let up = MenuItem::with_id(app, "update", label, true, None::<&str>)?;
             Menu::with_items(app, &[&up, &open, &quit])
         }
@@ -94,10 +96,16 @@ pub fn set_tray_update(app: &AppHandle, version: Option<&str>) {
         let _ = tray.set_menu(Some(menu));
     }
     let tip = match version {
-        Some(v) => format!("Lobby Companion: v{} disponível", v.trim_start_matches('v')),
+        Some(v) => t!("tray.tipUpdate", version = v.trim_start_matches('v')),
         None => "Lobby Companion".into(),
     };
     let _ = tray.set_tooltip(Some(tip));
+}
+
+/// Menu e dica da bandeja no idioma atual (depois de trocar o idioma).
+pub async fn refresh_tray(app: &AppHandle) {
+    let version = update::pending(app).await.map(|u| u.version);
+    set_tray_update(app, version.as_deref());
 }
 
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -147,13 +155,15 @@ async fn get_settings(shared: State<'_, Arc<Shared>>) -> Result<Settings, String
 async fn save_settings(
     app: AppHandle,
     shared: State<'_, Arc<Shared>>,
-    settings: Settings,
+    mut settings: Settings,
 ) -> Result<(), String> {
-    settings
-        .save(&shared.settings_path)
-        .map_err(|e| e.to_string())?;
     let (filters_changed, runes_changed, items_changed, bans_changed, picks_changed) = {
         let mut cur = shared.settings.lock().await;
+        // O locale do cliente é do backend (`detect_locale`): a cópia da janela pode estar velha.
+        settings.client_locale.clone_from(&cur.client_locale);
+        settings
+            .save(&shared.settings_path)
+            .map_err(|e| e.to_string())?;
         let changed = (
             cur.tier != settings.tier
                 || cur.region != settings.region
@@ -176,6 +186,8 @@ async fn save_settings(
         (s.champion_id, s.lane.clone(), s.in_champ_select)
     };
     let shared = shared.inner().clone();
+    // Idioma: a janela recebe o locale novo no snapshot; bandeja e notas mudam junto.
+    app::apply_locale(&app, &shared).await;
     if picks_changed || filters_changed {
         let (app, shared) = (app.clone(), shared.clone());
         tauri::async_runtime::spawn(async move { app::refresh_picks(&app, &shared).await });
@@ -264,7 +276,79 @@ async fn get_composition(
         build.as_ref(),
         assets.as_deref(),
         min_games,
+        i18n::Lang::current(),
     ))
+}
+
+/// Clique numa sugestão de ban na sua vez: marca e trava o ban no cliente.
+#[tauri::command]
+async fn ban_champion(shared: State<'_, Arc<Shared>>, champion_id: i64) -> Result<(), String> {
+    app::ban_champion(&shared, champion_id).await
+}
+
+/// Páginas de runas próprias (todas, para a janela e as configurações).
+#[tauri::command]
+async fn get_own_pages(shared: State<'_, Arc<Shared>>) -> Result<Vec<own_runes::OwnEntry>, String> {
+    Ok(app::own_pages(&shared).await)
+}
+
+/// Copia a página atual do cliente (GET) como página sua do campeão (nova ou por cima de `page_id`).
+#[tauri::command]
+async fn save_own_runes(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    champion_id: i64,
+    page_id: Option<u32>,
+    name: Option<String>,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::save_own_runes(&app, shared.inner(), champion_id, page_id, name).await
+}
+
+/// Página montada na janela (editor): funciona sem o cliente aberto.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn save_own_runes_page(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    champion_id: i64,
+    page_id: Option<u32>,
+    name: String,
+    primary_style: i64,
+    sub_style: i64,
+    perks: Vec<i64>,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::save_own_runes_page(
+        &app,
+        shared.inner(),
+        champion_id,
+        page_id,
+        name,
+        primary_style,
+        sub_style,
+        perks,
+    )
+    .await
+}
+
+#[tauri::command]
+async fn delete_own_runes(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    champion_id: i64,
+    page_id: u32,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::delete_own_runes(&app, shared.inner(), champion_id, page_id).await
+}
+
+/// "pick" | "win" | "own" (com `page_id`) para o campeão em tela.
+#[tauri::command]
+async fn choose_runes(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    choice: String,
+    page_id: Option<u32>,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::choose_runes(&app, shared.inner(), choice, page_id).await
 }
 
 #[tauri::command]
@@ -332,6 +416,12 @@ pub fn run() {
             set_vs,
             reimport,
             get_composition,
+            ban_champion,
+            get_own_pages,
+            save_own_runes,
+            save_own_runes_page,
+            delete_own_runes,
+            choose_runes,
             get_update,
             check_update,
             install_update
@@ -399,6 +489,17 @@ async fn diag() {
     match client.get("/lol-gameflow/v1/gameflow-phase").await {
         Ok(p) => println!("fase: {p}"),
         Err(e) => println!("fase: erro {e}"),
+    }
+    // Idioma do cliente (o app usa `locale`; os outros campos só para conferir o formato).
+    match client.get("/riotclient/region-locale").await {
+        Ok(v) => println!(
+            "idioma: {v} → {}",
+            v.get("locale")
+                .and_then(|l| l.as_str())
+                .and_then(i18n::from_tag)
+                .unwrap_or("(não reconhecido)")
+        ),
+        Err(e) => println!("idioma: erro {e}"),
     }
     match client.get("/lol-perks/v1/inventory").await {
         Ok(v) => println!("runas: {v}"),

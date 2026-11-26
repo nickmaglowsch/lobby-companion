@@ -179,9 +179,9 @@
             <button aria-pressed="false" data-step="img/fase-escolha.png"><span class="n">2</span>Escolha</button>
             <button aria-pressed="false" data-step="img/fase-build.png"><span class="n">3</span>Build</button>
           </div>
-          <p><strong>Bans:</strong> duas listas de 5, pelo seu time e contra o seu pick.<br />
+          <p><strong>Bans:</strong> duas listas de 5, pelo seu time e contra o seu pick; na sua vez, um clique bane.<br />
              <strong>Escolha:</strong> sugestões de pick com a nota de cada confronto e dupla, mais a composição de dano dos times.<br />
-             <strong>Build:</strong> runas, feitiços, habilidades e o caminho de itens com o win rate de cada um.</p>
+             <strong>Build:</strong> runas (a mais jogada, a de maior win rate ou a sua), feitiços, habilidades e o caminho de itens com o win rate de cada um.</p>
         </div>
       </div>
       <div class="showcase" data-panel="grade" hidden>
@@ -216,9 +216,11 @@
         <div class="card">
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/></svg></span>Importa ao travar</h3><p>Página de runas, feitiços (com o Flash na tecla de sempre) e conjunto de itens na loja, com o win rate no título de cada bloco.</p></div>
         <div class="card">
-          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg></span>Bans em duas listas</h3><p>Quem mais derruba o win rate do seu time e, à parte, os oponentes da sua lane que vão bem contra o seu campeão e aparecem com frequência.</p></div>
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg></span>Bans em duas listas</h3><p>Quem mais derruba o win rate do seu time e, à parte, os oponentes da sua lane que vão bem contra o seu campeão e aparecem com frequência. Na sua vez de banir, clique na sugestão e o ban sai no cliente <span class="muted">(novo na 0.6.0)</span>.</p></div>
         <div class="card">
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>Sugestão de pick</h3><p>Do seu pool (maestria) ou da tier list, somando força na lane, counter contra cada inimigo visível e sinergia com cada aliado declarado.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg></span>Suas runas <span class="muted" style="text-transform: none; font-weight: 400">· novo na 0.6.0</span></h3><p>Para quem é mono: quantas páginas quiser por campeão, cada uma com nome, montadas no app (até sem o cliente aberto) ou copiadas do cliente. Todas aparecem ao lado da mais jogada e da de maior WR, com quantos pontos de WR cada runa diferente muda.</p></div>
         <div class="card">
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h6l2-6 2 12 2-6h4"/></svg></span>Build contra o oponente</h3><p>Escolha o campeão do outro lado e veja runas, feitiços e itens daquele confronto, com o win rate comparado ao geral.</p></div>
         <div class="card">
@@ -239,12 +241,12 @@
       <p class="sub">Usa só a API local do próprio cliente do League, sem ler memória do jogo e sem nada desenhado por cima da partida.</p>
       <div class="two">
         <ul class="check no">
-          <li><strong>Não escolhe nem bane por você.</strong> Nada de hover, pick, ban, aceitar fila ou trocar posição: as sugestões são só sugestões.</li>
+          <li><strong>Não escolhe nem age sozinho.</strong> Nada de pick, aceitar fila ou trocar posição. O único ban é o que você clica numa sugestão, na sua vez de banir.</li>
           <li><strong>Não revela ninguém.</strong> Dos outros jogadores lê só campeões e posições, o que a própria tela mostra. Nunca nomes ou Riot IDs.</li>
           <li><strong>Não roda na partida.</strong> Sem overlay, sem timers, sem informação ao vivo do jogo.</li>
         </ul>
         <ul class="check">
-          <li><strong>Escreve só o que você importaria à mão:</strong> página de runas, conjunto de itens e feitiços. Suas páginas e conjuntos ficam intactos.</li>
+          <li><strong>Escreve só o que você faria à mão:</strong> página de runas, conjunto de itens, feitiços e o ban que você clicou. Suas páginas e conjuntos ficam intactos.</li>
           <li><strong>Privacidade:</strong> conversa com o cliente no seu PC, com o lolalytics (campeão, lane e filtros) e com o GitHub, para saber se há versão nova. Nada pessoal é enviado.</li>
           <li><strong>Código aberto:</strong> o instalador é gerado pelo GitHub Actions a partir do código de cada versão, com SHA-256 publicado.</li>
         </ul>
@@ -271,9 +273,11 @@
     <div class="wrap">
       <h2>Perguntas</h2>
       <details><summary>É permitido pela Riot?</summary>
-        <p>O app usa a API local do cliente para importar runas, itens e feitiços, como os apps conhecidos de build. Ele segue as regras de não agir pelo jogador, não revelar nomes ocultos e não mostrar nada durante a partida. Não é afiliado nem endossado pela Riot Games.</p></details>
+        <p>O app usa a API local do cliente para importar runas, itens e feitiços, como os apps conhecidos de build. Ele não age sozinho (o único ban é o que você clica, na sua vez), não revela nomes ocultos e não mostra nada durante a partida. Não é afiliado nem endossado pela Riot Games.</p></details>
       <details><summary>Por que o Smart App Control ou o SmartScreen bloqueiam?</summary>
         <p>Porque o instalador ainda não tem certificado de assinatura de código do Windows, que é pago. O SmartScreen deixa executar em "Mais informações"; o Smart App Control, quando ligado, pode bloquear.</p></details>
+      <details><summary>Dá para usar as minhas próprias runas?</summary>
+        <p>Sim, a partir da 0.6.0. Busque o campeão e clique em "+ Nova página" no cartão de runas (dê um nome; dá para ter várias por campeão): o editor funciona na própria janela, até sem o cliente do League aberto (a partir da 0.6.1; o app guarda os dados das runas da última vez que achou o cliente). Também dá para montar no cliente, até na seleção de campeões, e usar "Copiar do cliente". Cada página aparece pelo nome ao lado da mais jogada e da de maior WR; a escolhida é importada no lugar da do lolalytics, e dá para voltar à mais jogada, editar ou apagar quando quiser. Montar ou copiar a página só grava no seu computador; nada muda no cliente até a importação.</p></details>
       <details><summary>De onde vêm os números?</summary>
         <p>Do lolalytics.com, com cache de 6 horas e no máximo uma consulta por segundo. São tendência estatística das partidas do elo escolhido, não leitura do outro time. O app sempre mostra o link para a página original.</p></details>
       <details><summary>Funciona em Mac ou Linux?</summary>

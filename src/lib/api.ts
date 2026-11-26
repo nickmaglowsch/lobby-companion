@@ -3,10 +3,23 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { cdragonUrl } from "./mockIcons";
 import { itemWpa, type Metric } from "./metric";
+import { t } from "./i18n/index.svelte";
 
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
 export interface RuneSet { primary: number[]; secondary: number[]; shards: number[]; wr: number; n: number }
+/** Página de runas própria (`own_runes.rs`): várias por campeão, cada uma com nome.
+ *  `active` = a escolhida do campeão (vai para o cliente na importação). */
+export interface OwnPage {
+  championId: number; id: number; name: string; primaryStyle: number; subStyle: number;
+  /** 9 runas na ordem do cliente: keystone + 3, 2 secundárias, 3 fragmentos. */
+  perks: number[];
+  active: boolean;
+  /** Segundos desde 1970. */
+  savedAt: number;
+}
+/** Aba de runas: "pick" (mais jogada), "win" (maior WR) ou "own:<id>" (uma página sua). */
+export type RuneChoice = "pick" | "win" | `own:${number}`;
 
 export interface Build {
   slug: string;
@@ -106,6 +119,8 @@ export interface Snapshot {
   /** Na seleção, ainda há ban por fazer. */
   banning: boolean;
   locked: boolean;
+  /** É a sua vez de banir: clicar numa sugestão de ban bane no cliente. */
+  canBan: boolean;
   championId: number;
   lane: string | null;
   loading: boolean;
@@ -122,6 +137,8 @@ export interface Snapshot {
   bans: BanAdvice | null;
   picks: PickAdvice | null;
   synergy: SynergyAdvice | null;
+  /** Idioma da janela (locale do cliente, ex. "pt_BR"): configuração, senão o do cliente, senão o do sistema. */
+  locale: string;
 }
 
 export type DamageType = "physical" | "magic" | "mixed";
@@ -173,6 +190,10 @@ export interface Settings {
   checkUpdates: boolean;
   /** "phase" | "grid" | "tabs" | "classic" */
   layout: string;
+  /** "" = automático (do cliente do League); senão um locale do cliente ("pt_BR"). */
+  language: string;
+  /** Último locale lido do cliente (`/riotclient/region-locale`), para quando ele está fechado. */
+  clientLocale: string;
 }
 
 /** Versão nova no GitHub Releases (`update.rs`). */
@@ -183,15 +204,44 @@ export interface UpdateProgress { downloaded: number; total: number | null }
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 let mockAssetsWithIcons: Promise<Assets> | undefined;
+let mockBanTurnSet = false;
+let mockLang: Promise<void> | undefined;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri) return invoke<T>(cmd, args);
   const m = await import("./mock");
   // Para ver cada layout e etapa no navegador: ?layout=phase|grid|tabs|classic&fase=bans|picks|build
   const q = new URLSearchParams(location.search);
+  // ?lang=xx_YY: idioma (como se o cliente estivesse nele); sem, pt_BR.
+  if (!mockLang) {
+    m.mockSettings.clientLocale = q.get("lang") ?? "pt_BR";
+    mockLang = m.mockLanguage(m.mockSettings.clientLocale);
+  }
+  await mockLang;
+  if (cmd === "save_settings") {
+    // Como o backend: idioma escolhido, senão o do "cliente".
+    const s = (args as { settings: Settings }).settings;
+    Object.assign(m.mockSettings, s, { clientLocale: m.mockSettings.clientLocale });
+    await m.mockLanguage(s.language || m.mockSettings.clientLocale);
+    return undefined as T;
+  }
   if (q.get("layout")) m.mockSettings.layout = q.get("layout")!;
   const fase = q.get("fase");
   if (fase) Object.assign(m.mockSnapshot, { banning: fase === "bans", locked: fase === "build" });
+  // Primeira consulta com ?fase=bans: é a sua vez de banir (depois o mock segue o clique).
+  if (fase === "bans" && !mockBanTurnSet) {
+    mockBanTurnSet = true;
+    m.mockSnapshot.canBan = true;
+  }
+  if (cmd === "ban_champion") {
+    m.mockSnapshot.canBan = false;
+    return undefined as T;
+  }
+  // ?offline=1: só a janela aberta, sem o cliente do League (montar a página no app).
+  if (q.get("offline") === "1") Object.assign(m.mockSnapshot, { connected: false, phase: "None", inChampSelect: false, canBan: false });
+  if (["get_own_pages", "save_own_runes", "save_own_runes_page", "delete_own_runes", "choose_runes"].includes(cmd)) {
+    return m.mockOwnCommand(cmd, args ?? {}) as T;
+  }
   if (cmd === "get_assets") {
     return (await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets)))) as T;
   }
@@ -216,6 +266,19 @@ export const api = {
   setVs: (vsChampionId: number | null, vsLane: string | null) => call<void>("set_vs", { vsChampionId, vsLane }),
   reimport: () => call<ImportReport>("reimport"),
   composition: (allies: number[], enemies: number[]) => call<Composition>("get_composition", { allies, enemies }),
+  /** Na sua vez de banir: marca e trava o ban desse campeão no cliente. */
+  banChampion: (championId: number) => call<void>("ban_champion", { championId }),
+  /** Páginas de runas próprias (todas). */
+  ownPages: () => call<OwnPage[]>("get_own_pages"),
+  /** Copia a página atual do cliente (só GET) como página sua do campeão: nova (`pageId` null) ou por cima. */
+  saveOwnRunes: (championId: number, pageId: number | null, name: string | null) =>
+    call<OwnPage[]>("save_own_runes", { championId, pageId, name }),
+  /** Página montada na janela (funciona sem o cliente aberto); `pageId` null = nova. */
+  saveOwnRunesPage: (championId: number, pageId: number | null, name: string, primaryStyle: number, subStyle: number, perks: number[]) =>
+    call<OwnPage[]>("save_own_runes_page", { championId, pageId, name, primaryStyle, subStyle, perks }),
+  deleteOwnRunes: (championId: number, pageId: number) => call<OwnPage[]>("delete_own_runes", { championId, pageId }),
+  /** Mais jogada / Maior WR / uma página sua no campeão em tela (o backend leva para o cliente). */
+  chooseRunes: (choice: "pick" | "win" | "own", pageId: number | null) => call<OwnPage[]>("choose_runes", { choice, pageId }),
   onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
     inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   /** Atualização já encontrada nesta execução (a janela é recriada a cada seleção). */
@@ -244,55 +307,48 @@ export function championIcon(id: number): string {
   return icon(`/lol-game-data/assets/v1/champion-icons/${id}.png`);
 }
 
-export const pct = (x: number) => `${x.toFixed(1).replace(".", ",")}%`;
-/** Pontos com sinal: "+1,20" / "−0,35". */
-export const pts = (x: number, digits = 2) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(digits).replace(".", ",")}`;
-export const num = (x: number) => x.toLocaleString("pt-BR");
+export { pct, pts, num } from "./i18n/index.svelte";
 
-export const LANES: Record<string, string> = {
-  top: "Topo",
-  jungle: "Selva",
-  middle: "Meio",
-  bottom: "Atirador",
-  support: "Suporte",
-};
-
-export const PHASES: Record<string, string> = {
-  None: "Cliente aberto",
-  Lobby: "No lobby",
-  Matchmaking: "Na fila",
-  ReadyCheck: "Partida encontrada",
-  ChampSelect: "Seleção de campeões",
-  GameStart: "Carregando",
-  InProgress: "Em partida",
-  Reconnect: "Reconectar",
-  WaitingForStats: "Fim de jogo",
-  PreEndOfGame: "Fim de jogo",
-  EndOfGame: "Fim de jogo",
-};
-
-export const TIERS: [string, string][] = [
-  ["emerald_plus", "Esmeralda+"],
-  ["platinum_plus", "Platina+"],
-  ["gold_plus", "Ouro+"],
-  ["diamond_plus", "Diamante+"],
-  ["d2_plus", "Diamante 2+"],
-  ["master_plus", "Mestre+"],
-  ["all", "Todos"],
+const LANE_IDS = ["top", "jungle", "middle", "bottom", "support"];
+const PHASE_IDS = [
+  "None", "Lobby", "Matchmaking", "ReadyCheck", "ChampSelect", "GameStart", "InProgress", "Reconnect",
+  "WaitingForStats", "PreEndOfGame", "EndOfGame",
 ];
 
-export const REGIONS: [string, string][] = [
-  ["all", "Global"],
+/** Objeto de leitura que traduz na hora (`LANES.jungle` = "Selva" em pt_BR); `undefined` fora da lista. */
+function translated(ids: string[], prefix: string): Record<string, string> {
+  return new Proxy({} as Record<string, string>, {
+    get: (_, k) => (typeof k === "string" && ids.includes(k) ? t(`${prefix}.${k}`) : undefined),
+    has: (_, k) => typeof k === "string" && ids.includes(k),
+    ownKeys: () => ids,
+    getOwnPropertyDescriptor: (_, k) =>
+      typeof k === "string" && ids.includes(k)
+        ? { enumerable: true, configurable: true, value: t(`${prefix}.${k}`) }
+        : undefined,
+  });
+}
+
+/** Nomes das lanes do lolalytics no idioma da janela. */
+export const LANES = translated(LANE_IDS, "lane");
+/** Fases do cliente (`gameflow-phase`) no idioma da janela. */
+export const PHASES = translated(PHASE_IDS, "phase");
+
+/** Filtros de elo (os nomes vêm da tradução). */
+export const tiers = (): [string, string][] =>
+  ["emerald_plus", "platinum_plus", "gold_plus", "diamond_plus", "d2_plus", "master_plus", "all"].map((v) => [v, t(`tier.${v}`)]);
+
+export const regions = (): [string, string][] => [
+  ["all", t("region.all")],
   ["br", "BR"],
   ["na", "NA"],
   ["euw", "EUW"],
   ["kr", "KR"],
 ];
 
-export const PATCHES: [string, string][] = [
-  ["", "Patch atual"],
-  ["7", "Últimos 7 dias"],
-  ["30", "Últimos 30 dias"],
+export const patches = (): [string, string][] => [
+  ["", t("patch.current")],
+  ["7", t("patch.days", { count: 7 })],
+  ["30", t("patch.days", { count: 30 })],
 ];
 
 // Mesmas regras de `import/itemset.rs` (núcleo, primeira volta, situacionais), para a janela
@@ -349,3 +405,30 @@ export function situationalItems(build: Build, assets: Assets | null, minGames: 
     .slice(0, EXTRA_ITEMS);
 }
 
+
+/** A página própria no formato das do lolalytics (sem WR nem amostra). */
+export function ownRuneSet(p: OwnPage): RuneSet {
+  return { primary: p.perks.slice(0, 4), secondary: p.perks.slice(4, 6), shards: p.perks.slice(6, 9), wr: 0, n: 0 };
+}
+
+/** WR da runa na posição `i` da página (0–3 primária, 4–5 secundária, 6–8 fragmentos), como em `RuneAlternatives`. */
+export function perkStat(stats: RuneStats | null | undefined, id: number, i: number): PerkStat | undefined {
+  if (!stats) return undefined;
+  const source = i >= 4 && i <= 5 ? stats.secondary : i === 7 ? stats.flex : stats.primary;
+  return source[id];
+}
+
+export interface RuneDiff { mine: number; other: number; delta: number | null; n: number | null }
+
+/** Runas da sua página que diferem de `other` na mesma posição, com a diferença em pontos de WR. */
+export function runeDiffs(mine: RuneSet, other: RuneSet | null, stats: RuneStats | null): RuneDiff[] {
+  if (!other) return [];
+  const a = [...mine.primary, ...mine.secondary, ...mine.shards];
+  const b = [...other.primary, ...other.secondary, ...other.shards];
+  return a.flatMap((id, i) => {
+    if (id === b[i]) return [];
+    const sa = perkStat(stats, id, i);
+    const sb = perkStat(stats, b[i], i);
+    return [{ mine: id, other: b[i], delta: sa && sb ? sa.wr - sb.wr : null, n: sa?.n ?? null }];
+  });
+}
