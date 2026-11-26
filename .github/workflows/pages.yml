@@ -22,11 +22,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  # Dois jobs: o deploy logo depois do upload, no mesmo job, às vezes ainda não acha o artefato.
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,5 +47,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v5
