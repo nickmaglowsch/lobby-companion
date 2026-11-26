@@ -201,6 +201,7 @@
   .path { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
   .pstep { display: grid; gap: 4px; }
   .arrow { color: var(--gold-dim); font-size: 26px; }
+  .arrow:dir(rtl) { display: inline-block; transform: scaleX(-1); }
   .lbl { font-size: 11px; color: var(--muted); }
   .icons { display: flex; gap: 5px; }
   .icons img { width: 38px; height: 38px; border-radius: 4px; border: 1px solid var(--gold-dim); }

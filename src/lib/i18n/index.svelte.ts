@@ -116,8 +116,11 @@ export function t(key: string, params?: Params): string {
 
 /** "51,8%" / "51.8%" / "%51,8" (o número já vem de 0 a 100). */
 export const pct = (x: number) => i18n.formatPercent(x);
-/** Pontos com sinal: "+1,20" / "−0,35". */
-export const pts = (x: number, digits = 2) => `${x >= 0 ? "+" : "−"}${i18n.fixedFormat(digits).format(Math.abs(x))}`;
+/** Pontos com sinal: "+1,20" / "−0,35". Em RTL, isolado como LTR (senão o sinal vai para o fim). */
+export const pts = (x: number, digits = 2) => {
+  const s = `${x >= 0 ? "+" : "−"}${i18n.fixedFormat(digits).format(Math.abs(x))}`;
+  return i18n.rtl ? `\u2066${s}\u2069` : s;
+};
 /** Inteiro com separador de milhar do idioma. */
 export const num = (x: number) => i18n.formatNumber(x);
 /** Número com casas fixas ("1,5"). */
