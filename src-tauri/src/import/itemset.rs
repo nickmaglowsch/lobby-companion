@@ -4,6 +4,7 @@
 //! lemos, trocamos só os nossos (uid `lc-`/título `LC:`) e regravamos o resto intacto.
 
 use crate::assets::Assets;
+use crate::i18n::Lang;
 use crate::lcu::Lcu;
 use crate::lola::model::{Build, Combo, ItemStat};
 use serde_json::{Value, json};
@@ -16,11 +17,6 @@ const CONSUMABLES: &[i64] = &[2055, 2003]; // Sentinela de Controle, Poção de 
 const NOT_BUILD: &[&str] = &["Consumable", "Trinket", "Jungle"];
 /// Quantos itens entram na primeira volta e nos situacionais.
 const EXTRA_ITEMS: usize = 4;
-
-/// `53.456` → `"53,5%"` (pt-BR).
-pub fn pct(x: f64) -> String {
-    format!("{:.1}%", x).replace('.', ",")
-}
 
 fn item(id: i64, count: u32) -> Value {
     json!({"id": id.to_string(), "count": count})
@@ -117,12 +113,12 @@ pub fn situational(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemSt
         .collect()
 }
 
-fn wr_block(label: &str, items: &[ItemStat]) -> Option<Value> {
+fn wr_block(lang: Lang, label: &str, items: &[ItemStat]) -> Option<Value> {
     if items.is_empty() {
         return None;
     }
     // WR na mesma ordem dos ícones do bloco.
-    let wrs: Vec<String> = items.iter().map(|i| pct(i.wr)).collect();
+    let wrs: Vec<String> = items.iter().map(|i| lang.pct(i.wr)).collect();
     Some(json!({
         "type": format!("{label} · WR {}", wrs.join(" / ")),
         "hideIfSummonerSpell": "",
@@ -138,6 +134,7 @@ pub fn build_item_set(
     lane_label: &str,
     assets: &Assets,
     min_games: u64,
+    lang: Lang,
 ) -> Value {
     let mut blocks: Vec<Value> = Vec::new();
     // Inícios: o mais jogado e uma alternativa.
@@ -161,9 +158,13 @@ pub fn build_item_set(
         if counts.is_empty() {
             continue;
         }
-        let label = if i == 0 { "Início" } else { "Início alt." };
+        let label = lang.t(if i == 0 {
+            "itemset.start"
+        } else {
+            "itemset.startAlt"
+        });
         blocks.push(json!({
-            "type": format!("{label} · WR {}", pct(start.wr)),
+            "type": format!("{label} · WR {}", lang.pct(start.wr)),
             "hideIfSummonerSpell": "",
             "showIfSummonerSpell": "",
             "items": counts.iter().map(|(id, c)| item(*id, *c)).collect::<Vec<_>>(),
@@ -172,28 +173,32 @@ pub fn build_item_set(
     // Núcleo logo depois dos inícios: é o que a maioria compra primeiro.
     if let Some((core, ids)) = core_set(build, assets, min_games) {
         blocks.push(json!({
-            "type": format!("Núcleo · WR {}", pct(core.wr)),
+            "type": format!("{} · WR {}", lang.t("itemset.core"), lang.pct(core.wr)),
             "hideIfSummonerSpell": "",
             "showIfSummonerSpell": "",
             "items": ids.iter().map(|id| item(*id, 1)).collect::<Vec<_>>(),
         }));
     }
     blocks.extend(wr_block(
-        "Primeira volta",
+        lang,
+        &lang.t("itemset.firstBack"),
         &first_back(build, assets, min_games),
     ));
     blocks.extend(wr_block(
-        "Botas",
+        lang,
+        &lang.t("itemset.boots"),
         &pick_items(&build.boots, assets, min_games),
     ));
     for (i, slot) in build.slots.iter().enumerate() {
         blocks.extend(wr_block(
-            &format!("{}º item", i + 1),
+            lang,
+            &lang.tf("itemset.itemN", &[("n", &(i + 1))]),
             &pick_items(slot, assets, min_games),
         ));
     }
     blocks.extend(wr_block(
-        "Situacionais",
+        lang,
+        &lang.t("itemset.situational"),
         &situational(build, assets, min_games),
     ));
     let cons: Vec<Value> = CONSUMABLES
@@ -202,7 +207,7 @@ pub fn build_item_set(
         .map(|id| item(*id, 1))
         .collect();
     if !cons.is_empty() {
-        blocks.push(json!({"type": "Consumíveis", "hideIfSummonerSpell": "", "showIfSummonerSpell": "", "items": cons}));
+        blocks.push(json!({"type": lang.t("itemset.consumables"), "hideIfSummonerSpell": "", "showIfSummonerSpell": "", "items": cons}));
     }
     let patch = if build.patch.is_empty() {
         String::new()
@@ -260,7 +265,7 @@ pub async fn apply(lcu: &Lcu, new_set: Value) -> Result<String, String> {
     let sid = me
         .get("summonerId")
         .and_then(Value::as_u64)
-        .ok_or("summonerId ausente")?;
+        .ok_or_else(|| crate::t!("items.noSummoner"))?;
     let path = format!("/lol-item-sets/v1/item-sets/{sid}/sets");
     let existing = lcu.get(&path).await.map_err(|e| e.to_string())?;
     let now = std::time::SystemTime::now()
@@ -274,7 +279,7 @@ pub async fn apply(lcu: &Lcu, new_set: Value) -> Result<String, String> {
     lcu.put(&path, &merge(&existing, new_set, now))
         .await
         .map_err(|e| e.to_string())?;
-    Ok(format!("conjunto gravado ({n_blocks} blocos)"))
+    Ok(crate::t!("items.saved", count = n_blocks))
 }
 
 #[cfg(test)]
@@ -283,15 +288,31 @@ mod tests {
     use crate::assets::sample_assets;
     use crate::lola::model::{parse_build_full, tests::fixture};
 
+    const PT: Lang = Lang { locale: "pt_BR" };
+
     #[test]
-    fn pct_ptbr() {
-        assert_eq!(pct(53.456), "53,5%");
+    fn block_titles_follow_the_language() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let en = Lang { locale: "en_US" };
+        let set = build_item_set(&b, 31, "Cho'Gath", "Jungle", &sample_assets(), 200, en);
+        let titles: Vec<&str> = set["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["type"].as_str().unwrap())
+            .collect();
+        assert_eq!(titles[0], "Start · WR 51.8%");
+        assert!(titles.contains(&"Item 1 · WR 53.5% / 53.2%"));
+        assert!(titles.contains(&"Consumables"));
+        // O prefixo técnico não muda com o idioma: é por ele que achamos o nosso conjunto.
+        assert_eq!(set["title"], "LC: Cho'Gath Jungle · 16.23");
+        assert_eq!(set["uid"], "lc-31");
     }
 
     #[test]
     fn builds_blocks_with_wr() {
         let b = parse_build_full(&fixture()).unwrap();
-        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &sample_assets(), 200);
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &sample_assets(), 200, PT);
         assert_eq!(set["uid"], "lc-31");
         assert_eq!(set["title"], "LC: Cho'Gath Selva · 16.23");
         assert_eq!(set["associatedMaps"], json!([11]));
@@ -313,7 +334,7 @@ mod tests {
     fn core_first_back_and_situational_blocks() {
         let b = parse_build_full(&fixture()).unwrap();
         let assets = sample_assets();
-        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200);
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, PT);
         let blocks = set["blocks"].as_array().unwrap();
         let titles: Vec<&str> = blocks.iter().map(|b| b["type"].as_str().unwrap()).collect();
         // ordem: inícios, núcleo, primeira volta, botas, itens, situacionais, consumíveis

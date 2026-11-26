@@ -2,8 +2,9 @@
   // Página de runas compacta com a escolha entre as suas páginas do campeão (pelo nome),
   // Mais jogada e Maior WR (a escolha vai para o cliente).
   // `size` = tamanho das runas comuns.
-  import { icon, pct, num, perkStat } from "$lib/api";
+  import { icon, pct, perkStat } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { i18n, t } from "$lib/i18n/index.svelte";
   import OwnRunes from "./OwnRunes.svelte";
 
   let { size = 28, layout = "rows", toggle = true, compact = true }: {
@@ -23,9 +24,10 @@
   /** Nome + WR da runa naquele lugar da página (posição 0–8, como em `perkStat`). */
   function tip(id: number, i: number): string {
     const s = perkStat(app.build?.runeStats, id, i);
-    return `${perk(id)?.name ?? id}${s ? ` · WR ${pct(s.wr)} · ${num(s.n)} partidas` : ""}`;
+    const name = perk(id)?.name ?? String(id);
+    return s ? t("runePage.tip", { name, wr: pct(s.wr), count: s.n }) : name;
   }
-  const saved = $derived(app.ownPage ? new Date(app.ownPage.savedAt * 1000).toLocaleDateString("pt-BR") : "");
+  const saved = $derived(app.ownPage ? new Date(app.ownPage.savedAt * 1000).toLocaleDateString(i18n.tag) : "");
 </script>
 
 {#snippet rune(id: number, i: number, cls = "")}
@@ -38,10 +40,10 @@
       <div class="seg">
         {#each app.championPages as p (p.id)}
           <button class="own-tab" class:on={app.runeTab === `own:${p.id}`} onclick={() => app.chooseRunes(`own:${p.id}`)}
-            title="Sua página &quot;{p.name}&quot;">{p.name}</button>
+            title={t("parts.ownTabTip", { name: p.name })}>{p.name}</button>
         {/each}
-        <button class:on={app.runeTab === "pick"} onclick={() => app.chooseRunes("pick")}>Mais jogada</button>
-        <button class:on={app.runeTab === "win"} onclick={() => app.chooseRunes("win")} disabled={!hasWin}>Maior WR</button>
+        <button class:on={app.runeTab === "pick"} onclick={() => app.chooseRunes("pick")}>{t("parts.mostPlayed")}</button>
+        <button class:on={app.runeTab === "win"} onclick={() => app.chooseRunes("win")} disabled={!hasWin}>{t("parts.highestWr")}</button>
       </div>
     {/if}
     {#if layout === "key"}
@@ -69,14 +71,14 @@
       </div>
     {/if}
     {#if mine}
-      <div class="meta">Sua página "{app.ownPage?.name}" · salva em {saved}</div>
+      <div class="meta">{t("parts.ownSavedOn", { name: app.ownPage?.name ?? "", date: saved })}</div>
     {:else}
-      <div class="meta">WR {pct(set.wr)} · {num(set.n)} partidas</div>
+      <div class="meta">{t("runePage.meta", { wr: pct(set.wr), count: set.n })}</div>
     {/if}
     <OwnRunes {compact} />
   </div>
 {:else}
-  <p class="meta">Sem runas.</p>
+  <p class="meta">{t("runePage.none")}</p>
 {/if}
 
 <style>

@@ -63,7 +63,7 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
         .map_err(|e| e.to_string())?
         .check()
         .await
-        .map_err(|e| format!("não deu para consultar o GitHub: {e}"))?;
+        .map_err(|e| crate::t!("update.checkFailed", error = e))?;
     let found = update.as_ref().map(info);
     *app.state::<Pending>().0.lock().await = update;
     crate::set_tray_update(app, found.as_ref().map(|i| i.version.as_str()));
@@ -104,7 +104,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         .lock()
         .await
         .clone()
-        .ok_or("nenhuma atualização encontrada")?;
+        .ok_or_else(|| crate::t!("update.none"))?;
     let emitter = app.clone();
     let mut downloaded: u64 = 0;
     update
@@ -116,7 +116,7 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
             || {},
         )
         .await
-        .map_err(|e| format!("a atualização falhou: {e}"))?;
+        .map_err(|e| crate::t!("update.failed", error = e))?;
     // Fora do Windows o plugin não reinicia sozinho.
     app.restart()
 }

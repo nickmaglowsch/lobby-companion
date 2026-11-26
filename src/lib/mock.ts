@@ -66,6 +66,7 @@ export const mockSnapshot: Snapshot = {
     items: { ok: true, msg: "conjunto gravado (9 blocos)" },
     spells: { ok: false, msg: "fora da seleção de campeões" },
   },
+  locale: "pt_BR",
   vsChampionId: 0,
   vsLane: null,
   enemyPicks: [234, 122, 876, 62],
@@ -201,7 +202,29 @@ export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
   suggestBans: true, suggestPicks: true, pickPool: "mastery", checkUpdates: true, layout: "phase",
+  language: "", clientLocale: "pt_BR",
 };
+
+// Mensagens que no app vêm traduzidas pelo Rust: no navegador, dos mesmos arquivos do backend.
+const rustLocales = import.meta.glob<Record<string, string>>("../../src-tauri/locales/*.json", { import: "default" });
+
+/** `?lang=xx_YY`: janela e mensagens "do backend" nesse idioma (padrão: pt_BR). */
+export async function mockLanguage(locale: string) {
+  const { fileFor } = await import("./i18n/index.svelte");
+  const load = rustLocales[`../../src-tauri/locales/${fileFor(locale)}.json`];
+  const d = load ? await load() : {};
+  const tr = (key: string, args: Record<string, string | number> = {}) =>
+    Object.entries(args).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), d[key] ?? key);
+  const pct = (x: number) => tr("fmt.percent", { n: x.toFixed(1).replace(".", d["fmt.decimal"] ?? ".") });
+  mockSnapshot.locale = locale;
+  mockSnapshot.import = {
+    runes: { ok: true, msg: tr("runes.created") },
+    items: { ok: true, msg: tr("items.saved_other", { count: 9 }) },
+    spells: { ok: false, msg: tr("ban.notInSelect") },
+  };
+  for (const it of mockComposition.items) it.slot = tr("itemset.itemN", { n: Number(it.slot[0]) });
+  mockComposition.note = tr("comp.armorItem", { item: mockAssets.items["3742"]?.name ?? "", wr: pct(55.6) });
+}
 
 export const mockUpdate: UpdateInfo = {
   version: "0.4.0", current: "0.3.1", notes: null,

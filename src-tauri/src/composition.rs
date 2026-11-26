@@ -8,7 +8,7 @@
 //! `items.json` ("Armor"; "SpellBlock" ou "MagicResist").
 
 use crate::assets::Assets;
-use crate::import::itemset::pct;
+use crate::i18n::Lang;
 use crate::lcu::Lcu;
 use crate::lola::model::Build;
 use serde::Serialize;
@@ -163,13 +163,14 @@ pub fn defensive_items(
     assets: &Assets,
     need: Defense,
     min_games: u64,
+    lang: Lang,
 ) -> Vec<DefItem> {
-    let slots = std::iter::once(("Botas".to_string(), &build.boots)).chain(
+    let slots = std::iter::once((lang.t("itemset.boots"), &build.boots)).chain(
         build
             .slots
             .iter()
             .enumerate()
-            .map(|(i, s)| (format!("{}º item", i + 1), s)),
+            .map(|(i, s)| (lang.tf("itemset.itemN", &[("n", &(i + 1))]), s)),
     );
     let mut out: Vec<DefItem> = Vec::new();
     for (label, list) in slots {
@@ -214,6 +215,7 @@ pub fn summarize(
     build: Option<&Build>,
     assets: Option<&Assets>,
     min_games: u64,
+    lang: Lang,
 ) -> Composition {
     let mix = |ids: &[i64]| {
         team_mix(
@@ -225,21 +227,20 @@ pub fn summarize(
     let enemies_mix = mix(enemies);
     let need = defense_need(&enemies_mix);
     let items = match (need, build, assets) {
-        (Some(need), Some(b), Some(a)) => defensive_items(b, a, need, min_games),
+        (Some(need), Some(b), Some(a)) => defensive_items(b, a, need, min_games, lang),
         _ => Vec::new(),
     };
     let note = need.map(|n| {
-        let what = match n {
-            Defense::Armor => "armadura",
-            Defense::MagicResist => "resistência mágica",
+        let key = match n {
+            Defense::Armor => "comp.armor",
+            Defense::MagicResist => "comp.magicResist",
         };
         match (items.first(), assets) {
-            (Some(d), Some(a)) => format!(
-                "Dano inimigo concentrado: {what} ajuda. No seu build, {} tem WR {}.",
-                a.item_name(d.id),
-                pct(d.wr)
+            (Some(d), Some(a)) => lang.tf(
+                &format!("{key}Item"),
+                &[("item", &a.item_name(d.id)), ("wr", &lang.pct(d.wr))],
             ),
-            _ => format!("Dano inimigo concentrado: {what} ajuda."),
+            _ => lang.t(key),
         }
     });
     Composition {
@@ -259,6 +260,8 @@ pub fn summarize(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PT: Lang = Lang { locale: "pt_BR" };
     use crate::assets::sample_assets;
     use crate::lola::model::{ItemStat, parse_build_full, tests::fixture};
     use DamageType::*;
@@ -338,7 +341,7 @@ mod tests {
             },
         ];
         let a = sample_assets();
-        let armor: Vec<(i64, String)> = defensive_items(&b, &a, Defense::Armor, 200)
+        let armor: Vec<(i64, String)> = defensive_items(&b, &a, Defense::Armor, 200, PT)
             .into_iter()
             .map(|d| (d.id, d.slot))
             .collect();
@@ -351,7 +354,7 @@ mod tests {
                 (3075, "3º item".to_string())
             ]
         );
-        assert!(defensive_items(&b, &a, Defense::MagicResist, 200).is_empty());
+        assert!(defensive_items(&b, &a, Defense::MagicResist, 200, PT).is_empty());
 
         let types: HashMap<i64, DamageType> = [
             (1, Physical),
@@ -363,7 +366,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        let c = summarize(&[31], &[1, 2, 3, 4, 5], &types, Some(&b), Some(&a), 200);
+        let c = summarize(&[31], &[1, 2, 3, 4, 5], &types, Some(&b), Some(&a), 200, PT);
         assert_eq!(c.need, Some(Defense::Armor));
         assert_eq!(c.allies.magic, 1);
         assert_eq!(c.items.len(), 3);
@@ -374,7 +377,7 @@ mod tests {
                 .contains("Botas Galvanizadas de Aço tem WR 55,2%")
         );
         // sem build (busca fora da seleção): só a contagem
-        let c = summarize(&[], &[1, 2, 3], &types, None, None, 200);
+        let c = summarize(&[], &[1, 2, 3], &types, None, None, 200, PT);
         assert_eq!(c.need, Some(Defense::Armor));
         assert!(c.items.is_empty());
     }

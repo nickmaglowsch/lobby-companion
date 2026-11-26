@@ -251,7 +251,7 @@ impl Assets {
         self.items
             .get(&id)
             .map(|n| n.name.clone())
-            .unwrap_or_else(|| format!("item {id}"))
+            .unwrap_or_else(|| crate::t!("item.unknown", id = id))
     }
 }
 

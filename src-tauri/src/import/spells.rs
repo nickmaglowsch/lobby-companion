@@ -37,7 +37,7 @@ pub async fn apply(lcu: &Lcu, pair: (i64, i64)) -> Result<String, String> {
     )
     .await
     .map_err(|e| e.to_string())?;
-    Ok("feitiços aplicados".into())
+    Ok(crate::t!("import.spellsApplied"))
 }
 
 #[cfg(test)]

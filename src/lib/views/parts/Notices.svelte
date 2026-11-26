@@ -1,15 +1,16 @@
 <script lang="ts">
   // Erro, aviso, "buscando" e erro de importação numa linha (texto completo no tooltip).
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
 
   const items = $derived(
     [
       app.snap?.error ? { kind: "bad", text: app.snap.error } : null,
       app.importError ? { kind: "bad", text: app.importError } : null,
       app.banError ? { kind: "bad", text: app.banError } : null,
-      app.snap?.canBan ? { kind: "turn", text: "Sua vez de banir: clique numa sugestão de ban para banir no cliente." } : null,
+      app.snap?.canBan ? { kind: "turn", text: t("notices.banTurn") } : null,
       app.snap?.warning ? { kind: "warn", text: app.snap.warning } : null,
-      app.snap?.loading ? { kind: "info", text: "Buscando no lolalytics…" } : null,
+      app.snap?.loading ? { kind: "info", text: t("notices.loading") } : null,
     ].filter((x): x is { kind: string; text: string } => !!x),
   );
 </script>

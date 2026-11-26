@@ -12,13 +12,12 @@ use serde_json::{Value, json};
 /// Caminho e corpo do PATCH que trava o ban, ou o motivo para não banir.
 pub fn ban_request(session: &Value, champion_id: i64) -> Result<(String, Value), String> {
     if champion_id <= 0 {
-        return Err("campeão inválido".into());
+        return Err(crate::t!("ban.invalid"));
     }
-    let action =
-        champselect::my_ban_action(session).ok_or("não é a sua vez de banir no cliente")?;
+    let action = champselect::my_ban_action(session).ok_or_else(|| crate::t!("ban.notYourTurn"))?;
     let draft = champselect::parse_draft(session).unwrap_or_default();
     if draft.unavailable.contains(&champion_id) {
-        return Err("esse campeão já foi banido, escolhido ou declarado".into());
+        return Err(crate::t!("ban.unavailable"));
     }
     Ok((
         format!("/lol-champ-select/v1/session/actions/{action}"),
@@ -30,7 +29,7 @@ pub async fn apply(lcu: &Lcu, champion_id: i64) -> Result<(), String> {
     let session = lcu
         .get("/lol-champ-select/v1/session")
         .await
-        .map_err(|_| "fora da seleção de campeões".to_string())?;
+        .map_err(|_| crate::t!("ban.notInSelect"))?;
     let (path, body) = ban_request(&session, champion_id)?;
     lcu.patch(&path, &body).await.map_err(|e| e.to_string())?;
     Ok(())

@@ -4,6 +4,7 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { icon, pct, LANES, coreSets, firstBack, situationalItems } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import TopBar from "./parts/TopBar.svelte";
   import ChampLine from "./parts/ChampLine.svelte";
   import Notices from "./parts/Notices.svelte";
@@ -30,67 +31,69 @@
   <div class="cols">
     <section class:focus={draftFocus || !b}>
       {#if bans}
-        <h2>Bans <span class="muted">{bans.byTier ? `tier list${bans.lane ? ` · ${LANES[bans.lane] ?? bans.lane}` : ""}` : "pelo time"}</span>
+        <h2>{t("views.bans")} <span class="muted">{bans.byTier
+          ? (bans.lane ? t("vGrid.tierListLane", { lane: LANES[bans.lane] ?? bans.lane }) : t("vGrid.tierList"))
+          : t("vGrid.byTeam")}</span>
           {#if bans.loading}<span class="muted">…</span>{/if}</h2>
         {#if bans.picks.length}<BanList list={bans.picks} variant="strip" />{:else if bans.note}<p class="muted small">{bans.note}</p>{/if}
-        <h2>Bans <span class="muted">contra você</span></h2>
+        <h2>{t("views.bans")} <span class="muted">{t("vGrid.vsYou")}</span></h2>
         {#if bans.lanePicks.length}<BanList list={bans.lanePicks} variant="strip" />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
       {/if}
       {#if app.snap?.inChampSelect && app.snap.picks}
-        <h2>Pick <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? "tier list" : "seu pool"}</span></h2>
+        <h2>{t("vGrid.pick")} <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? t("vGrid.tierList") : t("vGrid.ownPool")}</span></h2>
         <PickList variant="rows" max={3} />
       {/if}
       {#if app.composition}
-        <h2>Dano</h2>
+        <h2>{t("views.damage")}</h2>
         <DamageMix mode="enemy" />
       {/if}
       {#if !bans && !app.snap?.picks && !app.composition}
-        <p class="muted small empty">Na seleção de campeões aparecem aqui os bans, as sugestões de pick e a composição dos times.</p>
+        <p class="muted small empty">{t("vGrid.emptyDraft")}</p>
       {/if}
     </section>
 
     <section class:focus={app.stage === "build"}>
       {#if b}
-        <h2>Runas</h2>
+        <h2>{t("common.runes")}</h2>
         <RunePage size={27} />
-        <h2>Feitiços</h2>
+        <h2>{t("common.spells")}</h2>
         {#each b.spells.slice(0, 2) as c, i (c.ids.join())}
           <div class="spells" class:alt={i > 0}>
             {#each c.ids as id (id)}<img src={icon(app.assets?.spells[id]?.icon)} alt={app.assets?.spells[id]?.name} title={app.assets?.spells[id]?.name} />{/each}
             <span class="small">{pct(c.wr)}</span><span class="muted small">{pct(c.pr)}</span>
           </div>
         {/each}
-        <h2>Habilidades</h2>
+        <h2>{t("common.skills")}</h2>
         <SkillGrid cell={11} />
       {:else}
-        <p class="muted small empty">{app.snap?.inChampSelect ? "Trave um campeão: runas, feitiços e o conjunto de itens entram sozinhos." : "Busque um campeão acima para ver o build."}</p>
+        <p class="muted small empty">{app.snap?.inChampSelect ? t("common.emptyLocked") : t("common.emptySearch")}</p>
       {/if}
     </section>
 
     <section class:focus={app.stage === "build"}>
       {#if b}
-        <h2>Itens</h2>
+        <h2>{t("common.items")}</h2>
         {#if b.startSets[0]}
           <div class="irow">
-            <span class="lbl">Início</span>
+            <span class="lbl">{t("common.start")}</span>
             <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
             <span class="small">{pct(b.startSets[0].wr)}</span>
           </div>
         {/if}
         {#if firstBack(b, app.assets, app.minGames).length}
           <div class="irow">
-            <span class="lbl">1ª volta</span>
+            <span class="lbl">{t("common.firstBack")}</span>
             <div class="icons">{#each firstBack(b, app.assets, app.minGames).slice(0, 3) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div>
           </div>
         {/if}
         {#if core}
           <div class="irow">
-            <span class="lbl">Núcleo</span>
+            <span class="lbl">{t("common.core")}</span>
             <div class="icons">{#each core.ids as id (id)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
             <span class="small">{pct(core.combo.wr)}</span>
           </div>
         {/if}
-        {#each [["Botas", b.boots], ["4º item", b.slots[3] ?? []], ["5º item", b.slots[4] ?? []]] as const as [label, list] (label)}
+        {#each [[t("common.boots"), b.boots], [t("common.itemN", { n: 4 }), b.slots[3] ?? []], [t("common.itemN", { n: 5 }), b.slots[4] ?? []]] as const as [label, list] (label)}
           {#if list.length}
             <div class="irow">
               <span class="lbl">{label}</span>
@@ -100,7 +103,7 @@
         {/each}
         {#if situationalItems(b, app.assets, app.minGames).length}
           <div class="irow">
-            <span class="lbl">Situac.</span>
+            <span class="lbl">{t("common.situationalShort")}</span>
             <div class="icons">{#each situationalItems(b, app.assets, app.minGames).slice(0, 3) as it (it.id)}<Item {it} size={28} />{/each}</div>
           </div>
         {/if}
@@ -119,8 +122,8 @@
 <style>
   .grid-layout { height: 100vh; display: grid; grid-template-rows: 44px auto 1fr 44px; overflow: hidden; }
   .cols { display: grid; grid-template-columns: 236px 1fr 250px; min-height: 0; }
-  section { padding: 8px 12px; border-right: 1px solid var(--line); overflow: hidden; opacity: 0.75; transition: opacity 0.2s; }
-  section:last-child { border-right: none; }
+  section { padding: 8px 12px; border-inline-end: 1px solid var(--line); overflow: hidden; opacity: 0.75; transition: opacity 0.2s; }
+  section:last-child { border-inline-end: none; }
   section.focus, section:hover { opacity: 1; }
   h2 { margin: 10px 0 6px; font-size: 12px; color: var(--gold); text-transform: uppercase; letter-spacing: 0.04em; display: flex; gap: 6px; align-items: baseline; }
   h2 .muted { text-transform: none; letter-spacing: 0; font-weight: normal; font-size: 11px; }

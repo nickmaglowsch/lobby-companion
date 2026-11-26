@@ -20,7 +20,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-thiserror = "2"
+sys-locale = "0.3"
 base64 = "0.22"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs"] }
 # native-tls = SChannel no Windows: sem dependência C extra e aceita o certificado autoassinado do LCU

@@ -1,7 +1,8 @@
 <script lang="ts">
   // Um item com o WR embaixo: verde/vermelho = ≥1 ponto acima/abaixo do WR do campeão;
   // apagado = amostra pequena; contorno verde = defesa contra o dano do time inimigo.
-  import { icon, pct, num, type ItemStat } from "$lib/api";
+  import { icon, pct, type ItemStat } from "$lib/api";
+  import { t } from "$lib/i18n/index.svelte";
   import { app } from "$lib/app.svelte";
 
   let { it, size = 30 }: { it: ItemStat; size?: number } = $props();
@@ -11,7 +12,7 @@
 </script>
 
 <div class="it" class:low={it.n < app.minGames} class:def style="--s: {size}px"
-  title="{item?.name} · {pct(it.wr)} · pick {pct(it.pr)} · {num(it.n)} partidas{def ? ' · defesa contra o time inimigo' : ''}">
+  title={t(def ? "item.tipDefense" : "item.tip", { name: item?.name ?? "", wr: pct(it.wr), pr: pct(it.pr), count: it.n })}>
   <img src={icon(item?.icon)} alt={item?.name} />
   <span class:up={it.wr - base >= 1} class:down={it.wr - base <= -1}>{pct(it.wr)}</span>
 </div>

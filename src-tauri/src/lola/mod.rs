@@ -326,9 +326,10 @@ impl Lolalytics {
             Err(e) => match cached {
                 Some((v, age)) => Ok(Fetched {
                     data: v,
-                    stale_warning: Some(format!(
-                        "lolalytics indisponível ({e}); usando dados de {} h atrás",
-                        age.as_secs() / 3600
+                    stale_warning: Some(crate::t!(
+                        "lola.stale",
+                        error = e,
+                        hours = age.as_secs() / 3600
                     )),
                 }),
                 None => Err(e),
@@ -352,14 +353,14 @@ impl Lolalytics {
             .get(q.api_url())
             .send()
             .await
-            .map_err(|e| format!("rede: {e}"))?;
+            .map_err(|e| crate::t!("lola.network", error = e))?;
         let status = resp.status();
         if !status.is_success() {
             return Err(format!("HTTP {}", status.as_u16()));
         }
         resp.json::<Value>()
             .await
-            .map_err(|e| format!("resposta inválida: {e}"))
+            .map_err(|e| crate::t!("lola.invalid", error = e))
     }
 }
 

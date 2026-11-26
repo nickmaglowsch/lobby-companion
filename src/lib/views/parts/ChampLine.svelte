@@ -1,7 +1,8 @@
 <script lang="ts">
   // Campeão em tela numa linha: retrato, nome, lane (troca de lane no menu) e WR/rank.
-  import { championIcon, pct, num, LANES } from "$lib/api";
+  import { championIcon, pct, LANES } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
 
   let { size = 26, stats = "short" }: { size?: number; stats?: "short" | "long" } = $props();
   const b = $derived(app.build);
@@ -13,15 +14,15 @@
     <img src={championIcon(app.snap.championId)} alt="" style="width: {size}px; height: {size}px" />
     <span class="nm">{app.champ?.name ?? b.slug}</span>
     {#if lanes.length > 1}
-      <select class="lane" value={b.lane} onchange={(e) => app.changeLane(e.currentTarget.value)} title="Trocar a lane">
-        {#each lanes as [lane, p] (lane)}<option value={lane}>{LANES[lane] ?? lane} {Math.round(p)}%</option>{/each}
+      <select class="lane" value={b.lane} onchange={(e) => app.changeLane(e.currentTarget.value)} title={t("champLine.changeLane")}>
+        {#each lanes as [lane, p] (lane)}<option value={lane}>{t("champLine.laneOption", { lane: LANES[lane] ?? lane, p: Math.round(p) })}</option>{/each}
       </select>
     {:else}
       <span class="chip">{LANES[b.lane] ?? b.lane}</span>
     {/if}
     <span class="muted">
       WR <b class="txt">{pct(b.wr)}</b>{#if b.rank} · #{b.rank}/{b.rankTotal}{/if}
-      {#if stats === "long"} · PR {pct(b.pr)} · BR {pct(b.br)} · {num(b.n)} partidas{/if} · {b.patch}
+      {#if stats === "long"} · PR {pct(b.pr)} · BR {pct(b.br)} · {t("common.games", { count: b.n })}{/if} · {b.patch}
     </span>
   </span>
 {/if}

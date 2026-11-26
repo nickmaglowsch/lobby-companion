@@ -4,6 +4,7 @@
 use crate::assets::{Assets, lolalytics_slug};
 use crate::bans::{self, BanPick};
 use crate::champselect::{self, Ally, Draft, Me};
+use crate::i18n::{self, Lang};
 use crate::import::{ban, itemset, runes, spells};
 use crate::lcu::ws::{self, LcuEvent};
 use crate::lcu::{self, Lcu};
@@ -125,6 +126,8 @@ pub struct Snapshot {
     pub picks: Option<PickAdvice>,
     /// Sinergia do seu campeão (escolhido ou declarado) com os aliados declarados.
     pub synergy: Option<SynergyAdvice>,
+    /// Idioma da janela (locale do cliente, ex. "pt_BR"): configuração → cliente → sistema → inglês.
+    pub locale: String,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -147,7 +150,9 @@ pub struct BanAdvice {
     pub lane_note: Option<String>,
 }
 
-const DECLARE_NOTE: &str = "Declare ou escolha seu campeão para ver os bans contra ele.";
+fn declare_note() -> String {
+    crate::t!("bans.declareMine")
+}
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -208,6 +213,8 @@ pub struct Shared {
     /// Páginas de runas próprias (`rune-pages.json`, ao lado de `settings.json`).
     own_runes: Mutex<OwnPages>,
     own_runes_path: PathBuf,
+    /// Idioma do sistema operacional (último recurso do idioma automático).
+    system_locale: Option<String>,
 }
 
 impl Shared {
@@ -218,14 +225,19 @@ impl Shared {
             .map_or_else(|| cache_dir.clone(), PathBuf::from);
         // Sem o cliente aberto, a janela usa a cópia da última conexão (nomes, runas, árvores).
         let cached = Assets::load_cached(&data_dir.join("assets.json")).map(Arc::new);
+        let settings = Settings::load(&settings_path);
+        let system_locale = i18n::system_locale();
+        let locale = settings.locale(system_locale.as_deref());
+        i18n::set_current(locale);
         Self {
             lcu: RwLock::new(None),
             assets: RwLock::new(cached),
             snapshot: Mutex::new(Snapshot {
                 phase: "None".into(),
+                locale: locale.into(),
                 ..Default::default()
             }),
-            settings: Mutex::new(Settings::load(&settings_path)),
+            settings: Mutex::new(settings),
             settings_path,
             lola: Lolalytics::new(cache_dir),
             icons: Mutex::new(HashMap::new()),
@@ -242,8 +254,53 @@ impl Shared {
             mastery: Mutex::new(None),
             own_runes: Mutex::new(OwnPages::load(&own_runes_path)),
             own_runes_path,
+            system_locale,
         }
     }
+}
+
+/// Recalcula o idioma pelas configurações; se mudou, avisa a janela (que recarrega os textos),
+/// troca o menu da bandeja e refaz as notas de bans e picks no idioma novo.
+pub async fn apply_locale(app: &AppHandle, shared: &Arc<Shared>) {
+    let locale = shared
+        .settings
+        .lock()
+        .await
+        .locale(shared.system_locale.as_deref());
+    if !i18n::set_current(locale) {
+        return;
+    }
+    update(app, shared, |s| s.locale = locale.into()).await;
+    crate::refresh_tray(app).await;
+    let (app, shared) = (app.clone(), shared.clone());
+    tauri::async_runtime::spawn(async move {
+        refresh_bans(&app, &shared).await;
+        refresh_picks(&app, &shared).await;
+    });
+}
+
+/// Idioma do cliente (só GET): guarda nas configurações para abrir no mesmo idioma sem ele.
+/// `RegionLocale {locale, region, webLanguage, webRegion}` (schema do LCU); usamos `locale`.
+async fn detect_locale(app: &AppHandle, shared: &Arc<Shared>, client: &Lcu) {
+    let Ok(v) = client.get("/riotclient/region-locale").await else {
+        return;
+    };
+    let Some(locale) = v
+        .get("locale")
+        .and_then(Value::as_str)
+        .and_then(|l| i18n::supported(l).or_else(|| i18n::from_tag(l)))
+    else {
+        return;
+    };
+    {
+        let mut s = shared.settings.lock().await;
+        if s.client_locale == locale {
+            return;
+        }
+        s.client_locale = locale.into();
+        let _ = s.save(&shared.settings_path);
+    }
+    apply_locale(app, shared).await;
 }
 
 async fn update(app: &AppHandle, shared: &Shared, f: impl FnOnce(&mut Snapshot)) {
@@ -287,7 +344,7 @@ pub async fn worker(app: AppHandle) {
             }
             Err(e) => {
                 update(&app, &shared, |s| {
-                    s.error = Some(format!("dados do cliente: {e}"))
+                    s.error = Some(crate::t!("err.clientData", error = e))
                 })
                 .await;
                 tokio::time::sleep(Duration::from_secs(3)).await;
@@ -295,6 +352,7 @@ pub async fn worker(app: AppHandle) {
             }
         }
         *shared.lcu.write().await = Some(client.clone());
+        detect_locale(&app, &shared, &client).await;
         update(&app, &shared, |s| {
             s.connected = true;
             s.error = None;
@@ -521,7 +579,7 @@ pub async fn load_build(
     else {
         update(app, shared, |s| {
             s.loading = false;
-            s.error = Some("campeão desconhecido (cliente fechado?)".into());
+            s.error = Some(crate::t!("err.unknownChampion"));
         })
         .await;
         return;
@@ -554,12 +612,20 @@ pub async fn load_build(
                     Ok((b, w))
                 }
                 _ => {
-                    let lane = vq.vs_lane.as_deref().map(champselect::lane_label);
-                    let msg = format!(
-                        "o lolalytics não tem partidas de {} contra {vs_name}{}; mostrando o build geral",
-                        champ.name,
-                        lane.map(|l| format!(" ({l})")).unwrap_or_default()
-                    );
+                    let lane = vq
+                        .vs_lane
+                        .as_deref()
+                        .map(|l| champselect::lane_label(Lang::current(), l))
+                        .filter(|l| !l.is_empty());
+                    let msg = match lane {
+                        Some(lane) => crate::t!(
+                            "warn.noVsGamesLane",
+                            champion = champ.name,
+                            vs = vs_name,
+                            lane = lane
+                        ),
+                        None => crate::t!("warn.noVsGames", champion = champ.name, vs = vs_name),
+                    };
                     fetch_build(shared, &q).await.map(|(b, w)| {
                         let warn = match w {
                             Some(w) => format!("{msg}. {w}"),
@@ -657,7 +723,7 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
     if allies.is_empty() {
         update(app, shared, |s| {
             s.bans = in_select.then(|| BanAdvice {
-                note: Some("Declare ou escolha um campeão para ver sugestões de ban.".into()),
+                note: Some(crate::t!("bans.declareAny")),
                 ..Default::default()
             })
         })
@@ -720,13 +786,13 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         ..me.clone()
     });
     let lane_note = if mine.is_none() {
-        Some(DECLARE_NOTE.to_string())
+        Some(declare_note())
     } else if lane_picks.is_empty() {
-        Some("Nenhum oponente provável da sua lane vai melhor contra o seu campeão (fora os da lista do time).".into())
+        Some(crate::t!("bans.noLaneOpponent"))
     } else {
         None
     };
-    let note = (!missing.is_empty()).then(|| format!("sem dados de {}", missing.join(", ")));
+    let note = (!missing.is_empty()).then(|| crate::t!("bans.noData", names = missing.join(", ")));
     if shared.bans_gen.load(Ordering::SeqCst) != generation {
         return;
     }
@@ -828,14 +894,14 @@ async fn bans_by_tier(
             by_tier: true,
             lane: Some(lane),
             page_url: Some(q.page_url()),
-            lane_note: Some(DECLARE_NOTE.into()),
+            lane_note: Some(declare_note()),
             ..Default::default()
         },
         Err(e) => BanAdvice {
-            note: Some(format!("tier list indisponível: {e}")),
+            note: Some(crate::t!("tierList.unavailable", error = e)),
             by_tier: true,
             lane: Some(lane),
-            lane_note: Some(DECLARE_NOTE.into()),
+            lane_note: Some(declare_note()),
             ..Default::default()
         },
     };
@@ -852,7 +918,7 @@ async fn mastery(shared: &Shared) -> Result<Vec<(i64, u64)>, String> {
         .read()
         .await
         .clone()
-        .ok_or("cliente do League fechado")?;
+        .ok_or_else(|| crate::t!("err.clientClosed"))?;
     let v = lcu
         .get("/lol-champion-mastery/v1/local-player/champion-mastery")
         .await
@@ -881,7 +947,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
     let Some(lane) = shared.my_lane.lock().await.clone() else {
         update(app, shared, |s| {
             s.picks = Some(PickAdvice {
-                note: Some("Sem posição atribuída (às cegas?): sem sugestão de pick.".into()),
+                note: Some(crate::t!("picks.noPosition")),
                 ..Default::default()
             });
             s.synergy = None;
@@ -926,7 +992,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
                 update(app, shared, |s| {
                     if let Some(p) = s.picks.as_mut() {
                         p.loading = false;
-                        p.note = Some(format!("tier list indisponível: {e}"));
+                        p.note = Some(crate::t!("tierList.unavailable", error = e));
                     }
                 })
                 .await;
@@ -980,10 +1046,10 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
                 candidates = picks::pool_from_mastery(&m, &list, &exclude, picks::POOL_SIZE);
                 owned = m;
             }
-            Err(e) => notes.push(format!("maestria indisponível ({e})")),
+            Err(e) => notes.push(crate::t!("picks.masteryUnavailable", error = e)),
         }
         if candidates.is_empty() {
-            notes.push("nenhum campeão do seu pool joga essa lane; usando a tier list".into());
+            notes.push(crate::t!("picks.poolEmpty"));
             pool_kind = "tier".into();
         }
     }
@@ -1006,7 +1072,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         );
         match fetch_counter(shared, &q).await {
             Ok(c) => counters.push((e, e_lane, c)),
-            Err(_) => notes.push(format!("sem dados de counter de {name}")),
+            Err(_) => notes.push(crate::t!("picks.noCounter", name = name)),
         }
         if stale() {
             return;
@@ -1020,7 +1086,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         let q = extra_query(&settings, Ep::BuildTeam, a_slug, Some(a_lane.clone()), None);
         match fetch_team(shared, &q).await {
             Ok(t) => teams.push((a.champion_id, a_lane, t)),
-            Err(_) => notes.push(format!("sem dados de sinergia de {name}")),
+            Err(_) => notes.push(crate::t!("picks.noSynergy", name = name)),
         }
         if stale() {
             return;
@@ -1130,22 +1196,23 @@ pub async fn apply_change(app: &AppHandle, shared: &Arc<Shared>, scope: Scope) {
 
 async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport, String> {
     let _one_at_a_time = shared.import_lock.lock().await;
+    let lang = Lang::current();
     let lcu = shared
         .lcu
         .read()
         .await
         .clone()
-        .ok_or("cliente do League fechado")?;
+        .ok_or_else(|| lang.t("err.clientClosed"))?;
     let assets = shared
         .assets
         .read()
         .await
         .clone()
-        .ok_or("dados do cliente ainda não carregados")?;
+        .ok_or_else(|| lang.t("import.assetsNotLoaded"))?;
     let (build, champion_id) = {
         let s = shared.snapshot.lock().await;
         (
-            s.build.clone().ok_or("nenhum build carregado")?,
+            s.build.clone().ok_or_else(|| lang.t("import.noBuild"))?,
             s.champion_id,
         )
     };
@@ -1157,16 +1224,16 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             .or_else(|| gs.pointer("/gameData/queue/mapId"))
             .and_then(Value::as_i64);
         if map.is_some_and(|m| m != 11) {
-            return Err(
-                "modo fora do Summoner's Rift: só mostrando o build, nada importado".into(),
-            );
+            return Err(lang.t("import.notRift"));
         }
     }
     let name = assets
         .champion(champion_id)
         .map(|c| c.name.clone())
         .unwrap_or_default();
-    let lane_label = champselect::lane_label(&build.lane);
+    // Nomes que vão para o cliente (página de runas, conjunto de itens) no idioma do app;
+    // os prefixos `LC:`/`lc-` não mudam: é por eles que achamos o que é nosso.
+    let lane_label = champselect::lane_label(lang, &build.lane);
     // Build de confronto: "vs Viego" no nome da página e no título do conjunto.
     let vs_name = build
         .vs
@@ -1174,13 +1241,13 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
         .and_then(|v| assets.champion(v.champion_id))
         .map(|c| c.name.clone());
     let set_label = match &vs_name {
-        Some(v) => format!("{lane_label} vs {v}"),
-        None => lane_label.to_string(),
+        Some(v) => lang.tf("itemset.vs", &[("lane", &lane_label), ("champion", v)]),
+        None => lane_label.clone(),
     };
     // O nome da página é curto (o cliente corta): com confronto, sai a lane.
     let page_label = match &vs_name {
-        Some(v) => format!("vs {v}"),
-        None => lane_label.to_string(),
+        Some(v) => lang.tf("runes.vs", &[("champion", v)]),
+        None => lane_label.clone(),
     };
     let mut rep = ImportReport::default();
 
@@ -1193,7 +1260,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             build.runes_win.as_ref(),
             own.as_ref(),
         ) {
-            Chosen::None => Err("lolalytics sem página de runas".to_string()),
+            Chosen::None => Err(lang.t("import.noRunes")),
             Chosen::Lola(set) => {
                 runes::page_body(&runes::page_name(&name, &page_label), set, &assets)
             }
@@ -1217,6 +1284,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             &set_label,
             &assets,
             build.min_games(settings.min_games),
+            lang,
         );
         rep.items = Some(Outcome::from(itemset::apply(&lcu, set).await));
     }
@@ -1236,7 +1304,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             // Feitiços só existem na seleção, e só valem para o campeão do próprio jogador.
             None => None,
             Some(me) if me.current_champion() != champion_id => None,
-            Some(_) if rec.len() != 2 => Some(Outcome::fail("lolalytics sem feitiços")),
+            Some(_) if rec.len() != 2 => Some(Outcome::fail(lang.t("import.noSpells"))),
             Some(me) => {
                 let pair = spells::arrange(
                     (rec[0], rec[1]),
@@ -1244,7 +1312,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
                     settings.flash_slot,
                 );
                 Some(if pair == (me.spell1, me.spell2) {
-                    Outcome::ok("feitiços já estavam certos")
+                    Outcome::ok(lang.t("import.spellsAlready"))
                 } else {
                     Outcome::from(spells::apply(&lcu, pair).await)
                 })
@@ -1349,7 +1417,7 @@ async fn view_champion(shared: &Shared) -> Option<i64> {
 fn store_own(shared: &Shared, pages: &OwnPages) -> Result<Vec<OwnEntry>, String> {
     pages
         .save(&shared.own_runes_path)
-        .map_err(|e| format!("não deu para gravar as suas páginas: {e}"))?;
+        .map_err(|e| crate::t!("own.saveFailed", error = e))?;
     Ok(pages.entries())
 }
 
@@ -1393,7 +1461,7 @@ pub async fn save_own_runes(
         .read()
         .await
         .clone()
-        .ok_or("abra o cliente do League para ler a página atual")?;
+        .ok_or_else(|| crate::t!("own.needClient"))?;
     let current = lcu
         .get("/lol-perks/v1/currentpage")
         .await
@@ -1410,7 +1478,7 @@ pub async fn save_own_runes(
     if view_champion(shared).await == Some(champion_id) {
         update(app, shared, |s| {
             s.import.get_or_insert_with(Default::default).runes =
-                Some(Outcome::ok("página atual do cliente salva como sua"));
+                Some(Outcome::ok(crate::t!("own.savedCurrent")));
         })
         .await;
     }
@@ -1436,7 +1504,7 @@ pub async fn save_own_runes_page(
         .read()
         .await
         .clone()
-        .ok_or("sem os dados das runas: abra o cliente do League uma vez com o app aberto")?;
+        .ok_or_else(|| crate::t!("own.noAssets"))?;
     page.check(&assets)?;
     store_page(app, shared, champion_id, page_id, page, true).await
 }
@@ -1469,7 +1537,7 @@ pub async fn choose_runes(
     page_id: Option<u32>,
 ) -> Result<Vec<OwnEntry>, String> {
     if !matches!(choice.as_str(), "pick" | "win" | "own") {
-        return Err(format!("escolha de runas desconhecida: {choice}"));
+        return Err(crate::t!("own.unknownChoice", choice = choice));
     }
     let champion = view_champion(shared).await;
     let mut changed = false;
@@ -1479,7 +1547,7 @@ pub async fn choose_runes(
         if let Some(id) = target
             && !champion.is_some_and(|c| pages.get(c, id).is_some())
         {
-            return Err("essa página não existe mais".into());
+            return Err(crate::t!("own.pageGone"));
         }
         if let Some(c) = champion {
             changed = pages.set_active(c, target);
@@ -1514,6 +1582,6 @@ pub async fn ban_champion(shared: &Shared, champion_id: i64) -> Result<(), Strin
         .read()
         .await
         .clone()
-        .ok_or("cliente do League fechado")?;
+        .ok_or_else(|| crate::t!("err.clientClosed"))?;
     ban::apply(&lcu, champion_id).await
 }

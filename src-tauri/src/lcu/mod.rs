@@ -14,21 +14,54 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::time::Duration;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum LcuError {
-    #[error("cliente do League não encontrado (abra o cliente)")]
     NotRunning,
-    #[error("escrita não permitida em {method} {path}")]
-    Forbidden { method: String, path: String },
-    #[error("HTTP {status} em {method} {path}: {message}")]
+    Forbidden {
+        method: String,
+        path: String,
+    },
     Http {
         status: u16,
         method: String,
         path: String,
         message: String,
     },
-    #[error("erro de rede com o cliente: {0}")]
-    Net(#[from] reqwest::Error),
+    Net(reqwest::Error),
+}
+
+/// Mensagem no idioma do app (vai para a janela).
+impl std::fmt::Display for LcuError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            Self::NotRunning => crate::t!("lcu.notFound"),
+            Self::Forbidden { method, path } => {
+                crate::t!("lcu.forbidden", method = method, path = path)
+            }
+            Self::Http {
+                status,
+                method,
+                path,
+                message,
+            } => crate::t!(
+                "lcu.http",
+                status = status,
+                method = method,
+                path = path,
+                message = message
+            ),
+            Self::Net(e) => crate::t!("lcu.network", error = e),
+        };
+        f.write_str(&msg)
+    }
+}
+
+impl std::error::Error for LcuError {}
+
+impl From<reqwest::Error> for LcuError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::Net(e)
+    }
 }
 
 /// Porta e senha da API local. A senha só sai daqui dentro do header Authorization.

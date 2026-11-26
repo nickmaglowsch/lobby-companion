@@ -1,11 +1,12 @@
 <script lang="ts">
   // Botão "Importar" + o que foi importado (✓/✗ com o motivo no tooltip).
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
 
   let { big = false, labels = true }: { big?: boolean; labels?: boolean } = $props();
   const parts = $derived(
     app.snap?.import
-      ? ([["Runas", app.snap.import.runes], ["Itens", app.snap.import.items], ["Feitiços", app.snap.import.spells]] as const)
+      ? ([[t("common.runes"), app.snap.import.runes], [t("common.items"), app.snap.import.items], [t("common.spells"), app.snap.import.spells]] as const)
           .filter(([, o]) => !!o)
           .map(([label, o]) => ({ label, ok: o!.ok, msg: o!.msg }))
       : [],
@@ -14,7 +15,7 @@
 
 <div class="imp" class:big>
   <button class="primary" onclick={() => app.importNow()} disabled={app.importing || !app.snap?.connected || !app.build}>
-    {app.importing ? "Importando…" : "Importar"}
+    {app.importing ? t("importButton.importing") : t("importButton.import")}
   </button>
   <span class="marks">
     {#each parts as p (p.label)}

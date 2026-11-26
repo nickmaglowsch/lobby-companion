@@ -1,5 +1,6 @@
 <script lang="ts">
   import { pct, num, type Build, type Combo } from "./api";
+  import { t } from "./i18n/index.svelte";
 
   // Habilidades até o nível 6 e até o 10: a mais jogada e, se for outra, a de maior WR com amostra.
   let { build, minGames }: { build: Build; minGames: number } = $props();
@@ -13,8 +14,8 @@
 
   const lines = $derived(
     [
-      ["Até o 6", rows(build.skill6 ?? [])],
-      ["Até o 10", rows(build.skill10 ?? [])],
+      [t("skillPaths.upTo", { level: 6 }), rows(build.skill6 ?? [])],
+      [t("skillPaths.upTo", { level: 10 }), rows(build.skill10 ?? [])],
     ].filter((l): l is [string, { top: Combo; best: Combo | null }] => l[1] !== null),
   );
 </script>
@@ -29,8 +30,8 @@
         <span class="muted">{num(r.top.n)}</span>
       </div>
       {#if r.best}
-        <div class="line alt" title="Maior WR com pelo menos {minGames} partidas">
-          <span class="label">maior WR</span>
+        <div class="line alt" title={t("skillPaths.bestTitle", { count: minGames })}>
+          <span class="label">{t("skillPaths.best")}</span>
           <span class="seq">{#each r.best.ids as k, i (i)}<span class="k k{k}">{k}</span>{/each}</span>
           <span class="wr up">{pct(r.best.wr)}</span>
           <span class="muted">{num(r.best.n)}</span>
