@@ -4,12 +4,13 @@ name: pages
 # O botão de download é fixo (releases/latest/download/LobbyCompanion-setup.exe, cópia que o
 # release.yml sobe em cada versão). Aqui só se atualizam os textos de versão, data e SHA-256
 # (elementos com data-release=...) a partir da última release publicada.
+# Sem o gatilho "release published": ele roda na tag, e o ambiente github-pages só aceita a main
+# (o deploy da v0.6.0 foi rejeitado por isso). O auto-release.yml dispara este workflow na main
+# depois de publicar; release publicada à mão: rode à mão (Actions → pages → Run workflow).
 on:
   push:
     branches: [main]
     paths: ["site/**", ".github/workflows/pages.yml"]
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
