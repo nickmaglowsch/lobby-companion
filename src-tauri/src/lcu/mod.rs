@@ -3,7 +3,8 @@
 //! Regras de segurança (ver CLAUDE.md):
 //! - o token nunca é impresso, logado nem gravado (`Credentials` não implementa Debug com o token);
 //! - TLS sem verificação só para `127.0.0.1` (o certificado do cliente é autoassinado);
-//! - escrita (POST/PUT/PATCH/DELETE) só nos caminhos de [`WRITE_ALLOW`]: runas, conjuntos de itens e feitiços.
+//! - escrita (POST/PUT/PATCH/DELETE) só nos caminhos de [`WRITE_ALLOW`]: runas, conjuntos de itens,
+//!   feitiços e o ban no clique (`import::ban`, que só manda ação de ban na sua vez).
 
 pub mod ws;
 
@@ -119,6 +120,9 @@ const WRITE_ALLOW: &[(&str, &str, bool)] = &[
     ("PUT", "/lol-perks/v1/currentpage", true),
     ("PUT", "/lol-item-sets/v1/item-sets/", false),
     ("PATCH", "/lol-champ-select/v1/session/my-selection", true),
+    // Ban no clique (pedido explícito do usuário). `import::ban` só usa com a SUA ação de ban em
+    // andamento; picks continuam fora.
+    ("PATCH", "/lol-champ-select/v1/session/actions/", false),
 ];
 
 pub fn write_allowed(method: &str, path: &str) -> bool {
@@ -272,11 +276,20 @@ mod tests {
             "PATCH",
             "/lol-champ-select/v1/session/my-selection"
         ));
-        // nada de agir pelo jogador
-        assert!(!write_allowed(
+        // ban no clique (o tipo da ação é conferido em `import::ban`)
+        assert!(write_allowed(
             "PATCH",
             "/lol-champ-select/v1/session/actions/1"
         ));
+        assert!(!write_allowed(
+            "PATCH",
+            "/lol-champ-select/v1/session/actions/"
+        ));
+        assert!(!write_allowed(
+            "POST",
+            "/lol-champ-select/v1/session/actions/1/complete"
+        ));
+        // nada de aceitar fila, trocar posição etc.
         assert!(!write_allowed(
             "POST",
             "/lol-matchmaking/v1/ready-check/accept"

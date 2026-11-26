@@ -1,6 +1,6 @@
 // Dados sintéticos para ver a interface no navegador (`npm run dev`), fora do Tauri.
 // Números inventados: não redistribuímos dados do lolalytics.
-import type { Assets, Composition, Settings, Snapshot, UpdateInfo } from "./api";
+import type { Assets, Composition, OwnPage, Settings, Snapshot, UpdateInfo } from "./api";
 
 const item = (name: string, categories: string[] = []) => ({ name, icon: "", categories });
 
@@ -52,6 +52,7 @@ export const mockSnapshot: Snapshot = {
   inChampSelect: true,
   banning: false,
   locked: true,
+  canBan: false,
   championId: 31,
   lane: "jungle",
   loading: false,
@@ -204,3 +205,32 @@ export const mockUpdate: UpdateInfo = {
   version: "0.4.0", current: "0.3.1", notes: null,
   url: "https://github.com/nickmaglowsch/lobby-companion/releases/tag/v0.4.0",
 };
+
+/** "Página atual do cliente" que o botão de salvar lê no navegador (runas da `mockAssets`). */
+const mockClientPage = { primaryStyle: 8100, subStyle: 8200, perks: [9923, 8139, 8140, 8135, 8226, 8234, 5005, 5008, 5001] };
+
+// Com `?own=0` a janela começa sem página própria (para ver o botão de salvar).
+const startEmpty = typeof location !== "undefined" && new URLSearchParams(location.search).get("own") === "0";
+let mockOwnPages: OwnPage[] = startEmpty
+  ? []
+  : [{ championId: 31, lane: "jungle", ...mockClientPage, active: true, savedAt: 1795608000 }];
+
+/** Comandos das páginas próprias no navegador (mesma regra do backend, sem cliente). */
+export function mockOwnCommand(cmd: string, args: Record<string, unknown>): OwnPage[] {
+  const view = { championId: mockSnapshot.championId, lane: mockSnapshot.build?.lane ?? "" };
+  const same = (p: OwnPage, k: { championId: unknown; lane: unknown }) => p.championId === k.championId && p.lane === k.lane;
+  if (cmd === "save_own_runes") {
+    const key = { championId: args.championId as number, lane: args.lane as string };
+    mockOwnPages = [...mockOwnPages.filter((p) => !same(p, key)),
+      { ...key, ...mockClientPage, perks: [...mockClientPage.perks], active: true, savedAt: Math.floor(Date.now() / 1000) }];
+  } else if (cmd === "delete_own_runes") {
+    mockOwnPages = mockOwnPages.filter((p) => !same(p, args as { championId: number; lane: string }));
+  } else if (cmd === "choose_runes") {
+    const choice = args.choice as string;
+    const own = mockOwnPages.find((p) => same(p, view));
+    if (choice === "mine" && !own) throw "nenhuma página sua salva para esse campeão nessa lane";
+    if (own) own.active = choice === "mine";
+    if (choice === "pick" || choice === "win") mockSettings.runeChoice = choice;
+  }
+  return structuredClone(mockOwnPages);
+}

@@ -6,6 +6,16 @@ import { cdragonUrl } from "./mockIcons";
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
 export interface RuneSet { primary: number[]; secondary: number[]; shards: number[]; wr: number; n: number }
+/** Página de runas própria (`own_runes.rs`), por campeão e lane; `active` = usar na importação ("Minha"). */
+export interface OwnPage {
+  championId: number; lane: string; primaryStyle: number; subStyle: number;
+  /** 9 runas na ordem do cliente: keystone + 3, 2 secundárias, 3 fragmentos. */
+  perks: number[];
+  active: boolean;
+  /** Segundos desde 1970. */
+  savedAt: number;
+}
+export type RuneChoice = "pick" | "win" | "mine";
 
 export interface Build {
   slug: string;
@@ -101,6 +111,8 @@ export interface Snapshot {
   /** Na seleção, ainda há ban por fazer. */
   banning: boolean;
   locked: boolean;
+  /** É a sua vez de banir: clicar numa sugestão de ban bane no cliente. */
+  canBan: boolean;
   championId: number;
   lane: string | null;
   loading: boolean;
@@ -176,6 +188,7 @@ export interface UpdateProgress { downloaded: number; total: number | null }
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 let mockAssetsWithIcons: Promise<Assets> | undefined;
+let mockBanTurnSet = false;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri) return invoke<T>(cmd, args);
@@ -185,6 +198,18 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   if (q.get("layout")) m.mockSettings.layout = q.get("layout")!;
   const fase = q.get("fase");
   if (fase) Object.assign(m.mockSnapshot, { banning: fase === "bans", locked: fase === "build" });
+  // Primeira consulta com ?fase=bans: é a sua vez de banir (depois o mock segue o clique).
+  if (fase === "bans" && !mockBanTurnSet) {
+    mockBanTurnSet = true;
+    m.mockSnapshot.canBan = true;
+  }
+  if (cmd === "ban_champion") {
+    m.mockSnapshot.canBan = false;
+    return undefined as T;
+  }
+  if (["get_own_pages", "save_own_runes", "delete_own_runes", "choose_runes"].includes(cmd)) {
+    return m.mockOwnCommand(cmd, args ?? {}) as T;
+  }
   if (cmd === "get_assets") {
     return (await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets)))) as T;
   }
@@ -209,6 +234,15 @@ export const api = {
   setVs: (vsChampionId: number | null, vsLane: string | null) => call<void>("set_vs", { vsChampionId, vsLane }),
   reimport: () => call<ImportReport>("reimport"),
   composition: (allies: number[], enemies: number[]) => call<Composition>("get_composition", { allies, enemies }),
+  /** Na sua vez de banir: marca e trava o ban desse campeão no cliente. */
+  banChampion: (championId: number) => call<void>("ban_champion", { championId }),
+  /** Páginas de runas próprias (todas). */
+  ownPages: () => call<OwnPage[]>("get_own_pages"),
+  /** Lê a página atual do cliente (só GET) e guarda como a sua para o campeão e lane. */
+  saveOwnRunes: (championId: number, lane: string) => call<OwnPage[]>("save_own_runes", { championId, lane }),
+  deleteOwnRunes: (championId: number, lane: string) => call<OwnPage[]>("delete_own_runes", { championId, lane }),
+  /** Mais jogada / Maior WR / Minha para o build em tela (o backend leva para o cliente). */
+  chooseRunes: (choice: RuneChoice) => call<OwnPage[]>("choose_runes", { choice }),
   onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
     inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   /** Atualização já encontrada nesta execução (a janela é recriada a cada seleção). */
@@ -333,3 +367,30 @@ export function situationalItems(build: Build, assets: Assets | null, minGames: 
     .slice(0, EXTRA_ITEMS);
 }
 
+
+/** A página própria no formato das do lolalytics (sem WR nem amostra). */
+export function ownRuneSet(p: OwnPage): RuneSet {
+  return { primary: p.perks.slice(0, 4), secondary: p.perks.slice(4, 6), shards: p.perks.slice(6, 9), wr: 0, n: 0 };
+}
+
+/** WR da runa na posição `i` da página (0–3 primária, 4–5 secundária, 6–8 fragmentos), como em `RuneAlternatives`. */
+export function perkStat(stats: RuneStats | null | undefined, id: number, i: number): PerkStat | undefined {
+  if (!stats) return undefined;
+  const source = i >= 4 && i <= 5 ? stats.secondary : i === 7 ? stats.flex : stats.primary;
+  return source[id];
+}
+
+export interface RuneDiff { mine: number; other: number; delta: number | null; n: number | null }
+
+/** Runas da sua página que diferem de `other` na mesma posição, com a diferença em pontos de WR. */
+export function runeDiffs(mine: RuneSet, other: RuneSet | null, stats: RuneStats | null): RuneDiff[] {
+  if (!other) return [];
+  const a = [...mine.primary, ...mine.secondary, ...mine.shards];
+  const b = [...other.primary, ...other.secondary, ...other.shards];
+  return a.flatMap((id, i) => {
+    if (id === b[i]) return [];
+    const sa = perkStat(stats, id, i);
+    const sb = perkStat(stats, b[i], i);
+    return [{ mine: id, other: b[i], delta: sa && sb ? sa.wr - sb.wr : null, n: sa?.n ?? null }];
+  });
+}

@@ -1,8 +1,8 @@
 // Estado da janela e ações, compartilhados pelos layouts (Clássico, Grade, Abas, Por fase).
 // Os dados vêm do backend (`api`): snapshot do cliente + build do lolalytics, assets e configurações.
 import {
-  api, minGamesFor,
-  type Assets, type Champion, type Composition, type Settings, type Snapshot,
+  api, minGamesFor, ownRuneSet,
+  type Assets, type Champion, type Composition, type OwnPage, type RuneChoice, type Settings, type Snapshot,
 } from "./api";
 
 export type Layout = "phase" | "grid" | "tabs" | "classic";
@@ -28,6 +28,13 @@ class AppState {
   settingsOpen = $state(false);
   updateCheck = $state<string | null>(null);
   composition = $state<Composition | null>(null);
+  /** Páginas de runas próprias (todas); a do build em tela é `ownPage`. */
+  ownPages = $state<OwnPage[]>([]);
+  ownBusy = $state(false);
+  ownError = $state<string | null>(null);
+  /** Campeão sendo banido agora (clique na sugestão) e o erro do último ban. */
+  banBusy = $state<number | null>(null);
+  banError = $state<string | null>(null);
   private compSeq = 0;
   private compKey = "";
 
@@ -37,9 +44,16 @@ class AppState {
     this.assets ? Object.values(this.assets.champions).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) : [],
   );
   layout = $derived<Layout>((this.settings?.layout as Layout) ?? "phase");
-  runeTab = $derived(this.settings?.runeChoice ?? "pick");
+  /** Sua página para o campeão e a lane em tela (aparece como "Minha" ao lado das outras duas). */
+  ownPage = $derived(
+    this.ownPages.find((p) => p.championId === this.snap?.championId && p.lane === this.build?.lane) ?? null,
+  );
+  runeTab = $derived<RuneChoice>(this.ownPage?.active ? "mine" : this.settings?.runeChoice ?? "pick");
   runeSet = $derived(
-    this.build ? (this.runeTab === "win" ? this.build.runesWin ?? this.build.runesPick : this.build.runesPick) : null,
+    !this.build ? null
+    : this.runeTab === "mine" && this.ownPage ? ownRuneSet(this.ownPage)
+    : this.runeTab === "win" ? this.build.runesWin ?? this.build.runesPick
+    : this.build.runesPick,
   );
   minGames = $derived(
     this.build ? minGamesFor(this.build, this.settings?.minGames ?? 200) : this.settings?.minGames ?? 200,
@@ -69,6 +83,7 @@ class AppState {
     this.snap = await api.snapshot();
     this.settings = await api.settings();
     this.version = await api.version();
+    this.ownPages = await api.ownPages();
     await this.refreshAssets();
     this.refreshComposition();
     return api.onSnapshot((s) => {
@@ -145,10 +160,55 @@ class AppState {
     if (this.settings) await api.saveSettings($state.snapshot(this.settings));
   }
 
-  chooseRunes(choice: "pick" | "win") {
-    if (!this.settings || this.settings.runeChoice === choice) return;
-    this.settings.runeChoice = choice;
-    this.save();
+  /** Mais jogada / Maior WR / Minha. A troca já aparece; o backend grava e leva para o cliente. */
+  async chooseRunes(choice: RuneChoice) {
+    if (!this.settings || choice === this.runeTab) return;
+    const own = this.ownPage;
+    if (own) own.active = choice === "mine";
+    if (choice !== "mine") this.settings.runeChoice = choice;
+    await this.ownCall(api.chooseRunes(choice));
+  }
+
+  /** Clique numa sugestão de ban na sua vez: bane no cliente (marca e trava). */
+  async ban(championId: number) {
+    if (!this.snap?.canBan || this.banBusy !== null) return;
+    this.banBusy = championId;
+    this.banError = null;
+    try {
+      await api.banChampion(championId);
+      // O cliente confirma pelo WebSocket; até lá, nada de segundo clique.
+      if (this.snap) this.snap.canBan = false;
+    } catch (e) {
+      this.banError = `Ban não feito: ${e}`;
+    } finally {
+      this.banBusy = null;
+    }
+  }
+
+  /** Guarda a página atual do cliente como a sua para o campeão e a lane em tela. */
+  async saveOwnRunes() {
+    const id = this.snap?.championId;
+    const lane = this.build?.lane;
+    if (id && lane) await this.ownCall(api.saveOwnRunes(id, lane));
+  }
+
+  async deleteOwnRunes(championId: number, lane: string) {
+    await this.ownCall(api.deleteOwnRunes(championId, lane));
+  }
+
+  private async ownCall(p: Promise<OwnPage[]>) {
+    this.ownBusy = true;
+    this.ownError = null;
+    try {
+      this.ownPages = await p;
+    } catch (e) {
+      this.ownError = String(e);
+      // Volta ao que o backend tem (a troca otimista pode ter falhado).
+      this.ownPages = await api.ownPages().catch(() => this.ownPages);
+      this.settings = await api.settings().catch(() => this.settings);
+    } finally {
+      this.ownBusy = false;
+    }
   }
 
   async checkUpdateNow() {

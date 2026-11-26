@@ -4,6 +4,7 @@
 use crate::assets::Assets;
 use crate::lcu::Lcu;
 use crate::lola::model::RuneSet;
+use crate::own_runes::OwnPage;
 use serde_json::{Value, json};
 
 pub const PREFIX: &str = "LC:";
@@ -29,13 +30,28 @@ pub fn page_body(name: &str, set: &RuneSet, assets: &Assets) -> Result<Value, St
     let sub = assets
         .secondary_style(&set.secondary, primary)
         .ok_or("árvore secundária desconhecida")?;
-    Ok(json!({
+    Ok(body(name, primary, sub, set.selected_perk_ids()))
+}
+
+/// A página própria do jogador (`own_runes`): as árvores vêm salvas junto, sem deduzir.
+pub fn own_page_body(name: &str, page: &OwnPage, assets: &Assets) -> Result<Value, String> {
+    page.check(assets)?;
+    Ok(body(
+        name,
+        page.primary_style,
+        page.sub_style,
+        page.perks.clone(),
+    ))
+}
+
+fn body(name: &str, primary: i64, sub: i64, perks: Vec<i64>) -> Value {
+    json!({
         "name": name,
         "primaryStyleId": primary,
         "subStyleId": sub,
-        "selectedPerkIds": set.selected_perk_ids(),
+        "selectedPerkIds": perks,
         "current": true,
-    }))
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -169,6 +185,27 @@ mod tests {
         assert_eq!(body["selectedPerkIds"].as_array().unwrap().len(), 9);
         let win = page_body("x", b.runes_win.as_ref().unwrap(), &sample_assets()).unwrap();
         assert_eq!(win["subStyleId"], 8400);
+    }
+
+    #[test]
+    fn own_body_keeps_saved_styles() {
+        let own = OwnPage {
+            primary_style: 8100,
+            sub_style: 8200,
+            perks: vec![9923, 8126, 8140, 8106, 8224, 8234, 5008, 5010, 5011],
+            active: true,
+            saved_at: 0,
+        };
+        let body = own_page_body("LC: Cho'Gath Minha", &own, &sample_assets()).unwrap();
+        assert_eq!(body["primaryStyleId"], 8100);
+        assert_eq!(body["subStyleId"], 8200);
+        assert_eq!(body["selectedPerkIds"], json!(own.perks));
+        assert_eq!(body["current"], true);
+        let stale = OwnPage {
+            perks: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ..own
+        };
+        assert!(own_page_body("x", &stale, &sample_assets()).is_err());
     }
 
     #[test]

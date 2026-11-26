@@ -26,7 +26,8 @@
       <img class="shard" src={icon(perk(id)?.icon)} alt={perk(id)?.name} title={perk(id)?.name} />
     {/each}
   </div>
-  <div class="meta">WR {pct(set.wr)} · {num(set.n)} partidas</div>
+  <!-- Página própria (n = 0): sem WR de página; o cartão mostra a diferença runa a runa. -->
+  {#if set.n > 0}<div class="meta">WR {pct(set.wr)} · {num(set.n)} partidas</div>{/if}
 </div>
 
 <style>
