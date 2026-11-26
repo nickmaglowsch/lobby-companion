@@ -316,5 +316,22 @@
   "runeEditor.titleNew": "Halaman baru · {name}",
   "runeEditor.defaultName": "Halaman {n}",
   "runeEditor.nameTip": "Nama halaman (maks. 20 karakter); masuk ke nama halaman di client: LC: {name} <nama>",
-  "settings.ownEmptyNamed": "Belum ada. Cari champion lalu pakai \"{new}\" di kartu rune (bisa tanpa client terbuka) atau \"{copy}\": tiap halaman muncul dengan namanya di samping {mostPlayed} dan {highestWr}."
+  "settings.ownEmptyNamed": "Belum ada. Cari champion lalu pakai \"{new}\" di kartu rune (bisa tanpa client terbuka) atau \"{copy}\": tiap halaman muncul dengan namanya di samping {mostPlayed} dan {highestWr}.",
+  "metric.wpaHelp": "Peluang menang tambahan (WPA): seberapa besar sebuah pilihan mengubah peluang menang timmu dibanding tidak memilihnya (champion umum di lane, slot tanpa champion yang di-ban, atau item umum di posisi build tersebut).",
+  "metric.wrHelp": "Poin win rate di atas rata-rata (perhitungan awal).",
+  "metric.toggleLabel": "Metrik saran",
+  "metric.pointsPp": "{value} poin %",
+  "metric.banTierWpa": "poin % (WPA) = seberapa besar peluang menangmu naik jika slot lawan lane-mu jatuh ke champion lain, sesuai pick rate; sampel kecil dihitung lebih sedikit. Beralih ke perhitungan tim begitu ada yang mendeklarasikan.",
+  "metric.banTeamWpa": "poin % (WPA) = seberapa besar peluang menang timmu naik tanpa champion ini: slotnya jatuh ke champion lain di lane itu, sesuai pick rate (sampel kecil dihitung lebih sedikit). Kecenderungan statistik, bukan membaca tim lawan.",
+  "metric.banShortWpa": "poin % (WPA) = peluang menang yang didapat tanpanya (slotnya jatuh ke yang lain). Arahkan kursor untuk melihat alasannya.",
+  "metric.pickWpa": "poin % (WPA) = peluang menang dengannya dikurangi dengan champion umum di lane, di draft ini; tiap matchup dan duo menunjukkan seberapa besar peluang turun tanpanya (sampel kecil dihitung lebih sedikit). Kecenderungan statistik; mengeklik hanya menampilkan build.",
+  "metric.total": "total {value}",
+  "metric.itemLegendWpa": "WPA = peluang menang dengan item dikurangi dengan item umum di posisi itu (first back dan situasional: dikurangi WR champion); hijau/merah = ≥0,5 poin %. Tidak menghapus bias membeli karena sudah unggul. Pudar = kurang dari {min} game.",
+  "metric.itemsSubWpa": "WPA · PR per posisi build",
+  "metric.vsSlot": "{value} dibanding item umum di posisi ini",
+  "metric.vsChampion": "{value} dibanding WR champion",
+  "metric.setting": "Metrik untuk ban, pick, dan item",
+  "metric.optWpa": "WPA (peluang menang tambahan)",
+  "metric.optWr": "Win rate (poin di atas rata-rata)",
+  "metric.settingTip": "WPA: seberapa besar sebuah pilihan mengubah peluang menang dibanding tidak memilihnya; untuk item, dibanding item umum di posisi itu. WR: poin win rate di atas rata-rata (perhitungan awal). Bisa juga diganti saat pemilihan champion."
 }

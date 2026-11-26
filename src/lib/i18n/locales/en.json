@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "New page · {name}",
   "runeEditor.defaultName": "Page {n}",
   "runeEditor.nameTip": "Page name (up to 20 characters); it goes into the page name in the client: LC: {name} <name>",
-  "settings.ownEmptyNamed": "None. Search for the champion and use \"{new}\" on the runes card (works without the client open) or \"{copy}\": each page shows up by name next to {mostPlayed} and {highestWr}."
+  "settings.ownEmptyNamed": "None. Search for the champion and use \"{new}\" on the runes card (works without the client open) or \"{copy}\": each page shows up by name next to {mostPlayed} and {highestWr}.",
+  "metric.wpaHelp": "Win probability added: how much a choice changes your team's chance to win versus not making it (the typical champion for the lane, the slot without the banned champion, or the typical item for that build slot).",
+  "metric.wrHelp": "Win rate points above average (the original calculation).",
+  "metric.toggleLabel": "Suggestion metric",
+  "metric.pointsPp": "{value} pp",
+  "metric.banTierWpa": "pp (WPA) = how much your chance to win rises if your lane opponent's slot goes to the other champions, by pick rate; small samples count less. Switches to the team calculation once someone declares.",
+  "metric.banTeamWpa": "pp (WPA) = how much your team's chance to win rises without this champion: their slot goes to the others in that lane, by pick rate (small samples count less). Statistical tendency, not a read on the other team.",
+  "metric.banShortWpa": "pp (WPA) = chance to win gained without them (their slot goes to the others). Hover to see why.",
+  "metric.pickWpa": "pp (WPA) = chance to win with them minus with the typical champion for the lane, in this draft; each matchup and duo shows how much the chance drops without it (small samples count less). Statistical tendency; clicking only shows the build.",
+  "metric.total": "{value} in total",
+  "metric.itemLegendWpa": "WPA = chance to win with the item minus with the typical item for that slot (first back and situational: minus the champion's WR); green/red = ≥0.5 pp. Doesn't remove the bias of buying it because you're already ahead. Faded = fewer than {min} games.",
+  "metric.itemsSubWpa": "WPA · PR by build slot",
+  "metric.vsSlot": "{value} vs. the typical item for this slot",
+  "metric.vsChampion": "{value} vs. the champion's WR",
+  "metric.setting": "Metric for bans, picks and items",
+  "metric.optWpa": "WPA (win probability added)",
+  "metric.optWr": "Win rate (points above average)",
+  "metric.settingTip": "WPA: how much a choice changes the chance to win versus not making it; for items, versus the typical item for that slot. WR: win rate points above average (the original calculation). You can also switch it during champ select."
 }

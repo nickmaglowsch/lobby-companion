@@ -40,6 +40,12 @@
     <label>{t("settings.period")} <select bind:value={settings.patch} onchange={() => app.save()}>{#each patches() as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
     <label title={t("settings.runesTip")}>{t("common.runes")} <select bind:value={settings.runeChoice} onchange={() => app.save()}><option value="pick">{t("parts.mostPlayed")}</option><option value="win">{t("parts.highestWr")}</option></select></label>
     <label>{t("settings.minGames")} <input type="number" min="0" step="50" bind:value={settings.minGames} onchange={() => app.save()} /></label>
+    <label class="wide" title={t("metric.settingTip")}>{t("metric.setting")}
+      <select bind:value={settings.metric} onchange={() => app.save()}>
+        <option value="wpa">{t("metric.optWpa")}</option>
+        <option value="wr">{t("metric.optWr")}</option>
+      </select>
+    </label>
     <label>{t("settings.flashKey")} <select bind:value={settings.flashSlot} onchange={() => app.save()}><option value={1}>D</option><option value={2}>F</option></select></label>
   </div>
   <div class="checks">

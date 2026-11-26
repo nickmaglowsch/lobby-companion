@@ -84,5 +84,6 @@
   "update.failed": "das Update ist fehlgeschlagen: {error}",
   "item.unknown": "Item {id}",
   "own.pageGone": "diese Seite existiert nicht mehr",
-  "own.defaultName": "Seite {n}"
+  "own.defaultName": "Seite {n}",
+  "metric.pp": "PP"
 }

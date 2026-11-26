@@ -84,5 +84,6 @@
   "update.failed": "a frissítés nem sikerült: {error}",
   "item.unknown": "tárgy: {id}",
   "own.pageGone": "ez az oldal már nem létezik",
-  "own.defaultName": "{n}. oldal"
+  "own.defaultName": "{n}. oldal",
+  "metric.pp": "%pont"
 }

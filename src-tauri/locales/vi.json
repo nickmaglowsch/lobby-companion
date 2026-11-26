@@ -83,5 +83,6 @@
   "update.failed": "cập nhật thất bại: {error}",
   "item.unknown": "trang bị {id}",
   "own.pageGone": "trang này không còn nữa",
-  "own.defaultName": "Trang {n}"
+  "own.defaultName": "Trang {n}",
+  "metric.pp": "điểm %"
 }

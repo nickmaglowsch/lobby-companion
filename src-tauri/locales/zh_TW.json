@@ -83,5 +83,6 @@
   "update.failed": "更新失敗: {error}",
   "item.unknown": "裝備 {id}",
   "own.pageGone": "該頁面已不存在",
-  "own.defaultName": "頁面 {n}"
+  "own.defaultName": "頁面 {n}",
+  "metric.pp": "百分點"
 }

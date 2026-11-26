@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "Nova página · {name}",
   "runeEditor.defaultName": "Página {n}",
   "runeEditor.nameTip": "Nome da página (até 20 letras); vai no nome da página no cliente: LC: {name} <nome>",
-  "settings.ownEmptyNamed": "Nenhuma. Busque o campeão e use \"{new}\" no cartão de runas (funciona sem o cliente aberto) ou \"{copy}\": cada página aparece pelo nome ao lado de {mostPlayed} e {highestWr}."
+  "settings.ownEmptyNamed": "Nenhuma. Busque o campeão e use \"{new}\" no cartão de runas (funciona sem o cliente aberto) ou \"{copy}\": cada página aparece pelo nome ao lado de {mostPlayed} e {highestWr}.",
+  "metric.wpaHelp": "Probabilidade de vitória adicionada: quanto a escolha muda a chance de vitória do time em relação a não fazê-la (o campeão típico da lane, a vaga sem o banido ou o item típico daquela posição da build).",
+  "metric.wrHelp": "Pontos de win rate acima da média (a conta original).",
+  "metric.toggleLabel": "Métrica das sugestões",
+  "metric.pointsPp": "{value} pp",
+  "metric.banTierWpa": "pp (WPA) = quanto a chance de vitória sobe se a vaga do oponente na sua lane ficar com os outros campeões, pelo pick rate; amostra pequena conta menos. Troca sozinho para a conta pelo time quando alguém declarar.",
+  "metric.banTeamWpa": "pp (WPA) = quanto a chance de vitória do time sobe sem esse campeão: a vaga dele fica com os outros daquela lane, pelo pick rate (amostra pequena conta menos). Tendência estatística, não leitura do outro time.",
+  "metric.banShortWpa": "pp (WPA) = chance de vitória ganha sem ele (a vaga fica com os outros). Passe o mouse para ver o porquê.",
+  "metric.pickWpa": "pp (WPA) = chance de vitória com ele menos a com o campeão típico da lane, neste draft; cada confronto e dupla mostra quanto a chance cai sem ele (amostra pequena conta menos). Tendência estatística; clicar só mostra o build.",
+  "metric.total": "{value} no total",
+  "metric.itemLegendWpa": "WPA = chance de vitória com o item menos a com o item típico daquela posição (1ª volta e situacionais: menos o WR do campeão); verde/vermelho = ≥0,5 pp. Não tira o viés de comprar porque já está ganhando. Apagado = menos de {min} partidas.",
+  "metric.itemsSubWpa": "WPA · PR por posição na build",
+  "metric.vsSlot": "{value} contra o item típico da posição",
+  "metric.vsChampion": "{value} contra o WR do campeão",
+  "metric.setting": "Métrica dos bans, picks e itens",
+  "metric.optWpa": "WPA (probabilidade de vitória adicionada)",
+  "metric.optWr": "Win rate (pontos acima da média)",
+  "metric.settingTip": "WPA: quanto a escolha muda a chance de vitória em relação a não fazê-la; nos itens, em relação ao item típico daquela posição. WR: pontos de win rate acima da média (a conta original). Também dá para trocar na seleção."
 }

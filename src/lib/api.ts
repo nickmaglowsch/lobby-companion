@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { cdragonUrl } from "./mockIcons";
+import { itemWpa, type Metric } from "./metric";
 import { t } from "./i18n/index.svelte";
 
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
@@ -87,6 +88,8 @@ export interface BanAdvice {
   byTier: boolean; lane: string | null; pageUrl: string | null;
   /** Contra o seu pick: oponentes da sua lane com confronto ruim e pick provável (sem repetir `picks`). */
   lanePicks: BanPick[]; laneFor: Ally | null; laneNote: string | null;
+  /** Métrica dos ganhos (`metric.rs`): "wpa" = pontos percentuais de chance; "wr" = pontos de WR. */
+  metric: Metric;
 }
 
 /** Parte da nota de um pick: contra um inimigo ou com um aliado (pontos já encolhidos pela amostra). */
@@ -100,6 +103,8 @@ export interface PickAdvice {
   /** "mastery" = seu pool; "tier" = tier list da lane. */
   pool: string;
   suggestions: PickSuggestion[]; enemies: number[]; allies: Ally[]; note: string | null; pageUrl: string | null;
+  /** Métrica de `total`/`base`/`delta`. */
+  metric: Metric;
 }
 export interface SynergyLine { allyChampionId: number; lane: string; wr: number; delta: number; n: number }
 export interface SynergyAdvice { championId: number; lane: string; baseWr: number | null; lines: SynergyLine[]; pageUrl: string | null }
@@ -180,6 +185,8 @@ export interface Settings {
   suggestBans: boolean;
   suggestPicks: boolean;
   pickPool: "mastery" | "tier";
+  /** Métrica das sugestões de ban e pick. */
+  metric: Metric;
   checkUpdates: boolean;
   /** "phase" | "grid" | "tabs" | "classic" */
   layout: string;
@@ -380,12 +387,21 @@ export function firstBack(build: Build, assets: Assets | null, minGames: number)
     .slice(0, EXTRA_ITEMS);
 }
 
-/** Situacionais: maior WR com amostra mínima, fora dos mais jogados (slots, botas, núcleo) e sem botas. */
-export function situationalItems(build: Build, assets: Assets | null, minGames: number): ItemStat[] {
+/**
+ * Situacionais, fora dos mais jogados (slots, botas, núcleo) e sem botas. WR: maior WR com amostra
+ * mínima. WPA: maior WPA contra o WR do campeão (sem corte de amostra), só os positivos.
+ */
+export function situationalItems(build: Build, assets: Assets | null, minGames: number, metric: Metric): ItemStat[] {
   const usual = new Set<number>([...build.slots, build.boots].flatMap((s) => pickItems(s, assets, minGames).map((i) => i.id)));
   coreSets(build, assets, minGames)[0]?.ids.forEach((id) => usual.add(id));
-  return (build.winningItems ?? [])
-    .filter((i) => i.n >= minGames && !usual.has(i.id) && isBuildItem(assets, i.id) && !itemHas(assets, i.id, "Boots"))
+  const open = (i: ItemStat) => !usual.has(i.id) && isBuildItem(assets, i.id) && !itemHas(assets, i.id, "Boots");
+  const list = build.winningItems ?? [];
+  if (metric === "wr") return list.filter((i) => i.n >= minGames && open(i)).slice(0, EXTRA_ITEMS);
+  const score = itemWpa(list, build.wr, false);
+  const s = (i: ItemStat) => score.get(i.id) ?? 0;
+  return list
+    .filter((i) => open(i) && s(i) > 0)
+    .sort((a, b) => s(b) - s(a) || a.id - b.id)
     .slice(0, EXTRA_ITEMS);
 }
 

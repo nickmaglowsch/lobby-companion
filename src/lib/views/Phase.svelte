@@ -9,6 +9,7 @@
   import Notices from "./parts/Notices.svelte";
   import BanList from "./parts/BanList.svelte";
   import PickList from "./parts/PickList.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
   import RunePage from "./parts/RunePage.svelte";
   import Item from "./parts/Item.svelte";
   import ImportButton from "./parts/ImportButton.svelte";
@@ -51,7 +52,7 @@
     <main class="bans">
       {#if bans}
         <section>
-          <h2>{bans.byTier ? t("vPhase.strongestInLane") : t("vPhase.byYourTeam")} {#if bans.loading}<span class="muted small">{t("common.calculating")}</span>{/if}</h2>
+          <h2>{bans.byTier ? t("vPhase.strongestInLane") : t("vPhase.byYourTeam")} <MetricToggle /> {#if bans.loading}<span class="muted small">{t("common.calculating")}</span>{/if}</h2>
           <p class="muted small sub">
             {#if bans.byTier}
               {bans.lane ? t("vPhase.noneDeclaredLane", { lane: LANES[bans.lane] ?? bans.lane }) : t("vPhase.noneDeclared")}
@@ -85,6 +86,7 @@
           <span class="muted small">· {p.enemies.length
             ? t(p.pool === "tier" ? "vPhase.poolTierVs" : "vPhase.poolOwnVs", { enemies: p.enemies.map(app.champName).join(", ") })
             : t(p.pool === "tier" ? "vPhase.poolTier" : "vPhase.poolOwn")}</span>
+          <MetricToggle />
           {#if p.loading}<span class="muted small">{t("common.calculating")}</span>{/if}</h2>
         <PickList variant="cards" />
         <p class="muted small">{t("vPhase.pickHint")}</p>
@@ -132,10 +134,10 @@
         <ImportButton big />
       </section>
       <section class="right">
-        <h2>{t("vPhase.path")}</h2>
+        <h2>{t("vPhase.path")} <MetricToggle /></h2>
         <div class="path">
           {#if b.startSets[0]}
-            <div class="pstep"><span class="lbl">{t("common.start")} · {pct(b.startSets[0].wr)}</span>
+            <div class="pstep"><span class="lbl">{t("common.start")} · {app.startText(0)}</span>
               <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div></div>
           {/if}
           {#if firstBack(b, app.assets, app.minGames).length}
@@ -145,16 +147,16 @@
           {/if}
           {#if core}
             <span class="arrow">›</span>
-            <div class="pstep"><span class="lbl">{t("common.core")} · {pct(core.combo.wr)}</span>
+            <div class="pstep"><span class="lbl">{t("common.core")} · {app.coreText(core.combo)}</span>
               <div class="icons">{#each core.ids as id (id)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div></div>
           {/if}
         </div>
         <h2>{t("vPhase.later")}</h2>
         <div class="table">
-          {#each [[t("common.boots"), b.boots], [t("common.itemN", { n: 4 }), b.slots[3] ?? []], [t("common.itemN", { n: 5 }), b.slots[4] ?? []], [t("common.situationalShort"), situationalItems(b, app.assets, app.minGames)]] as const as [label, list] (label)}
+          {#each [[t("common.boots"), b.boots, b.boots, true], [t("common.itemN", { n: 4 }), b.slots[3] ?? [], b.slots[3] ?? [], true], [t("common.itemN", { n: 5 }), b.slots[4] ?? [], b.slots[4] ?? [], true], [t("common.situationalShort"), situationalItems(b, app.assets, app.minGames, app.metric), b.winningItems ?? [], false]] as const as [label, list, from, slot] (label)}
             {#if list.length}
               <span class="lbl">{label}</span>
-              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} size={32} />{/each}</div>
+              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} {from} {slot} size={32} />{/each}</div>
             {/if}
           {/each}
         </div>

@@ -5,6 +5,7 @@
   import { t } from "$lib/i18n/index.svelte";
   import { app } from "$lib/app.svelte";
   import { signed } from "./fmt";
+  import { gainText } from "$lib/metric";
 
   let { list, variant = "rows", max = 5 }: { list: BanPick[]; variant?: "strip" | "rows" | "cards"; max?: number } = $props();
 
@@ -32,7 +33,7 @@
   <div class="strip">
     {#each shown as p (p.championId)}
       <svelte:element this={tag} class="s" class:act={can} class:busy={app.banBusy === p.championId} role={can ? undefined : "listitem"}
-        onclick={() => can && app.ban(p.championId)} title="{act(p)}{t('banList.gain', { name: app.champName(p.championId), gain: signed(p.gain) })}&#10;{why(p)}">
+        onclick={() => can && app.ban(p.championId)} title="{act(p)}{app.snap?.bans?.metric === 'wr' ? t('banList.gain', { name: app.champName(p.championId), gain: signed(p.gain) }) : `${app.champName(p.championId)} ${gainText('wpa', signed(p.gain))}`}&#10;{why(p)}">
         <img src={championIcon(p.championId)} alt={app.champName(p.championId)} />
         <span class="up">{signed(p.gain)}</span>
       </svelte:element>

@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "Nuova pagina · {name}",
   "runeEditor.defaultName": "Pagina {n}",
   "runeEditor.nameTip": "Nome della pagina (fino a 20 caratteri); finisce nel nome della pagina nel client: LC: {name} <nome>",
-  "settings.ownEmptyNamed": "Nessuna. Cerca il campione e usa \"{new}\" nella scheda delle rune (funziona senza il client aperto) o \"{copy}\": ogni pagina compare col suo nome accanto a {mostPlayed} e {highestWr}."
+  "settings.ownEmptyNamed": "Nessuna. Cerca il campione e usa \"{new}\" nella scheda delle rune (funziona senza il client aperto) o \"{copy}\": ogni pagina compare col suo nome accanto a {mostPlayed} e {highestWr}.",
+  "metric.wpaHelp": "Probabilità di vittoria aggiunta: quanto una scelta cambia la probabilità di vittoria della tua squadra rispetto a non farla (il campione tipico della corsia, lo slot senza il campione bannato o l'oggetto tipico di quella posizione della build).",
+  "metric.wrHelp": "Punti di win rate sopra la media (il calcolo originale).",
+  "metric.toggleLabel": "Metrica dei suggerimenti",
+  "metric.pointsPp": "{value} pp",
+  "metric.banTierWpa": "pp (WPA) = quanto sale la tua probabilità di vittoria se lo slot del tuo avversario di corsia passa agli altri campioni, in base al pick rate; i dati scarsi contano meno. Passa al calcolo di squadra appena qualcuno dichiara.",
+  "metric.banTeamWpa": "pp (WPA) = quanto sale la probabilità di vittoria della squadra senza questo campione: il suo slot passa agli altri di quella corsia, in base al pick rate (i dati scarsi contano meno). Tendenza statistica, non una lettura dell'altra squadra.",
+  "metric.banShortWpa": "pp (WPA) = probabilità di vittoria guadagnata senza di lui (il suo slot passa agli altri). Passa il mouse per vedere perché.",
+  "metric.pickWpa": "pp (WPA) = probabilità di vittoria con lui meno con il campione tipico della corsia, in questo draft; ogni matchup e duo mostra quanto scende senza (i dati scarsi contano meno). Tendenza statistica; il clic mostra solo la build.",
+  "metric.total": "{value} in totale",
+  "metric.itemLegendWpa": "WPA = probabilità di vittoria con l'oggetto meno con l'oggetto tipico di quella posizione (primo ritorno e situazionali: meno il WR del campione); verde/rosso = ≥0,5 pp. Non elimina l'effetto di comprarlo perché si è già in vantaggio. Sbiadito = meno di {min} partite.",
+  "metric.itemsSubWpa": "WPA · PR per posizione nella build",
+  "metric.vsSlot": "{value} rispetto all'oggetto tipico della posizione",
+  "metric.vsChampion": "{value} rispetto al WR del campione",
+  "metric.setting": "Metrica di ban, pick e oggetti",
+  "metric.optWpa": "WPA (probabilità di vittoria aggiunta)",
+  "metric.optWr": "Win rate (punti sopra la media)",
+  "metric.settingTip": "WPA: quanto una scelta cambia la probabilità di vittoria rispetto a non farla; per gli oggetti, rispetto all'oggetto tipico di quella posizione. WR: punti di win rate sopra la media (il calcolo originale). Si può cambiare anche durante la selezione."
 }

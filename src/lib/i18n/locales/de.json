@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "Neue Seite · {name}",
   "runeEditor.defaultName": "Seite {n}",
   "runeEditor.nameTip": "Seitenname (bis zu 20 Zeichen); er kommt in den Seitennamen im Client: LC: {name} <Name>",
-  "settings.ownEmptyNamed": "Keine. Suche den Champion und nutze „{new}“ auf der Runenkarte (geht auch ohne geöffneten Client) oder „{copy}“: Jede Seite erscheint mit ihrem Namen neben {mostPlayed} und {highestWr}."
+  "settings.ownEmptyNamed": "Keine. Suche den Champion und nutze „{new}“ auf der Runenkarte (geht auch ohne geöffneten Client) oder „{copy}“: Jede Seite erscheint mit ihrem Namen neben {mostPlayed} und {highestWr}.",
+  "metric.wpaHelp": "Hinzugefügte Siegwahrscheinlichkeit: wie stark eine Wahl die Siegchance deines Teams verändert, verglichen damit, sie nicht zu treffen (typischer Champion der Lane, der Platz ohne den gebannten Champion oder das typische Item dieser Build-Position).",
+  "metric.wrHelp": "Winrate-Punkte über dem Durchschnitt (die ursprüngliche Berechnung).",
+  "metric.toggleLabel": "Metrik der Vorschläge",
+  "metric.pointsPp": "{value} PP",
+  "metric.banTierWpa": "PP (WPA) = wie stark deine Siegchance steigt, wenn der Platz deines Lane-Gegners an die anderen Champions geht, nach Pickrate; kleine Stichproben zählen weniger. Wechselt zur Team-Berechnung, sobald jemand etwas angibt.",
+  "metric.banTeamWpa": "PP (WPA) = wie stark die Siegchance deines Teams ohne diesen Champion steigt: sein Platz geht an die anderen dieser Lane, nach Pickrate (kleine Stichproben zählen weniger). Statistische Tendenz, keine Vorhersage über das andere Team.",
+  "metric.banShortWpa": "PP (WPA) = gewonnene Siegchance ohne ihn (sein Platz geht an die anderen). Für Details mit der Maus darüberfahren.",
+  "metric.pickWpa": "PP (WPA) = Siegchance mit ihm minus mit dem typischen Champion der Lane, in diesem Draft; jedes Matchup und Duo zeigt, wie stark die Chance ohne es sinkt (kleine Stichproben zählen weniger). Statistische Tendenz; ein Klick zeigt nur den Build.",
+  "metric.total": "{value} insgesamt",
+  "metric.itemLegendWpa": "WPA = Siegchance mit dem Item minus mit dem typischen Item dieser Position (erster Rückweg und situativ: minus die Winrate des Champions); grün/rot = ≥0,5 PP. Entfernt nicht den Effekt, dass man es kauft, weil man schon vorne liegt. Blass = weniger als {min} Spiele.",
+  "metric.itemsSubWpa": "WPA · PR je Build-Position",
+  "metric.vsSlot": "{value} gegenüber dem typischen Item der Position",
+  "metric.vsChampion": "{value} gegenüber der Winrate des Champions",
+  "metric.setting": "Metrik für Bans, Picks und Items",
+  "metric.optWpa": "WPA (hinzugefügte Siegwahrscheinlichkeit)",
+  "metric.optWr": "Winrate (Punkte über dem Durchschnitt)",
+  "metric.settingTip": "WPA: wie stark eine Wahl die Siegchance verändert, verglichen damit, sie nicht zu treffen; bei Items im Vergleich zum typischen Item dieser Position. WR: Winrate-Punkte über dem Durchschnitt (die ursprüngliche Berechnung). Lässt sich auch in der Championauswahl umschalten."
 }

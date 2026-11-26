@@ -86,5 +86,6 @@
   "update.failed": "aktualizacja nie powiodła się: {error}",
   "item.unknown": "przedmiot {id}",
   "own.pageGone": "ta strona już nie istnieje",
-  "own.defaultName": "Strona {n}"
+  "own.defaultName": "Strona {n}",
+  "metric.pp": "pp"
 }

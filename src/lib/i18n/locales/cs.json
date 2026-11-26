@@ -372,5 +372,22 @@
   "runeEditor.titleNew": "Nová stránka · {name}",
   "runeEditor.defaultName": "Stránka {n}",
   "runeEditor.nameTip": "Název stránky (až 20 znaků); dostane se do názvu stránky v klientu: LC: {name} <název>",
-  "settings.ownEmptyNamed": "Žádná. Vyhledej šampiona a na kartě run použij „{new}“ (funguje i bez otevřeného klienta) nebo „{copy}“: každá stránka se zobrazí pod svým názvem vedle {mostPlayed} a {highestWr}."
+  "settings.ownEmptyNamed": "Žádná. Vyhledej šampiona a na kartě run použij „{new}“ (funguje i bez otevřeného klienta) nebo „{copy}“: každá stránka se zobrazí pod svým názvem vedle {mostPlayed} a {highestWr}.",
+  "metric.wpaHelp": "Přidaná pravděpodobnost výhry: jak moc volba mění šanci tvého týmu na výhru oproti tomu, kdybys ji neudělal (typický šampion linky, místo bez zabanovaného šampiona nebo typický předmět dané pozice buildu).",
+  "metric.wrHelp": "Body win rate nad průměrem (původní výpočet).",
+  "metric.toggleLabel": "Metrika návrhů",
+  "metric.pointsPp": "{value} p.b.",
+  "metric.banTierWpa": "p.b. (WPA) = o kolik stoupne tvoje šance na výhru, když místo tvého soupeře na lince připadne ostatním šampionům, podle pick rate; malé vzorky se počítají méně. Jakmile někdo deklaruje, přepne na výpočet podle týmu.",
+  "metric.banTeamWpa": "p.b. (WPA) = o kolik stoupne šance tvého týmu na výhru bez tohoto šampiona: jeho místo připadne ostatním na té lince, podle pick rate (malé vzorky se počítají méně). Statistická tendence, ne odhad druhého týmu.",
+  "metric.banShortWpa": "p.b. (WPA) = šance na výhru získaná bez něj (jeho místo připadne ostatním). Najetím myši uvidíš proč.",
+  "metric.pickWpa": "p.b. (WPA) = šance na výhru s ním minus s typickým šampionem linky, v tomto draftu; každý souboj a duo ukazuje, o kolik šance bez něj klesne (malé vzorky se počítají méně). Statistická tendence; kliknutí jen ukáže build.",
+  "metric.total": "{value} celkem",
+  "metric.itemLegendWpa": "WPA = šance na výhru s předmětem minus s typickým předmětem dané pozice (první návrat a situační: minus WR šampiona); zelená/červená = ≥0,5 p.b. Neodstraňuje vliv toho, že se kupuje, když už se vyhrává. Vybledlé = méně než {min} her.",
+  "metric.itemsSubWpa": "WPA · PR podle pozice v buildu",
+  "metric.vsSlot": "{value} oproti typickému předmětu pozice",
+  "metric.vsChampion": "{value} oproti WR šampiona",
+  "metric.setting": "Metrika banů, výběrů a předmětů",
+  "metric.optWpa": "WPA (přidaná pravděpodobnost výhry)",
+  "metric.optWr": "Win rate (body nad průměrem)",
+  "metric.settingTip": "WPA: jak moc volba mění šanci na výhru oproti tomu, kdybys ji neudělal; u předmětů oproti typickému předmětu dané pozice. WR: body win rate nad průměrem (původní výpočet). Lze přepnout i během výběru."
 }

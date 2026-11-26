@@ -400,5 +400,22 @@
   "runeEditor.titleNew": "Nowa strona · {name}",
   "runeEditor.defaultName": "Strona {n}",
   "runeEditor.nameTip": "Nazwa strony (do 20 znaków); trafia do nazwy strony w kliencie: LC: {name} <nazwa>",
-  "settings.ownEmptyNamed": "Brak. Wyszukaj bohatera i użyj „{new}” na karcie run (działa bez otwartego klienta) lub „{copy}”: każda strona pojawi się pod swoją nazwą obok {mostPlayed} i {highestWr}."
+  "settings.ownEmptyNamed": "Brak. Wyszukaj bohatera i użyj „{new}” na karcie run (działa bez otwartego klienta) lub „{copy}”: każda strona pojawi się pod swoją nazwą obok {mostPlayed} i {highestWr}.",
+  "metric.wpaHelp": "Dodane prawdopodobieństwo wygranej: jak bardzo wybór zmienia szansę twojej drużyny na wygraną w porównaniu z jego brakiem (typowy bohater na linii, miejsce bez zbanowanego bohatera lub typowy przedmiot na tej pozycji buildu).",
+  "metric.wrHelp": "Punkty win rate powyżej średniej (pierwotne obliczenie).",
+  "metric.toggleLabel": "Miara sugestii",
+  "metric.pointsPp": "{value} pp",
+  "metric.banTierWpa": "pp (WPA) = o ile rośnie twoja szansa na wygraną, jeśli miejsce przeciwnika z twojej linii przypadnie innym bohaterom, według pick rate; małe próbki liczą się mniej. Przełącza się na obliczenie drużynowe, gdy ktoś zadeklaruje.",
+  "metric.banTeamWpa": "pp (WPA) = o ile rośnie szansa twojej drużyny na wygraną bez tego bohatera: jego miejsce przypada innym na tej linii, według pick rate (małe próbki liczą się mniej). Tendencja statystyczna, nie odczyt drugiej drużyny.",
+  "metric.banShortWpa": "pp (WPA) = szansa na wygraną zyskana bez niego (jego miejsce przypada innym). Najedź kursorem, aby zobaczyć dlaczego.",
+  "metric.pickWpa": "pp (WPA) = szansa na wygraną z nim minus z typowym bohaterem linii, w tym drafcie; każde starcie i duet pokazuje, o ile szansa spada bez niego (małe próbki liczą się mniej). Tendencja statystyczna; kliknięcie tylko pokazuje build.",
+  "metric.total": "{value} łącznie",
+  "metric.itemLegendWpa": "WPA = szansa na wygraną z przedmiotem minus z typowym przedmiotem na tej pozycji (pierwszy powrót i sytuacyjne: minus WR bohatera); zielony/czerwony = ≥0,5 pp. Nie usuwa efektu kupowania, gdy już się wygrywa. Wyblakłe = mniej niż {min} gier.",
+  "metric.itemsSubWpa": "WPA · PR według pozycji w buildzie",
+  "metric.vsSlot": "{value} względem typowego przedmiotu na tej pozycji",
+  "metric.vsChampion": "{value} względem WR bohatera",
+  "metric.setting": "Miara banów, picków i przedmiotów",
+  "metric.optWpa": "WPA (dodane prawdopodobieństwo wygranej)",
+  "metric.optWr": "Win rate (punkty powyżej średniej)",
+  "metric.settingTip": "WPA: jak bardzo wybór zmienia szansę na wygraną w porównaniu z jego brakiem; dla przedmiotów – względem typowego przedmiotu na tej pozycji. WR: punkty win rate powyżej średniej (pierwotne obliczenie). Można to też zmienić podczas wyboru bohaterów."
 }

@@ -83,5 +83,6 @@
   "update.failed": "pembaruan gagal: {error}",
   "item.unknown": "item {id}",
   "own.pageGone": "halaman ini sudah tidak ada",
-  "own.defaultName": "Halaman {n}"
+  "own.defaultName": "Halaman {n}",
+  "metric.pp": "poin %"
 }

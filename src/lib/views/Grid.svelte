@@ -10,6 +10,7 @@
   import Notices from "./parts/Notices.svelte";
   import BanList from "./parts/BanList.svelte";
   import PickList from "./parts/PickList.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
   import RunePage from "./parts/RunePage.svelte";
   import SkillGrid from "./parts/SkillGrid.svelte";
   import Item from "./parts/Item.svelte";
@@ -34,13 +35,14 @@
         <h2>{t("views.bans")} <span class="muted">{bans.byTier
           ? (bans.lane ? t("vGrid.tierListLane", { lane: LANES[bans.lane] ?? bans.lane }) : t("vGrid.tierList"))
           : t("vGrid.byTeam")}</span>
+          <MetricToggle />
           {#if bans.loading}<span class="muted">…</span>{/if}</h2>
         {#if bans.picks.length}<BanList list={bans.picks} variant="strip" />{:else if bans.note}<p class="muted small">{bans.note}</p>{/if}
         <h2>{t("views.bans")} <span class="muted">{t("vGrid.vsYou")}</span></h2>
         {#if bans.lanePicks.length}<BanList list={bans.lanePicks} variant="strip" />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
       {/if}
       {#if app.snap?.inChampSelect && app.snap.picks}
-        <h2>{t("vGrid.pick")} <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? t("vGrid.tierList") : t("vGrid.ownPool")}</span></h2>
+        <h2>{t("vGrid.pick")} <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? t("vGrid.tierList") : t("vGrid.ownPool")}</span>{#if !bans}<MetricToggle />{/if}</h2>
         <PickList variant="rows" max={3} />
       {/if}
       {#if app.composition}
@@ -72,12 +74,12 @@
 
     <section class:focus={app.stage === "build"}>
       {#if b}
-        <h2>{t("common.items")}</h2>
+        <h2>{t("common.items")} <MetricToggle /></h2>
         {#if b.startSets[0]}
           <div class="irow">
             <span class="lbl">{t("common.start")}</span>
             <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
-            <span class="small">{pct(b.startSets[0].wr)}</span>
+            <span class="small">{app.startText(0)}</span>
           </div>
         {/if}
         {#if firstBack(b, app.assets, app.minGames).length}
@@ -90,21 +92,21 @@
           <div class="irow">
             <span class="lbl">{t("common.core")}</span>
             <div class="icons">{#each core.ids as id (id)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
-            <span class="small">{pct(core.combo.wr)}</span>
+            <span class="small">{app.coreText(core.combo)}</span>
           </div>
         {/if}
         {#each [[t("common.boots"), b.boots], [t("common.itemN", { n: 4 }), b.slots[3] ?? []], [t("common.itemN", { n: 5 }), b.slots[4] ?? []]] as const as [label, list] (label)}
           {#if list.length}
             <div class="irow">
               <span class="lbl">{label}</span>
-              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} size={28} />{/each}</div>
+              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} from={list} size={28} />{/each}</div>
             </div>
           {/if}
         {/each}
-        {#if situationalItems(b, app.assets, app.minGames).length}
+        {#if situationalItems(b, app.assets, app.minGames, app.metric).length}
           <div class="irow">
             <span class="lbl">{t("common.situationalShort")}</span>
-            <div class="icons">{#each situationalItems(b, app.assets, app.minGames).slice(0, 3) as it (it.id)}<Item {it} size={28} />{/each}</div>
+            <div class="icons">{#each situationalItems(b, app.assets, app.minGames, app.metric).slice(0, 3) as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={28} />{/each}</div>
           </div>
         {/if}
       {/if}

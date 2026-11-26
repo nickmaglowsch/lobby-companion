@@ -372,5 +372,22 @@
   "runeEditor.titleNew": "Pagină nouă · {name}",
   "runeEditor.defaultName": "Pagina {n}",
   "runeEditor.nameTip": "Numele paginii (până la 20 de caractere); intră în numele paginii din client: LC: {name} <nume>",
-  "settings.ownEmptyNamed": "Niciuna. Caută campionul și folosește „{new}” pe cardul de rune (merge fără clientul deschis) sau „{copy}”: fiecare pagină apare după nume lângă {mostPlayed} și {highestWr}."
+  "settings.ownEmptyNamed": "Niciuna. Caută campionul și folosește „{new}” pe cardul de rune (merge fără clientul deschis) sau „{copy}”: fiecare pagină apare după nume lângă {mostPlayed} și {highestWr}.",
+  "metric.wpaHelp": "Probabilitate de victorie adăugată: cât schimbă o alegere șansa de victorie a echipei tale față de a nu o face (campionul tipic al culoarului, locul fără campionul interzis sau obiectul tipic al acelei poziții din build).",
+  "metric.wrHelp": "Puncte de win rate peste medie (calculul inițial).",
+  "metric.toggleLabel": "Metrica sugestiilor",
+  "metric.pointsPp": "{value} pp",
+  "metric.banTierWpa": "pp (WPA) = cât crește șansa ta de victorie dacă locul adversarului de pe culoar revine celorlalți campioni, după pick rate; eșantioanele mici contează mai puțin. Trece la calculul pe echipă când cineva declară.",
+  "metric.banTeamWpa": "pp (WPA) = cât crește șansa de victorie a echipei fără acest campion: locul lui revine celorlalți de pe acel culoar, după pick rate (eșantioanele mici contează mai puțin). Tendință statistică, nu o citire a celeilalte echipe.",
+  "metric.banShortWpa": "pp (WPA) = șansă de victorie câștigată fără el (locul lui revine celorlalți). Treci cu mouse-ul pentru detalii.",
+  "metric.pickWpa": "pp (WPA) = șansa de victorie cu el minus cu campionul tipic al culoarului, în acest draft; fiecare confruntare și duo arată cât scade șansa fără el (eșantioanele mici contează mai puțin). Tendință statistică; clicul doar afișează build-ul.",
+  "metric.total": "{value} în total",
+  "metric.itemLegendWpa": "WPA = șansa de victorie cu obiectul minus cu obiectul tipic al acelei poziții (prima întoarcere și situaționale: minus WR-ul campionului); verde/roșu = ≥0,5 pp. Nu elimină efectul cumpărării atunci când deja câștigi. Estompat = sub {min} meciuri.",
+  "metric.itemsSubWpa": "WPA · PR pe poziție în build",
+  "metric.vsSlot": "{value} față de obiectul tipic al poziției",
+  "metric.vsChampion": "{value} față de WR-ul campionului",
+  "metric.setting": "Metrica pentru interziceri, alegeri și obiecte",
+  "metric.optWpa": "WPA (probabilitate de victorie adăugată)",
+  "metric.optWr": "Win rate (puncte peste medie)",
+  "metric.settingTip": "WPA: cât schimbă o alegere șansa de victorie față de a nu o face; la obiecte, față de obiectul tipic al acelei poziții. WR: puncte de win rate peste medie (calculul inițial). Se poate schimba și în timpul selecției."
 }

@@ -84,5 +84,6 @@
   "update.failed": "güncelleme başarısız: {error}",
   "item.unknown": "eşya {id}",
   "own.pageGone": "bu sayfa artık yok",
-  "own.defaultName": "Sayfa {n}"
+  "own.defaultName": "Sayfa {n}",
+  "metric.pp": "yp"
 }

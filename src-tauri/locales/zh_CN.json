@@ -83,5 +83,6 @@
   "update.failed": "更新失败: {error}",
   "item.unknown": "装备 {id}",
   "own.pageGone": "该页面已不存在",
-  "own.defaultName": "页面 {n}"
+  "own.defaultName": "页面 {n}",
+  "metric.pp": "百分点"
 }

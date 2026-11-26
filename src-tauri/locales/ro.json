@@ -85,5 +85,6 @@
   "update.failed": "actualizarea a eșuat: {error}",
   "item.unknown": "obiect {id}",
   "own.pageGone": "pagina aceasta nu mai există",
-  "own.defaultName": "Pagina {n}"
+  "own.defaultName": "Pagina {n}",
+  "metric.pp": "pp"
 }

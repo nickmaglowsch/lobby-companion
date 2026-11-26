@@ -18,6 +18,8 @@
   import OwnRunes from "./parts/OwnRunes.svelte";
   import { signed } from "./parts/fmt";
   import { t, i18n } from "$lib/i18n/index.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
+  import { banExplain, gainText, itemLegend, itemsSub } from "$lib/metric";
 
   const snap = $derived(app.snap);
   const assets = $derived(app.assets);
@@ -91,6 +93,7 @@
     <section class="card">
       <div class="card-head">
         <h2>{t("vClassic.banSuggest")}</h2>
+        <MetricToggle />
         {#if bans.loading}<span class="muted small">{t("common.calculating")}</span>{/if}
       </div>
       {#if snap.canBan}<p class="turn small">{t("vClassic.yourBanTurn")}</p>{/if}
@@ -101,7 +104,7 @@
             onclick={() => snap?.canBan && app.ban(p.championId)} title={snap?.canBan ? t("vClassic.clickToBan", { champ: champName(p.championId) }) : undefined}>
             <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
             <div>
-              <div><b>{champName(p.championId)}</b> <span class="gain" title={t("vClassic.gainTitle")}>{t("vClassic.gainPts", { value: signed(p.gain) })}</span></div>
+              <div><b>{champName(p.championId)}</b> <span class="gain" title={bans.metric === "wr" ? t("vClassic.gainTitle") : banExplain(bans.metric, bans.byTier)}>{gainText(bans.metric, signed(p.gain))}</span></div>
               {#if p.tier}
                 <div class="reason muted small">{t("vClassic.tierReason", { wr: pct(p.tier.wr), pr: pct(p.tier.pr), br: pct(p.tier.br), count: p.tier.games })}</div>
               {/if}
@@ -142,11 +145,11 @@
       {@render banList(bans.lanePicks)}
       {#if bans.laneNote}<p class="muted small">{bans.laneNote}</p>{/if}
       {#if bans.picks.length && bans.byTier}
-        <p class="muted small">{t("vClassic.ptsTierHint")}
+        <p class="muted small">{banExplain(bans.metric, true)}
           {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>{t("vClassic.tierListLink")}</button>{/if}
         </p>
       {:else if bans.picks.length || bans.lanePicks.length}
-        <p class="muted small">{t("vClassic.ptsTeamHint")}</p>
+        <p class="muted small">{banExplain(bans.metric, false)}</p>
       {/if}
     </section>
   {/if}
@@ -277,24 +280,24 @@
     </section>
 
     <section class="card">
-      <h2>{t("common.items")} <small class="muted">{t("vClassic.itemsSub")}</small></h2>
+      <h2>{t("common.items")} <small class="muted">{itemsSub(app.metric)}</small> <MetricToggle /></h2>
       {#each build.startSets.slice(0, 2) as s, i (i)}
         <div class="start">
           <span class="label">{i === 0 ? t("common.start") : t("vClassic.alt")}</span>
           <div class="combo">
             {#each s.ids as id, j (j)}<img src={icon(assets?.items[id]?.icon)} alt={assets?.items[id]?.name} title={assets?.items[id]?.name} />{/each}
-            <span>{pct(s.wr)}</span><span class="muted">{pct(s.pr)}</span>
+            <span>{app.startText(i)}</span><span class="muted">{pct(s.pr)}</span>
           </div>
         </div>
       {/each}
       <CoreBuild {build} {assets} {minGames} />
-      <ItemRow label={t("common.firstBack")} items={firstBack(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
+      <ItemRow label={t("common.firstBack")} items={firstBack(build, assets, minGames)} from={build.earlyItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
       <ItemRow label={t("common.boots")} items={build.boots} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {#each build.slots as slot, i (i)}
         <ItemRow label={t("common.itemN", { n: i + 1 })} items={slot} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {/each}
-      <ItemRow label={t("common.situationalShort")} items={situationalItems(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
-      <p class="muted small">{t("vClassic.itemLegend", { count: minGames })}</p>
+      <ItemRow label={t("common.situationalShort")} items={situationalItems(build, assets, minGames, app.metric)} from={build.winningItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
+      <p class="muted small">{itemLegend(app.metric, minGames)}</p>
     </section>
   {/if}
 

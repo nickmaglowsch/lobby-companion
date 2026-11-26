@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "Yeni sayfa · {name}",
   "runeEditor.defaultName": "Sayfa {n}",
   "runeEditor.nameTip": "Sayfa adı (en fazla 20 karakter); istemcideki sayfa adına girer: LC: {name} <ad>",
-  "settings.ownEmptyNamed": "Yok. Şampiyonu ara ve rün kartında \"{new}\" (istemci kapalıyken de çalışır) ya da \"{copy}\" kullan: her sayfa adıyla {mostPlayed} ve {highestWr} yanında görünür."
+  "settings.ownEmptyNamed": "Yok. Şampiyonu ara ve rün kartında \"{new}\" (istemci kapalıyken de çalışır) ya da \"{copy}\" kullan: her sayfa adıyla {mostPlayed} ve {highestWr} yanında görünür.",
+  "metric.wpaHelp": "Eklenen kazanma olasılığı: bir seçimin, yapılmamasına kıyasla takımının kazanma şansını ne kadar değiştirdiği (koridorun tipik şampiyonu, yasaklanan şampiyon olmadan kalan yer ya da o build konumunun tipik eşyası).",
+  "metric.wrHelp": "Ortalamanın üzerindeki kazanma oranı puanları (orijinal hesap).",
+  "metric.toggleLabel": "Öneri ölçütü",
+  "metric.pointsPp": "{value} yp",
+  "metric.banTierWpa": "yp (WPA) = koridor rakibinin yeri seçilme oranına göre diğer şampiyonlara kalırsa kazanma şansının ne kadar arttığı; küçük örneklemler daha az sayılır. Biri seçim bildirince takım hesabına geçer.",
+  "metric.banTeamWpa": "yp (WPA) = bu şampiyon olmadan takımının kazanma şansının ne kadar arttığı: yeri, seçilme oranına göre o koridordaki diğerlerine kalır (küçük örneklemler daha az sayılır). İstatistiksel eğilim, diğer takımın okunması değil.",
+  "metric.banShortWpa": "yp (WPA) = o olmadan kazanılan kazanma şansı (yeri diğerlerine kalır). Nedenini görmek için üzerine gel.",
+  "metric.pickWpa": "yp (WPA) = bu draftta, onunla kazanma şansı eksi koridorun tipik şampiyonuyla kazanma şansı; her eşleşme ve ikili, o olmadan şansın ne kadar düştüğünü gösterir (küçük örneklemler daha az sayılır). İstatistiksel eğilim; tıklamak yalnızca build'i gösterir.",
+  "metric.total": "toplam {value}",
+  "metric.itemLegendWpa": "WPA = eşyayla kazanma şansı eksi o konumun tipik eşyasıyla kazanma şansı (ilk dönüş ve duruma göre eşyalar: eksi şampiyonun kazanma oranı); yeşil/kırmızı = ≥0,5 yp. Zaten öndeyken alınmasının etkisini gidermez. Soluk = {min} maçtan az.",
+  "metric.itemsSubWpa": "WPA · build konumuna göre PR",
+  "metric.vsSlot": "{value}, konumun tipik eşyasına göre",
+  "metric.vsChampion": "{value}, şampiyonun kazanma oranına göre",
+  "metric.setting": "Yasaklama, seçim ve eşya ölçütü",
+  "metric.optWpa": "WPA (eklenen kazanma olasılığı)",
+  "metric.optWr": "Kazanma oranı (ortalamanın üzerindeki puanlar)",
+  "metric.settingTip": "WPA: bir seçimin, yapılmamasına kıyasla kazanma şansını ne kadar değiştirdiği; eşyalarda o konumun tipik eşyasına kıyasla. WR: ortalamanın üzerindeki kazanma oranı puanları (orijinal hesap). Seçim sırasında da değiştirilebilir."
 }

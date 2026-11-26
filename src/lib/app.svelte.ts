@@ -2,9 +2,10 @@
 // Os dados vêm do backend (`api`): snapshot do cliente + build do lolalytics, assets e configurações.
 import {
   api, minGamesFor, ownRuneSet,
-  type Assets, type Champion, type Composition, type OwnPage, type RuneChoice, type Settings, type Snapshot,
+  type Assets, type Champion, type Combo, type Composition, type OwnPage, type RuneChoice, type Settings, type Snapshot,
 } from "./api";
 import { compare, i18n, lower, setLocale, t } from "./i18n/index.svelte";
+import { comboWpa, scoreText, type Metric } from "./metric";
 
 export type Layout = "phase" | "grid" | "tabs" | "classic";
 /** Layouts com o nome no idioma da janela. */
@@ -50,6 +51,8 @@ class AppState {
   /** A escolhida do campeão em tela (vai para o cliente), se houver. */
   ownPage = $derived(this.championPages.find((p) => p.active) ?? null);
   runeTab = $derived<RuneChoice>(this.ownPage ? `own:${this.ownPage.id}` : this.settings?.runeChoice ?? "pick");
+  /** Métrica escolhida (o botão); os números de bans e picks vêm com a métrica de cada conta (`bans.metric`). */
+  metric = $derived<Metric>(this.settings?.metric ?? "wpa");
   runeSet = $derived(
     !this.build ? null
     : this.ownPage ? ownRuneSet(this.ownPage)
@@ -67,6 +70,22 @@ class AppState {
       ? this.build ? "build" : "idle"
       : this.snap.banning ? "bans" : this.snap.locked ? "build" : "picks",
   );
+
+  /** Número do início `i` (WR ou WPA contra o início típico). */
+  startText = (i: number) => {
+    const b = this.build;
+    const s = b?.startSets[i];
+    return b && s ? scoreText(this.metric, s.wr, comboWpa(b.startSets, b.wr)[i]) : "";
+  };
+
+  /** Número de um núcleo (WR ou WPA contra o núcleo típico). */
+  coreText = (c: Combo) => {
+    const b = this.build;
+    if (!b) return "";
+    const list = b.core ?? [];
+    const k = list.findIndex((x) => x.ids.join() === c.ids.join());
+    return scoreText(this.metric, c.wr, k >= 0 ? comboWpa(list, b.wr)[k] : undefined);
+  };
 
   champName = (id: number) => this.assets?.champions[id]?.name ?? `#${id}`;
 
@@ -235,6 +254,13 @@ class AppState {
     } finally {
       this.ownBusy = false;
     }
+  }
+
+  /** WPA ↔ WR: grava e o backend recalcula bans e picks (com o cache, sem requisição nova). */
+  setMetric(m: Metric) {
+    if (!this.settings || this.settings.metric === m) return;
+    this.settings.metric = m;
+    this.save();
   }
 
   async checkUpdateNow() {

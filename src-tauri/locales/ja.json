@@ -83,5 +83,6 @@
   "update.failed": "更新に失敗しました: {error}",
   "item.unknown": "アイテム{id}",
   "own.pageGone": "このページはもう存在しません",
-  "own.defaultName": "ページ {n}"
+  "own.defaultName": "ページ {n}",
+  "metric.pp": "pt"
 }

@@ -33,6 +33,9 @@ pub struct Settings {
     pub suggest_picks: bool,
     /// Candidatos da sugestão de pick: "mastery" = seu pool (maestria); "tier" = tier list da lane.
     pub pick_pool: String,
+    /// Métrica das sugestões de ban e pick: "wpa" (probabilidade de vitória adicionada) ou
+    /// "wr" (pontos de win rate, a conta original). Ver `metric.rs`.
+    pub metric: String,
     /// Procura versão nova no GitHub Releases ao abrir e a cada 6 h (só avisa; instalar é no clique).
     pub check_updates: bool,
     /// Layout da janela: "phase" (por fase), "grid" (grade), "tabs" (abas) ou "classic" (lista com rolagem).
@@ -62,6 +65,7 @@ impl Default for Settings {
             suggest_bans: true,
             suggest_picks: true,
             pick_pool: "mastery".into(),
+            metric: "wpa".into(),
             check_updates: true,
             layout: "phase".into(),
             language: String::new(),
@@ -120,6 +124,7 @@ mod tests {
         assert_eq!(s.pick_pool, "mastery");
         assert!(s.check_updates);
         assert_eq!(s.layout, "phase");
+        assert_eq!(s.metric, "wpa");
         assert_eq!(s.language, "");
         assert_eq!(s.client_locale, "");
     }

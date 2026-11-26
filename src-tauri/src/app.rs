@@ -11,6 +11,7 @@ use crate::lcu::{self, Lcu};
 use crate::lola::extra::{self, Counters, Team, TierList};
 use crate::lola::model::{self, Build};
 use crate::lola::{Ep, Lolalytics, Query};
+use crate::metric::Metric;
 use crate::own_runes::{self, Chosen, OwnEntry, OwnPage, OwnPages};
 use crate::picks::{self, PickSuggestion, SynergyLine};
 use crate::settings::Settings;
@@ -142,6 +143,8 @@ pub struct BanAdvice {
     pub by_tier: bool,
     pub lane: Option<String>,
     pub page_url: Option<String>,
+    /// Métrica dos ganhos (`gain`): pontos de WR ou probabilidade de vitória adicionada.
+    pub metric: Metric,
     /// Contra o seu pick: oponentes da sua lane com confronto ruim e pick provável
     /// (sem repetir os de `picks`).
     pub lane_picks: Vec<BanPick>,
@@ -163,6 +166,8 @@ pub struct PickAdvice {
     /// De onde vieram os candidatos: "mastery" (seu pool) ou "tier" (tier list da lane).
     pub pool: String,
     pub suggestions: Vec<PickSuggestion>,
+    /// Métrica dos pontos (`total`, `base`, `delta`).
+    pub metric: Metric,
     /// Inimigos e aliados usados na conta.
     pub enemies: Vec<i64>,
     pub allies: Vec<Ally>,
@@ -732,11 +737,11 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
     }
     update(app, shared, |s| {
         // Os da tier list não valem para a conta pelo time.
-        let (picks, lane_picks, lane_for) = s
+        let (picks, lane_picks, lane_for, metric) = s
             .bans
             .take()
             .filter(|b| !b.by_tier)
-            .map(|b| (b.picks, b.lane_picks, b.lane_for))
+            .map(|b| (b.picks, b.lane_picks, b.lane_for, b.metric))
             .unwrap_or_default();
         s.bans = Some(BanAdvice {
             loading: true,
@@ -744,6 +749,7 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
             picks,
             lane_picks,
             lane_for,
+            metric,
             ..Default::default()
         });
     })
@@ -772,12 +778,13 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         }
     }
     let inputs: Vec<(Ally, &Build)> = builds.iter().map(|(a, b)| (a.clone(), b)).collect();
-    let picks = bans::suggest(&inputs, &unavailable, 5);
+    let metric = Metric::from_setting(&settings.metric);
+    let picks = bans::suggest(&inputs, &unavailable, 5, metric);
     // Lista individual: só o seu campeão, oponentes da sua lane, sem repetir a do time.
     let in_team: Vec<i64> = picks.iter().map(|p| p.champion_id).collect();
     let mine = builds.iter().find(|(a, _)| a.me);
     let lane_picks = mine
-        .map(|(me, b)| bans::lane_suggest(me, b, &unavailable, &in_team, 5))
+        .map(|(me, b)| bans::lane_suggest(me, b, &unavailable, &in_team, 5, metric))
         .unwrap_or_default();
     let lane_for = mine.map(|(me, b)| Ally {
         lane: Some(b.lane.clone())
@@ -805,6 +812,7 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
             lane_picks,
             lane_for,
             lane_note,
+            metric,
             ..Default::default()
         })
     })
@@ -867,15 +875,16 @@ async fn bans_by_tier(
     unavailable: &[i64],
 ) {
     update(app, shared, |s| {
-        let picks = s
+        let (picks, metric) = s
             .bans
             .take()
             .filter(|b| b.by_tier)
-            .map(|b| b.picks)
+            .map(|b| (b.picks, b.metric))
             .unwrap_or_default();
         s.bans = Some(BanAdvice {
             loading: true,
             picks,
+            metric,
             by_tier: true,
             lane: Some(lane.clone()),
             ..Default::default()
@@ -883,6 +892,7 @@ async fn bans_by_tier(
     })
     .await;
     let q = extra_query(settings, Ep::List, String::new(), Some(lane.clone()), None);
+    let metric = Metric::from_setting(&settings.metric);
     let result = fetch_list(shared, &q).await;
     if shared.bans_gen.load(Ordering::SeqCst) != generation {
         return;
@@ -890,7 +900,8 @@ async fn bans_by_tier(
     let advice = match result {
         // Ninguém declarou, nem você: a lista individual espera o seu campeão.
         Ok(list) => BanAdvice {
-            picks: picks::tier_bans(&list, unavailable, 5),
+            picks: picks::tier_bans(&list, unavailable, 5, metric),
+            metric,
             by_tier: true,
             lane: Some(lane),
             page_url: Some(q.page_url()),
@@ -965,12 +976,17 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         .collect();
     let enemies: Vec<i64> = draft.enemies.iter().take(5).copied().collect();
     update(app, shared, |s| {
-        let prev = s.picks.take().map(|p| p.suggestions).unwrap_or_default();
+        let (prev, metric) = s
+            .picks
+            .take()
+            .map(|p| (p.suggestions, p.metric))
+            .unwrap_or_default();
         s.picks = Some(PickAdvice {
             loading: true,
             lane: Some(lane.clone()),
             pool: settings.pick_pool.clone(),
             suggestions: prev,
+            metric,
             enemies: enemies.clone(),
             allies: mates.clone(),
             ..Default::default()
@@ -1108,6 +1124,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
             team: t,
         })
         .collect();
+    let metric = Metric::from_setting(&settings.metric);
     let suggestions = picks::suggest(
         &lane,
         &list,
@@ -1116,6 +1133,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         &mate_inputs,
         &owned,
         picks::TOP,
+        metric,
     );
     if stale() {
         return;
@@ -1126,6 +1144,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
             lane: Some(lane),
             pool: pool_kind,
             suggestions,
+            metric,
             enemies,
             allies: mates,
             note: (!notes.is_empty()).then(|| notes.join("; ")),
@@ -1285,6 +1304,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             &assets,
             build.min_games(settings.min_games),
             lang,
+            Metric::from_setting(&settings.metric),
         );
         rep.items = Some(Outcome::from(itemset::apply(&lcu, set).await));
     }

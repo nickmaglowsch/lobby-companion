@@ -10,6 +10,7 @@ pub mod i18n;
 pub mod import;
 pub mod lcu;
 pub mod lola;
+pub mod metric;
 pub mod own_runes;
 pub mod picks;
 pub mod settings;
@@ -168,9 +169,11 @@ async fn save_settings(
                 || cur.region != settings.region
                 || cur.patch != settings.patch,
             cur.rune_choice != settings.rune_choice,
-            cur.min_games != settings.min_games,
-            cur.suggest_bans != settings.suggest_bans,
-            cur.suggest_picks != settings.suggest_picks || cur.pick_pool != settings.pick_pool,
+            cur.min_games != settings.min_games || cur.metric != settings.metric,
+            cur.suggest_bans != settings.suggest_bans || cur.metric != settings.metric,
+            cur.suggest_picks != settings.suggest_picks
+                || cur.pick_pool != settings.pick_pool
+                || cur.metric != settings.metric,
         );
         if cur.window_size() != settings.window_size() {
             apply_window_size(&app, settings.window_size());
@@ -573,14 +576,15 @@ async fn lola_cli(slug: String, lane: Option<String>, vs: Option<String>) {
                     lane: Some(b.lane.clone()),
                     me: true,
                 };
-                let team = bans::suggest(&[(me.clone(), &b)], &[], 5);
+                let metric = metric::Metric::from_setting(&s.metric);
+                let team = bans::suggest(&[(me.clone(), &b)], &[], 5, metric);
                 let in_team: Vec<i64> = team.iter().map(|p| p.champion_id).collect();
-                let lane = bans::lane_suggest(&me, &b, &[], &in_team, 5);
+                let lane = bans::lane_suggest(&me, &b, &[], &in_team, 5, metric);
                 for (kind, list) in [("ban (time)", team), ("ban (lane)", lane)] {
                     for p in list {
                         let r = p.reasons.first();
                         println!(
-                            "{kind}: campeão {} +{:.2} pts ({})",
+                            "{kind} ({metric:?}): campeão {} +{:.2} pts ({})",
                             p.champion_id,
                             p.gain,
                             r.map(|r| format!("{:.1}% em {} partidas, {}", r.wr, r.n, r.lane))
@@ -712,44 +716,47 @@ async fn picks_cli(lane: String, enemies: Vec<String>, allies: Vec<String>) {
         })
         .collect();
     let candidates = picks::pool_from_tier(&list, &[], picks::POOL_SIZE);
-    for p in picks::suggest(
-        &lane,
-        &list,
-        &candidates,
-        &enemy_inputs,
-        &mate_inputs,
-        &[],
-        5,
-    ) {
-        let parts: Vec<String> = p
-            .parts
-            .iter()
-            .map(|x| {
-                format!(
-                    "{:+.2} {:?} #{} ({}, WR {:.1}%, {} partidas)",
-                    x.delta, x.kind, x.champion_id, x.lane, x.wr, x.n
-                )
-            })
-            .collect();
-        println!(
-            "pick #{}: {:+.2} (base {:+.2}, WR {:.2}% em {}) {}",
-            p.champion_id,
-            p.total,
-            p.base,
-            p.wr,
-            p.games,
-            parts.join(" | ")
-        );
-    }
-    for b in picks::tier_bans(&list, &[], 5) {
-        let t = b.tier.as_ref();
-        println!(
-            "ban pela tier list: #{} +{:.3} (WR {:.2}%, PR {:.2}%, BR {:.2}%)",
-            b.champion_id,
-            b.gain,
-            t.map(|t| t.wr).unwrap_or(0.0),
-            t.map(|t| t.pr).unwrap_or(0.0),
-            t.map(|t| t.br).unwrap_or(0.0)
-        );
+    for metric in [metric::Metric::Wr, metric::Metric::Wpa] {
+        for p in picks::suggest(
+            &lane,
+            &list,
+            &candidates,
+            &enemy_inputs,
+            &mate_inputs,
+            &[],
+            5,
+            metric,
+        ) {
+            let parts: Vec<String> = p
+                .parts
+                .iter()
+                .map(|x| {
+                    format!(
+                        "{:+.2} {:?} #{} ({}, WR {:.1}%, {} partidas)",
+                        x.delta, x.kind, x.champion_id, x.lane, x.wr, x.n
+                    )
+                })
+                .collect();
+            println!(
+                "pick ({metric:?}) #{}: {:+.2} (base {:+.2}, WR {:.2}% em {}) {}",
+                p.champion_id,
+                p.total,
+                p.base,
+                p.wr,
+                p.games,
+                parts.join(" | ")
+            );
+        }
+        for b in picks::tier_bans(&list, &[], 5, metric) {
+            let t = b.tier.as_ref();
+            println!(
+                "ban pela tier list ({metric:?}): #{} +{:.3} (WR {:.2}%, PR {:.2}%, BR {:.2}%)",
+                b.champion_id,
+                b.gain,
+                t.map(|t| t.wr).unwrap_or(0.0),
+                t.map(|t| t.pr).unwrap_or(0.0),
+                t.map(|t| t.br).unwrap_or(0.0)
+            );
+        }
     }
 }

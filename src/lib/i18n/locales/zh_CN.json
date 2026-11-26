@@ -316,5 +316,22 @@
   "runeEditor.titleNew": "新建页面 · {name}",
   "runeEditor.defaultName": "页面 {n}",
   "runeEditor.nameTip": "页面名称（最多 20 个字符）；会写入客户端中的页面名称：LC: {name} <名称>",
-  "settings.ownEmptyNamed": "暂无。搜索英雄，在符文卡片上使用“{new}”（无需打开客户端）或“{copy}”：每个页面会以名称显示在 {mostPlayed} 和 {highestWr} 旁边。"
+  "settings.ownEmptyNamed": "暂无。搜索英雄，在符文卡片上使用“{new}”（无需打开客户端）或“{copy}”：每个页面会以名称显示在 {mostPlayed} 和 {highestWr} 旁边。",
+  "metric.wpaHelp": "胜率贡献（WPA）：与不做这个选择相比，你方队伍的获胜概率变化了多少（对比对象为该分路的典型英雄、去掉被禁英雄后的位置，或出装该位置的典型装备）。",
+  "metric.wrHelp": "高于平均水平的胜率点数（原始算法）。",
+  "metric.toggleLabel": "推荐指标",
+  "metric.pointsPp": "{value} 个百分点",
+  "metric.banTierWpa": "百分点（WPA）= 如果你的对线位置按选用率由其他英雄填补，你的获胜概率会提高多少；样本越少权重越低。有人声明后会切换为按队伍计算。",
+  "metric.banTeamWpa": "百分点（WPA）= 没有该英雄时你方队伍的获胜概率提高多少：其位置按选用率由该分路的其他英雄填补（样本越少权重越低）。这是统计趋势，而非对对方队伍的判断。",
+  "metric.banShortWpa": "百分点（WPA）= 没有他时获得的获胜概率（位置由其他英雄填补）。悬停查看原因。",
+  "metric.pickWpa": "百分点（WPA）= 在本次选人中，使用该英雄的获胜概率减去使用该分路典型英雄的获胜概率；每个对位和组合显示没有它时概率下降多少（样本越少权重越低）。这是统计趋势；点击只会显示出装。",
+  "metric.total": "共 {value}",
+  "metric.itemLegendWpa": "WPA = 购买该装备时的获胜概率减去该位置典型装备的获胜概率（首次回城和情况装：减去英雄胜率）；绿/红 = 相差 0.5 个百分点以上。无法去除“已经领先才买”的偏差。淡色 = 少于 {min} 场。",
+  "metric.itemsSubWpa": "WPA · 按出装位置的选用率",
+  "metric.vsSlot": "{value}（相对该位置的典型装备）",
+  "metric.vsChampion": "{value}（相对英雄胜率）",
+  "metric.setting": "禁用、选用和装备的指标",
+  "metric.optWpa": "WPA（胜率贡献）",
+  "metric.optWr": "胜率（高于平均的点数）",
+  "metric.settingTip": "WPA：与不做这个选择相比，获胜概率变化了多少；装备则与该位置的典型装备比较。WR：高于平均水平的胜率点数（原始算法）。在英雄选择期间也可以切换。"
 }

@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "Nouvelle page · {name}",
   "runeEditor.defaultName": "Page {n}",
   "runeEditor.nameTip": "Nom de la page (20 caractères max.) ; il entre dans le nom de la page dans le client : LC: {name} <nom>",
-  "settings.ownEmptyNamed": "Aucune. Cherchez le champion et utilisez « {new} » sur la carte des runes (fonctionne sans le client ouvert) ou « {copy} » : chaque page apparaît par son nom à côté de {mostPlayed} et {highestWr}."
+  "settings.ownEmptyNamed": "Aucune. Cherchez le champion et utilisez « {new} » sur la carte des runes (fonctionne sans le client ouvert) ou « {copy} » : chaque page apparaît par son nom à côté de {mostPlayed} et {highestWr}.",
+  "metric.wpaHelp": "Probabilité de victoire ajoutée : à quel point un choix change les chances de victoire de votre équipe par rapport à ne pas le faire (le champion typique de la voie, le créneau sans le champion banni ou l'objet typique de cette position du build).",
+  "metric.wrHelp": "Points de win rate au-dessus de la moyenne (le calcul d'origine).",
+  "metric.toggleLabel": "Métrique des suggestions",
+  "metric.pointsPp": "{value} pp",
+  "metric.banTierWpa": "pp (WPA) = de combien vos chances de victoire augmentent si le créneau de votre adversaire de voie revient aux autres champions, selon leur pick rate ; les petits échantillons comptent moins. Passe au calcul par équipe dès que quelqu'un déclare.",
+  "metric.banTeamWpa": "pp (WPA) = de combien les chances de victoire de votre équipe augmentent sans ce champion : son créneau revient aux autres de cette voie, selon leur pick rate (les petits échantillons comptent moins). Tendance statistique, pas une lecture de l'autre équipe.",
+  "metric.banShortWpa": "pp (WPA) = chances de victoire gagnées sans lui (son créneau revient aux autres). Survolez pour voir pourquoi.",
+  "metric.pickWpa": "pp (WPA) = chances de victoire avec lui moins avec le champion typique de la voie, dans ce draft ; chaque affrontement et duo montre de combien elles baissent sans lui (les petits échantillons comptent moins). Tendance statistique ; cliquer affiche seulement le build.",
+  "metric.total": "{value} au total",
+  "metric.itemLegendWpa": "WPA = chances de victoire avec l'objet moins avec l'objet typique de cette position (premier retour et situationnels : moins le WR du champion) ; vert/rouge = ≥0,5 pp. N'élimine pas le biais d'acheter parce qu'on gagne déjà. Estompé = moins de {min} parties.",
+  "metric.itemsSubWpa": "WPA · PR par position dans le build",
+  "metric.vsSlot": "{value} par rapport à l'objet typique de la position",
+  "metric.vsChampion": "{value} par rapport au WR du champion",
+  "metric.setting": "Métrique des bans, picks et objets",
+  "metric.optWpa": "WPA (probabilité de victoire ajoutée)",
+  "metric.optWr": "Win rate (points au-dessus de la moyenne)",
+  "metric.settingTip": "WPA : à quel point un choix change les chances de victoire par rapport à ne pas le faire ; pour les objets, par rapport à l'objet typique de cette position. WR : points de win rate au-dessus de la moyenne (le calcul d'origine). Modifiable aussi pendant la sélection."
 }

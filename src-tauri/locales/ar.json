@@ -88,5 +88,6 @@
   "update.failed": "فشل التحديث: {error}",
   "item.unknown": "العنصر {id}",
   "own.pageGone": "هذه الصفحة لم تعد موجودة",
-  "own.defaultName": "الصفحة {n}"
+  "own.defaultName": "الصفحة {n}",
+  "metric.pp": "نقطة مئوية"
 }

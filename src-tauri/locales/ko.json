@@ -83,5 +83,6 @@
   "update.failed": "업데이트 실패: {error}",
   "item.unknown": "아이템 {id}",
   "own.pageGone": "이 페이지는 더 이상 없습니다",
-  "own.defaultName": "페이지 {n}"
+  "own.defaultName": "페이지 {n}",
+  "metric.pp": "%p"
 }

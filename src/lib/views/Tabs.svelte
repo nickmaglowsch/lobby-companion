@@ -8,6 +8,8 @@
   import Notices from "./parts/Notices.svelte";
   import BanList from "./parts/BanList.svelte";
   import PickList from "./parts/PickList.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
+  import { banShort } from "$lib/metric";
   import RunePage from "./parts/RunePage.svelte";
   import SkillGrid from "./parts/SkillGrid.svelte";
   import Item from "./parts/Item.svelte";
@@ -77,7 +79,7 @@
     {#if tab === "draft"}
       <div class="two">
         <section>
-          <h2>{t("views.bans")} {#if bans?.loading}<span class="muted">{t("common.calculating")}</span>{/if}</h2>
+          <h2>{t("views.bans")} {#if bans}<MetricToggle />{/if} {#if bans?.loading}<span class="muted">{t("common.calculating")}</span>{/if}</h2>
           {#if bans}
             <div class="bans">
               <div>
@@ -89,7 +91,7 @@
                 {#if bans.lanePicks.length}<BanList list={bans.lanePicks} />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
               </div>
             </div>
-            <p class="muted small">{t("vTabs.ptsHint")}</p>
+            <p class="muted small">{banShort(bans.metric)}</p>
           {:else}
             <p class="muted small">{t("vTabs.bansLater")}</p>
           {/if}
@@ -97,7 +99,7 @@
         <section>
           {#if app.snap?.inChampSelect && app.snap.picks}
             {@const laneLabel = LANES[app.snap.picks.lane ?? ""]}
-            <h2>{laneLabel ? t("vTabs.pickFor", { lane: laneLabel }) : t("vTabs.pickForPosition")}</h2>
+            <h2>{laneLabel ? t("vTabs.pickFor", { lane: laneLabel }) : t("vTabs.pickForPosition")} <MetricToggle /></h2>
             <PickList variant="detailed" />
           {/if}
           {#if app.snap?.synergy?.lines.length}
@@ -117,11 +119,11 @@
     {:else if tab === "build"}
       <div class="two">
         <section>
-          <h2>{t("common.items")}</h2>
+          <h2>{t("common.items")} <MetricToggle /></h2>
           {#if b.startSets[0]}
             <div class="irow"><span class="lbl">{t("common.start")}</span>
               <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
-              <span class="small">{pct(b.startSets[0].wr)}</span></div>
+              <span class="small">{app.startText(0)}</span></div>
           {/if}
           {#if firstBack(b, app.assets, app.minGames).length}
             <div class="irow"><span class="lbl">{t("common.firstBack")}</span>
@@ -130,19 +132,19 @@
           {#if core}
             <div class="irow"><span class="lbl">{t("common.core")}</span>
               <div class="icons">{#each core.ids as id (id)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
-              <span class="small">{pct(core.combo.wr)}</span></div>
+              <span class="small">{app.coreText(core.combo)}</span></div>
           {/if}
           <div class="slots">
             {#each [[t("common.boots"), b.boots], [t("common.itemN", { n: 4 }), b.slots[3] ?? []], [t("common.itemN", { n: 5 }), b.slots[4] ?? []]] as const as [label, list] (label)}
               <div class="slot">
                 <span class="lbl">{label}</span>
-                <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} size={26} />{/each}</div>
+                <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} from={list} size={26} />{/each}</div>
               </div>
             {/each}
           </div>
-          {#if situationalItems(b, app.assets, app.minGames).length}
+          {#if situationalItems(b, app.assets, app.minGames, app.metric).length}
             <div class="irow"><span class="lbl">{t("common.situationalShort")}</span>
-              <div class="icons">{#each situationalItems(b, app.assets, app.minGames) as it (it.id)}<Item {it} size={26} />{/each}</div></div>
+              <div class="icons">{#each situationalItems(b, app.assets, app.minGames, app.metric) as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={26} />{/each}</div></div>
           {/if}
         </section>
         <section>

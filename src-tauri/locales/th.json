@@ -83,5 +83,6 @@
   "update.failed": "อัปเดตไม่สำเร็จ: {error}",
   "item.unknown": "ไอเทม {id}",
   "own.pageGone": "หน้านี้ไม่มีแล้ว",
-  "own.defaultName": "หน้า {n}"
+  "own.defaultName": "หน้า {n}",
+  "metric.pp": "จุด%"
 }

@@ -9,6 +9,8 @@
   } from "./api";
   import Synergy from "./Synergy.svelte";
   import { t } from "./i18n/index.svelte";
+  import MetricToggle from "./views/parts/MetricToggle.svelte";
+  import { gainText, pickExplain } from "./metric";
 
   let { advice, synergy, assets, locked, onPick }: {
     advice: PickAdvice | null;
@@ -32,6 +34,7 @@
 <section class="card">
   <div class="card-head">
     <h2>{t("pickSuggest.title")}</h2>
+    <MetricToggle />
     {#if advice?.loading}<span class="muted small">{t("common.calculating")}</span>{/if}
     {#if locked && advice?.suggestions.length}
       <button class="link small" onclick={() => (open = !open)}>{open ? t("pickSuggest.hide") : t("pickSuggest.show")}</button>
@@ -57,7 +60,7 @@
         <div class="body">
           <div>
             <b>{name(s.championId)}</b>
-            <span class="total" class:up={s.total >= 0} class:down={s.total < 0}>{t("lib.points", { value: pts(s.total) })}</span>
+            <span class="total" class:up={s.total >= 0} class:down={s.total < 0}>{gainText(advice?.metric, pts(s.total))}</span>
             {#if s.mastery !== null}<span class="muted small">· {t("pickSuggest.mastery", { points: s.mastery })}</span>{/if}
           </div>
           <div class="part muted small">{t("pickSuggest.base", { base: pts(s.base), wr: pct(s.wr), count: s.games })}</div>
@@ -74,7 +77,7 @@
   {#if advice?.note}<p class="muted small">{advice.note}</p>{/if}
   {#if showList && advice?.suggestions.length}
     <p class="muted small">
-      {t("pickSuggest.footnote")}
+      {pickExplain(advice.metric)}
       {#if advice.pageUrl}<button class="link small" onclick={() => openUrl(advice!.pageUrl!)}>{t("pickSuggest.tierListLink")}</button>{/if}
     </p>
   {/if}

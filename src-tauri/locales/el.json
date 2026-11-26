@@ -84,5 +84,6 @@
   "update.failed": "η ενημέρωση απέτυχε: {error}",
   "item.unknown": "αντικείμενο {id}",
   "own.pageGone": "αυτή η σελίδα δεν υπάρχει πια",
-  "own.defaultName": "Σελίδα {n}"
+  "own.defaultName": "Σελίδα {n}",
+  "metric.pp": "π.μ."
 }

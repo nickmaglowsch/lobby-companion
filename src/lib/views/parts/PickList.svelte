@@ -4,6 +4,7 @@
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
   import { signed } from "./fmt";
+  import { gainText, pickExplain } from "$lib/metric";
 
   let { variant = "rows", max = 5 }: { variant?: "rows" | "detailed" | "cards"; max?: number } = $props();
   const advice = $derived(app.snap?.picks ?? null);
@@ -13,7 +14,13 @@
       delta: signed(p.delta), name: app.champName(p.championId), lane: LANES[p.lane] ?? p.lane, wr: pct(p.wr), count: p.n,
     });
   const why = (s: PickSuggestion) =>
-    [t("pickList.base", { delta: signed(s.base), wr: pct(s.wr), count: s.games }), ...s.parts.map(partText)].join("\n");
+    [
+      t("metric.total", { value: gainText(advice?.metric, signed(s.total)) }),
+      t("pickList.base", { delta: signed(s.base), wr: pct(s.wr), count: s.games }),
+      ...s.parts.map(partText),
+      "",
+      pickExplain(advice?.metric),
+    ].join("\n");
   const best = (s: PickSuggestion) => [...s.parts].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
   const pick = (id: number) => app.lookup(id, advice?.lane ?? null);
 </script>

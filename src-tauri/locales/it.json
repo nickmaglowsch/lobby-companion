@@ -84,5 +84,6 @@
   "update.failed": "l'aggiornamento non è riuscito: {error}",
   "item.unknown": "oggetto {id}",
   "own.pageGone": "questa pagina non esiste più",
-  "own.defaultName": "Pagina {n}"
+  "own.defaultName": "Pagina {n}",
+  "metric.pp": "pp"
 }

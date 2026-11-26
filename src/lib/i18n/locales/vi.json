@@ -316,5 +316,22 @@
   "runeEditor.titleNew": "Trang mới · {name}",
   "runeEditor.defaultName": "Trang {n}",
   "runeEditor.nameTip": "Tên trang (tối đa 20 ký tự); sẽ nằm trong tên trang ở client: LC: {name} <tên>",
-  "settings.ownEmptyNamed": "Chưa có. Tìm tướng và dùng \"{new}\" trên thẻ ngọc (không cần mở client) hoặc \"{copy}\": mỗi trang hiện theo tên cạnh {mostPlayed} và {highestWr}."
+  "settings.ownEmptyNamed": "Chưa có. Tìm tướng và dùng \"{new}\" trên thẻ ngọc (không cần mở client) hoặc \"{copy}\": mỗi trang hiện theo tên cạnh {mostPlayed} và {highestWr}.",
+  "metric.wpaHelp": "Xác suất thắng tăng thêm (WPA): một lựa chọn thay đổi khả năng thắng của đội bạn bao nhiêu so với khi không chọn (tướng điển hình của đường, vị trí khi không có tướng bị cấm, hoặc trang bị điển hình ở vị trí đó của build).",
+  "metric.wrHelp": "Điểm tỉ lệ thắng trên mức trung bình (cách tính ban đầu).",
+  "metric.toggleLabel": "Chỉ số gợi ý",
+  "metric.pointsPp": "{value} điểm %",
+  "metric.banTierWpa": "điểm % (WPA) = khả năng thắng của bạn tăng bao nhiêu nếu vị trí đối thủ cùng đường thuộc về các tướng khác, theo tỉ lệ chọn; mẫu nhỏ được tính ít hơn. Chuyển sang cách tính theo đội khi có người khai báo.",
+  "metric.banTeamWpa": "điểm % (WPA) = khả năng thắng của đội tăng bao nhiêu khi không có tướng này: vị trí của họ thuộc về các tướng khác ở đường đó, theo tỉ lệ chọn (mẫu nhỏ được tính ít hơn). Xu hướng thống kê, không phải đọc vị đội kia.",
+  "metric.banShortWpa": "điểm % (WPA) = khả năng thắng có được khi không có tướng này (vị trí thuộc về tướng khác). Di chuột để xem lý do.",
+  "metric.pickWpa": "điểm % (WPA) = khả năng thắng với tướng này trừ khả năng thắng với tướng điển hình của đường, trong lượt chọn này; mỗi cặp đấu và bộ đôi cho thấy khả năng giảm bao nhiêu khi không có nó (mẫu nhỏ được tính ít hơn). Xu hướng thống kê; nhấp chỉ hiển thị build.",
+  "metric.total": "tổng {value}",
+  "metric.itemLegendWpa": "WPA = khả năng thắng với trang bị trừ khả năng thắng với trang bị điển hình ở vị trí đó (lần về nhà đầu và trang bị tình huống: trừ tỉ lệ thắng của tướng); xanh/đỏ = ≥0,5 điểm %. Không loại bỏ thiên lệch mua vì đang thắng sẵn. Mờ = ít hơn {min} trận.",
+  "metric.itemsSubWpa": "WPA · PR theo vị trí trong build",
+  "metric.vsSlot": "{value} so với trang bị điển hình của vị trí",
+  "metric.vsChampion": "{value} so với tỉ lệ thắng của tướng",
+  "metric.setting": "Chỉ số cho cấm, chọn và trang bị",
+  "metric.optWpa": "WPA (xác suất thắng tăng thêm)",
+  "metric.optWr": "Tỉ lệ thắng (điểm trên trung bình)",
+  "metric.settingTip": "WPA: một lựa chọn thay đổi khả năng thắng bao nhiêu so với khi không chọn; với trang bị, so với trang bị điển hình ở vị trí đó. WR: điểm tỉ lệ thắng trên trung bình (cách tính ban đầu). Có thể đổi trong lúc chọn tướng."
 }

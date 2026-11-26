@@ -85,5 +85,6 @@
   "update.failed": "aktualizace selhala: {error}",
   "item.unknown": "předmět {id}",
   "own.pageGone": "tato stránka už neexistuje",
-  "own.defaultName": "Stránka {n}"
+  "own.defaultName": "Stránka {n}",
+  "metric.pp": "p.b."
 }

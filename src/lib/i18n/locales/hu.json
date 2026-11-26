@@ -344,5 +344,22 @@
   "runeEditor.titleNew": "Új oldal · {name}",
   "runeEditor.defaultName": "{n}. oldal",
   "runeEditor.nameTip": "Az oldal neve (legfeljebb 20 karakter); bekerül a kliensbeli oldal nevébe: LC: {name} <név>",
-  "settings.ownEmptyNamed": "Nincs. Keresd meg a hőst, és használd a rúnakártyán a(z) „{new}” (kliens nélkül is működik) vagy a(z) „{copy}” gombot: minden oldal a nevével jelenik meg a(z) {mostPlayed} és {highestWr} mellett."
+  "settings.ownEmptyNamed": "Nincs. Keresd meg a hőst, és használd a rúnakártyán a(z) „{new}” (kliens nélkül is működik) vagy a(z) „{copy}” gombot: minden oldal a nevével jelenik meg a(z) {mostPlayed} és {highestWr} mellett.",
+  "metric.wpaHelp": "Hozzáadott győzelmi valószínűség: mennyit változtat egy döntés a csapatod győzelmi esélyén ahhoz képest, ha nem hoznád meg (a sáv tipikus bajnoka, a hely a kitiltott bajnok nélkül, vagy a build adott pozíciójának tipikus tárgya).",
+  "metric.wrHelp": "Átlag feletti win rate pontok (az eredeti számítás).",
+  "metric.toggleLabel": "Javaslatok mérőszáma",
+  "metric.pointsPp": "{value} %pont",
+  "metric.banTierWpa": "%pont (WPA) = mennyivel nő a győzelmi esélyed, ha a sávellenfeled helye a többi bajnokra jut, pick rate szerint; a kis minták kevesebbet számítanak. Csapat szerinti számításra vált, amint valaki jelez.",
+  "metric.banTeamWpa": "%pont (WPA) = mennyivel nő a csapatod győzelmi esélye e bajnok nélkül: a helye a sáv többi bajnokára jut, pick rate szerint (a kis minták kevesebbet számítanak). Statisztikai tendencia, nem a másik csapat kiolvasása.",
+  "metric.banShortWpa": "%pont (WPA) = nélküle nyert győzelmi esély (a helye a többiekre jut). Vidd fölé az egeret a részletekért.",
+  "metric.pickWpa": "%pont (WPA) = győzelmi esély vele mínusz a sáv tipikus bajnokával, ebben a draftban; minden párharc és duó mutatja, mennyit csökken nélküle (a kis minták kevesebbet számítanak). Statisztikai tendencia; a kattintás csak a buildet mutatja.",
+  "metric.total": "összesen {value}",
+  "metric.itemLegendWpa": "WPA = győzelmi esély a tárggyal mínusz a pozíció tipikus tárgyával (első visszatérés és helyzeti tárgyak: mínusz a bajnok WR-je); zöld/piros = ≥0,5 %pont. Nem szűri ki, hogy azért veszik, mert már nyerésre állnak. Halvány = {min} meccsnél kevesebb.",
+  "metric.itemsSubWpa": "WPA · PR a build pozíciói szerint",
+  "metric.vsSlot": "{value} a pozíció tipikus tárgyához képest",
+  "metric.vsChampion": "{value} a bajnok WR-jéhez képest",
+  "metric.setting": "Kitiltások, választások és tárgyak mérőszáma",
+  "metric.optWpa": "WPA (hozzáadott győzelmi valószínűség)",
+  "metric.optWr": "Win rate (átlag feletti pontok)",
+  "metric.settingTip": "WPA: mennyit változtat egy döntés a győzelmi esélyen ahhoz képest, ha nem hoznád meg; tárgyaknál a pozíció tipikus tárgyához képest. WR: átlag feletti win rate pontok (az eredeti számítás). A választás közben is átállítható."
 }
