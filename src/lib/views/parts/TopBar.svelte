@@ -4,20 +4,21 @@
   import type { Snippet } from "svelte";
   import { PHASES } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import Search from "./Search.svelte";
 
   let { children, status = true, searchWidth = 130 }: { children?: Snippet; status?: boolean; searchWidth?: number } = $props();
 </script>
 
 <header>
-  <span class="dot" class:on={app.snap?.connected} title={app.snap?.connected ? "Cliente conectado" : "Cliente do League fechado"}></span>
+  <span class="dot" class:on={app.snap?.connected} title={app.snap?.connected ? t("topBar.connected") : t("common.clientClosedLong")}></span>
   {#if status}
-    <span class="phase">{#if !app.snap?.connected}Cliente fechado{:else}{PHASES[app.snap.phase] ?? app.snap.phase}{/if}</span>
+    <span class="phase">{#if !app.snap?.connected}{t("common.clientClosed")}{:else}{PHASES[app.snap.phase] ?? app.snap.phase}{/if}</span>
   {/if}
   {@render children?.()}
   <span class="grow"></span>
   <Search width={searchWidth} />
-  <button class="icon" title="Configurações" onclick={() => (app.settingsOpen = true)}>⚙</button>
+  <button class="icon" title={t("parts.settings")} onclick={() => (app.settingsOpen = true)}>⚙</button>
 </header>
 
 <style>

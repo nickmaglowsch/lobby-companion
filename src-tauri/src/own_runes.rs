@@ -66,7 +66,7 @@ impl OwnPage {
         saved_at: u64,
     ) -> Result<Self, String> {
         if perks.len() != 9 || perks.contains(&0) || primary_style <= 0 || sub_style <= 0 {
-            return Err("escolha as 9 runas da página".into());
+            return Err(crate::t!("own.pickNine"));
         }
         Ok(Self::new(primary_style, sub_style, perks, saved_at))
     }
@@ -74,7 +74,7 @@ impl OwnPage {
     /// Lê a página atual do cliente (o nome dela vira o nome sugerido). Recusa página incompleta.
     pub fn from_client(page: &Value, saved_at: u64) -> Result<Self, String> {
         if page.get("isValid").and_then(Value::as_bool) == Some(false) {
-            return Err("a página atual do cliente está incompleta".into());
+            return Err(crate::t!("own.clientIncomplete"));
         }
         let style = |k: &str| page.get(k).and_then(Value::as_i64).unwrap_or(0);
         let perks: Vec<i64> = page
@@ -84,7 +84,7 @@ impl OwnPage {
             .unwrap_or_default();
         let (primary_style, sub_style) = (style("primaryStyleId"), style("subStyleId"));
         if perks.len() != 9 || perks.contains(&0) || primary_style <= 0 || sub_style <= 0 {
-            return Err("a página atual do cliente está incompleta".into());
+            return Err(crate::t!("own.clientIncomplete"));
         }
         let mut p = Self::new(primary_style, sub_style, perks, saved_at);
         p.name = page
@@ -97,13 +97,13 @@ impl OwnPage {
 
     /// Confere a página contra as runas do cliente (um patch pode trocar runas).
     pub fn check(&self, assets: &Assets) -> Result<(), String> {
-        const STALE: &str = "a sua página tem runas que não existem mais: salve de novo";
+        let stale = || crate::t!("own.stale");
         let style = |id: i64| assets.styles.iter().find(|s| s.id == id);
         let (Some(pri), Some(sub)) = (style(self.primary_style), style(self.sub_style)) else {
-            return Err(STALE.into());
+            return Err(stale());
         };
         if self.perks.len() != 9 || pri.id == sub.id {
-            return Err(STALE.into());
+            return Err(stale());
         }
         // Primária: keystone e uma runa de cada fileira, na ordem.
         let primary_ok =
@@ -120,7 +120,7 @@ impl OwnPage {
             .all(|(p, row)| row.contains(p))
             && assets.shard_slots.len() >= 3;
         if !primary_ok || !secondary_ok || !shards_ok {
-            return Err(STALE.into());
+            return Err(stale());
         }
         Ok(())
     }
@@ -212,13 +212,13 @@ impl OwnPages {
             let mut c = ChampionPages::default();
             for (i, (lane, p)) in lanes.into_iter().enumerate() {
                 let id = i as u32 + 1;
-                let label = champselect::lane_label(&lane);
+                let label = champselect::lane_label(crate::i18n::Lang::current(), &lane);
                 c.pages.push(OwnPage {
                     id,
                     name: if label.is_empty() {
-                        format!("Página {id}")
+                        crate::t!("own.defaultName", n = id)
                     } else {
-                        label.to_string()
+                        label
                     },
                     primary_style: p.primary_style,
                     sub_style: p.sub_style,
@@ -274,7 +274,7 @@ impl OwnPages {
         if page.name.is_empty() {
             page.name = match existing {
                 Some(i) => c.pages[i].name.clone(),
-                None => format!("Página {}", c.pages.len() + 1),
+                None => crate::t!("own.defaultName", n = c.pages.len() + 1),
             };
         }
         match existing {
@@ -474,7 +474,7 @@ mod tests {
         assert_eq!((a, b), (1, 2));
         assert_eq!(
             pages.get(103, 2).unwrap().name,
-            "Página 2",
+            crate::t!("own.defaultName", n = 2),
             "sem nome: padrão"
         );
         assert_eq!(
@@ -565,6 +565,8 @@ mod tests {
         jg["active"] = json!(false);
         let v1 = json!({"pages": {"103": {"top": top, "middle": mid}, "31": {"jungle": jg}}});
         let got = OwnPages::from_value(&v1);
+        // As páginas antigas ganham o nome da lane no idioma do app.
+        let label = |l: &str| champselect::lane_label(crate::i18n::Lang::current(), l);
         assert_eq!(got.version, 2);
         let ahri = &got.champions[&103];
         // lanes em ordem alfabética: middle (1), top (2)
@@ -573,11 +575,11 @@ mod tests {
                 .iter()
                 .map(|p| p.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["Meio", "Topo"]
+            vec![label("middle"), label("top")]
         );
         assert_eq!(ahri.active, Some(1), "a ativa continua escolhida");
         assert_eq!(got.champions[&31].active, None);
-        assert_eq!(got.champions[&31].pages[0].name, "Selva");
+        assert_eq!(got.champions[&31].pages[0].name, label("jungle"));
         assert_eq!(got.champions[&31].pages[0].saved_at, 5);
         assert_eq!(
             OwnPages::from_value(&json!({"pages": 3})),

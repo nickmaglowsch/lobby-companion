@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { championIcon, icon, pct, num, type DamageType, type TeamMix } from "./api";
+  import { championIcon, icon, pct, type DamageType, type TeamMix } from "./api";
   import { app } from "./app.svelte";
+  import { t } from "./i18n/index.svelte";
 
   // Composição de dano dos dois times (tipo de dano do próprio cliente) e, quando o inimigo
   // concentra um tipo, os itens de armadura/resistência mágica do seu build. Só exibição.
@@ -10,11 +11,7 @@
   const enemies = $derived(app.snap?.enemyPicks ?? []);
   const assets = $derived(app.assets);
 
-  const LABEL: Record<DamageType, [string, string]> = {
-    physical: ["físico", "físicos"],
-    magic: ["mágico", "mágicos"],
-    mixed: ["misto", "mistos"],
-  };
+  const typeName = (k: DamageType) => t(`composition.${k}`);
   const champName = (id: number) => assets?.champions[id]?.name ?? `#${id}`;
 
   function describe(m: TeamMix): string {
@@ -22,15 +19,15 @@
       .map((k) => [k, m[k]] as const)
       .filter(([, n]) => n > 0)
       .sort((x, y) => y[1] - x[1])
-      .map(([k, n]) => `${n} ${LABEL[k][n === 1 ? 0 : 1]}`);
-    return parts.length ? parts.join(", ") : "—";
+      .map(([k, n]) => t(`composition.${k}Count`, { count: n }));
+    return parts.length ? parts.join(t("lib.listSep")) : "—";
   }
 
   const teams = $derived(
     comp
       ? ([
-          ["Seu time", allies, comp.allies],
-          ["Time inimigo", enemies, comp.enemies],
+          [t("composition.allies"), allies, comp.allies],
+          [t("composition.enemies"), enemies, comp.enemies],
         ] as [string, number[], TeamMix][]).filter(([, ids]) => ids.length > 0)
       : [],
   );
@@ -38,19 +35,19 @@
 
 {#if comp && teams.length}
   <section class="card">
-    <h2>Composição</h2>
+    <h2>{t("composition.title")}</h2>
     {#each teams as [label, ids, mix] (label)}
       <div class="team">
-        <span class="label">{label}:</span>
+        <span class="label">{label}</span>
         <span class="icons">
           {#each ids as id (id)}
             <img class={comp.types[id] ?? "unknown"} src={championIcon(id)} alt={champName(id)}
-              title="{champName(id)} · {comp.types[id] ? LABEL[comp.types[id]][0] : 'tipo de dano desconhecido'}" />
+              title="{champName(id)} · {comp.types[id] ? typeName(comp.types[id]) : t('composition.unknownType')}" />
           {/each}
         </span>
         <span>{describe(mix)}</span>
         {#if mix.physical + mix.magic + mix.mixed > 0}
-          <span class="bar" title="Físico {Math.round(mix.physicalShare * 100)}% · mágico {Math.round(mix.magicShare * 100)}% (misto conta metade para cada)">
+          <span class="bar" title={t("composition.barTitle", { physical: Math.round(mix.physicalShare * 100), magic: Math.round(mix.magicShare * 100) })}>
             <span class="physical" style="width: {mix.physicalShare * 100}%"></span>
             <span class="magic" style="width: {mix.magicShare * 100}%"></span>
           </span>
@@ -59,10 +56,10 @@
     {/each}
     {#if comp.need && comp.items.length}
       <div class="def">
-        <span class="muted small">{comp.need === "armor" ? "Armadura" : "Resistência mágica"} no seu build:</span>
+        <span class="muted small">{comp.need === "armor" ? t("composition.armorInBuild") : t("composition.mrInBuild")}</span>
         {#each comp.items as it (it.id)}
           {@const item = assets?.items[it.id]}
-          <span class="item" title="{item?.name} · {it.slot} · {num(it.n)} partidas">
+          <span class="item" title="{item?.name} · {it.slot} · {t('common.games', { count: it.n })}">
             <img src={icon(item?.icon)} alt={item?.name} />
             <span>{pct(it.wr)}</span>
             <span class="muted tiny">{it.slot}</span>
@@ -71,7 +68,7 @@
       </div>
     {/if}
     {#if comp.note}<p class="small note">{comp.note}</p>{/if}
-    <p class="muted small">Tipo de dano pelo cliente do League; inimigo com ≥ 60% de um tipo destaca os itens de defesa do seu build. Nada é importado por isso.</p>
+    <p class="muted small">{t("composition.footnote")}</p>
   </section>
 {/if}
 

@@ -22,14 +22,14 @@ pub fn page_name(champion: &str, lane_label: &str) -> String {
 
 pub fn page_body(name: &str, set: &RuneSet, assets: &Assets) -> Result<Value, String> {
     if !set.is_complete() {
-        return Err("página de runas incompleta no lolalytics".into());
+        return Err(crate::t!("runes.incomplete"));
     }
     let primary = assets
         .style_of_perk(set.primary[0], None)
-        .ok_or("árvore primária desconhecida (cliente desatualizado?)")?;
+        .ok_or_else(|| crate::t!("runes.unknownPrimary"))?;
     let sub = assets
         .secondary_style(&set.secondary, primary)
-        .ok_or("árvore secundária desconhecida")?;
+        .ok_or_else(|| crate::t!("runes.unknownSecondary"))?;
     Ok(body(name, primary, sub, set.selected_perk_ids()))
 }
 
@@ -134,7 +134,7 @@ pub async fn apply(lcu: &Lcu, body: &Value, replace_current: bool) -> Result<Str
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        return Ok("página já estava aplicada".to_string());
+        return Ok(crate::t!("runes.already"));
     }
     let inventory = lcu
         .get("/lol-perks/v1/inventory")
@@ -142,17 +142,19 @@ pub async fn apply(lcu: &Lcu, body: &Value, replace_current: bool) -> Result<Str
         .map_err(|e| e.to_string())?;
     let msg = match plan(&pages, &inventory, replace_current) {
         Plan::ReplaceOurs(id) => {
-            lcu.delete(&format!("/lol-perks/v1/pages/{id}")).await.map_err(|e| e.to_string())?;
-            "página atualizada"
+            lcu.delete(&format!("/lol-perks/v1/pages/{id}"))
+                .await
+                .map_err(|e| e.to_string())?;
+            crate::t!("runes.updated")
         }
-        Plan::Create => "página criada",
+        Plan::Create => crate::t!("runes.created"),
         Plan::ReplaceCurrent(id) => {
-            lcu.delete(&format!("/lol-perks/v1/pages/{id}")).await.map_err(|e| e.to_string())?;
-            "página atual substituída"
+            lcu.delete(&format!("/lol-perks/v1/pages/{id}"))
+                .await
+                .map_err(|e| e.to_string())?;
+            crate::t!("runes.replaced")
         }
-        Plan::NoRoom => {
-            return Err("sem espaço para página de runas: apague uma página ou ative \"substituir a página atual\"".into())
-        }
+        Plan::NoRoom => return Err(crate::t!("runes.noRoom")),
     };
     let created = lcu
         .post("/lol-perks/v1/pages", body)

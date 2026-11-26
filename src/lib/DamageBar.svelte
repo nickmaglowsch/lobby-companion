@@ -1,5 +1,6 @@
 <script lang="ts">
   import { num, type Damage } from "./api";
+  import { t } from "./i18n/index.svelte";
 
   // Perfil de dano do campeão (dano médio por partida no lolalytics).
   let { damage }: { damage: Damage | null } = $props();
@@ -9,15 +10,15 @@
     const total = damage.physical + damage.magic + damage.true;
     if (total <= 0) return [];
     return [
-      { key: "phys", label: "Físico", value: damage.physical },
-      { key: "magic", label: "Mágico", value: damage.magic },
-      { key: "true", label: "Verdadeiro", value: damage.true },
+      { key: "phys", label: t("damageBar.physical"), value: damage.physical },
+      { key: "magic", label: t("damageBar.magic"), value: damage.magic },
+      { key: "true", label: t("damageBar.true"), value: damage.true },
     ].map((p) => ({ ...p, share: (p.value / total) * 100 }));
   });
 </script>
 
 {#if parts.length}
-  <div class="dmg" title={parts.map((p) => `${p.label}: ${num(Math.round(p.value))} por partida`).join(" · ")}>
+  <div class="dmg" title={parts.map((p) => t("damageBar.perGame", { type: p.label, value: num(Math.round(p.value)) })).join(" · ")}>
     <div class="bar">
       {#each parts as p (p.key)}
         {#if p.share > 0}<span class={p.key} style="width: {p.share}%"></span>{/if}
@@ -25,7 +26,7 @@
     </div>
     <div class="legend">
       {#each parts as p (p.key)}
-        <span><i class={p.key}></i>{p.label} {Math.round(p.share)}%</span>
+        <span><i class={p.key}></i>{t("damageBar.share", { type: p.label, share: Math.round(p.share) })}</span>
       {/each}
     </div>
   </div>

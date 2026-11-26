@@ -1,24 +1,27 @@
 <script lang="ts">
   // Sugestões de pick compactas. Clicar só mostra o build na janela (não muda nada no cliente).
-  import { championIcon, pct, num, LANES, type PickPart, type PickSuggestion } from "$lib/api";
+  import { championIcon, pct, LANES, type PickPart, type PickSuggestion } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import { signed } from "./fmt";
 
   let { variant = "rows", max = 5 }: { variant?: "rows" | "detailed" | "cards"; max?: number } = $props();
   const advice = $derived(app.snap?.picks ?? null);
   const list = $derived((advice?.suggestions ?? []).slice(0, max));
   const partText = (p: PickPart) =>
-    `${signed(p.delta)} ${p.kind === "counter" ? "contra" : "com"} ${app.champName(p.championId)} (${LANES[p.lane] ?? p.lane}) · ${pct(p.wr)} · ${num(p.n)} partidas`;
+    t(p.kind === "counter" ? "pickList.partCounter" : "pickList.partSynergy", {
+      delta: signed(p.delta), name: app.champName(p.championId), lane: LANES[p.lane] ?? p.lane, wr: pct(p.wr), count: p.n,
+    });
   const why = (s: PickSuggestion) =>
-    [`${signed(s.base)} força na lane · ${pct(s.wr)} em ${num(s.games)} partidas`, ...s.parts.map(partText)].join("\n");
+    [t("pickList.base", { delta: signed(s.base), wr: pct(s.wr), count: s.games }), ...s.parts.map(partText)].join("\n");
   const best = (s: PickSuggestion) => [...s.parts].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
   const pick = (id: number) => app.lookup(id, advice?.lane ?? null);
 </script>
 
 {#if advice?.loading && !list.length}
-  <p class="muted small">calculando…</p>
+  <p class="muted small">{t("common.calculating")}</p>
 {:else if !list.length}
-  <p class="muted small">{advice?.note ?? "Sem sugestões ainda."}</p>
+  <p class="muted small">{advice?.note ?? t("pickList.none")}</p>
 {:else if variant === "cards"}
   <div class="cards">
     {#each list as s, i (s.championId)}
@@ -26,7 +29,7 @@
         <img src={championIcon(s.championId)} alt="" />
         <b>{app.champName(s.championId)}</b>
         <span class="score" class:up={s.total >= 0} class:down={s.total < 0}>{signed(s.total)}</span>
-        <span class="muted small">{pct(s.wr)}{s.mastery !== null ? ` · ${Math.round(s.mastery / 1000)}k pts` : ""}</span>
+        <span class="muted small">{pct(s.wr)}{s.mastery !== null ? ` · ${t("pickList.mastery", { k: Math.round(s.mastery / 1000) })}` : ""}</span>
         <span class="parts">
           {#each s.parts.slice(0, 3) as p, j (j)}
             <span class:up={p.delta > 0} class:down={p.delta < 0}><img src={championIcon(p.championId)} alt="" />{signed(p.delta)}</span>
@@ -50,7 +53,7 @@
             {/each}
           </span>
         {:else if b}
-          <span class="muted small">{b.kind === "counter" ? "contra" : "com"} {app.champName(b.championId)} {signed(b.delta)}</span>
+          <span class="muted small">{t(b.kind === "counter" ? "pickList.bestCounter" : "pickList.bestSynergy", { name: app.champName(b.championId), delta: signed(b.delta) })}</span>
         {/if}
       </span>
     </button>
@@ -59,7 +62,7 @@
 
 <style>
   button { font: inherit; color: inherit; cursor: pointer; }
-  .row { display: flex; gap: 8px; align-items: center; width: 100%; padding: 3px 0; border: none; background: none; text-align: left; border-radius: 0; }
+  .row { display: flex; gap: 8px; align-items: center; width: 100%; padding: 3px 0; border: none; background: none; text-align: start; border-radius: 0; }
   .row > img { width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--gold-dim); }
   .row:hover > img { border-color: var(--gold); }
   .txt { display: grid; line-height: 1.25; font-size: 13px; }

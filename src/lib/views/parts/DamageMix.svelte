@@ -2,25 +2,27 @@
   // Composição de dano compacta: barra físico × mágico de cada time e a dica de defesa.
   import { championIcon, icon, pct, type TeamMix } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
 
   // mode: "full" = os dois times; "enemy" = só o inimigo e a defesa; "def" = só a dica de defesa.
   let { columns = false, mode = "full" }: { columns?: boolean; mode?: "full" | "enemy" | "def" } = $props();
   const c = $derived(app.composition);
   const teams = $derived(
     c
-      ? ([["Seu time", app.snap?.allyPicks ?? [], c.allies], ["Inimigo", app.snap?.enemyPicks ?? [], c.enemies]] as [string, number[], TeamMix][])
-          .filter(([label, ids]) => ids.length && (mode === "full" || (mode === "enemy" && label === "Inimigo")))
+      ? ([["allies", app.snap?.allyPicks ?? [], c.allies], ["enemy", app.snap?.enemyPicks ?? [], c.enemies]] as [string, number[], TeamMix][])
+          .filter(([side, ids]) => ids.length && (mode === "full" || (mode === "enemy" && side === "enemy")))
       : [],
   );
-  const share = (m: TeamMix) => `${Math.round(m.physicalShare * 100)}% físico · ${Math.round(m.magicShare * 100)}% mágico`;
+  const share = (m: TeamMix) =>
+    t("damageMix.share", { phys: Math.round(m.physicalShare * 100), mag: Math.round(m.magicShare * 100) });
 </script>
 
 {#if c && (teams.length || (mode === "def" && c.need && c.items.length))}
   <div class="mix" class:columns>
-    {#each teams as [label, ids, m] (label)}
+    {#each teams as [side, ids, m] (side)}
       <div class="team">
         <div class="lbl">
-          <span>{label}</span>
+          <span>{t(`damageMix.${side}`)}</span>
           <span class="icons">{#each ids as id (id)}<img class={c.types[id] ?? "unknown"} src={championIcon(id)} alt={app.champName(id)} title={app.champName(id)} />{/each}</span>
         </div>
         <div class="bar" title={share(m)}>
@@ -31,7 +33,7 @@
     {/each}
     {#if c.need && c.items.length}
       <div class="def">
-        <span class="muted small">{c.need === "armor" ? "Armadura" : "Resistência mágica"}:</span>
+        <span class="muted small">{c.need === "armor" ? t("damageMix.armor") : t("damageMix.magicResist")}</span>
         {#each c.items.slice(0, 3) as it (it.id)}
           <span class="d" title="{app.assets?.items[it.id]?.name} · {it.slot}">
             <img src={icon(app.assets?.items[it.id]?.icon)} alt="" />{pct(it.wr)}

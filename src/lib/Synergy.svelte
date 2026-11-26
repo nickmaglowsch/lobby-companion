@@ -1,27 +1,40 @@
 <script lang="ts">
   // Sinergia do seu campeão (escolhido ou declarado) com cada aliado declarado, pelo
   // `ep=build-team` do lolalytics: WR da dupla, o WR geral do seu campeão e a amostra.
-  import { championIcon, pct, pts, num, LANES, type Assets, type SynergyAdvice } from "./api";
+  import { championIcon, pct, pts, LANES, type Assets, type SynergyAdvice } from "./api";
+  import { t } from "./i18n/index.svelte";
 
   let { synergy, assets }: { synergy: SynergyAdvice; assets: Assets | null } = $props();
 
   const name = (id: number) => assets?.champions[id]?.name ?? `#${id}`;
+  // Frase inteira traduzida; o WR (em destaque) entra no lugar de `{wr}`.
+  function pairLine(allyId: number, lane: string, n: number): [string, string] {
+    const s = t("synergy.pair", {
+      name: name(allyId),
+      lane: LANES[lane] ?? lane,
+      base: synergy.baseWr !== null ? pct(synergy.baseWr) : "?",
+      count: n,
+    });
+    const at = s.indexOf("{wr}");
+    return at < 0 ? [s, ""] : [s.slice(0, at), s.slice(at + 4)];
+  }
 </script>
 
 <div class="synergy">
   <div class="title muted small">
     <img class="mini me" src={championIcon(synergy.championId)} alt={name(synergy.championId)} />
-    Sinergia de {name(synergy.championId)} ({LANES[synergy.lane] ?? synergy.lane}) com o time
+    {t("synergy.title", { name: name(synergy.championId), lane: LANES[synergy.lane] ?? synergy.lane })}
   </div>
   {#each synergy.lines as l (l.allyChampionId + l.lane)}
-    <div class="line small" title="Além da força geral dos dois: {pts(l.delta)} pts">
+    {@const [before, after] = pairLine(l.allyChampionId, l.lane, l.n)}
+    <div class="line small" title={t("synergy.lineTitle", { delta: pts(l.delta) })}>
       <img class="mini" src={championIcon(l.allyChampionId)} alt={name(l.allyChampionId)} />
-      você + {name(l.allyChampionId)} ({LANES[l.lane] ?? l.lane}):
+      {before}
       <b class:up={l.delta >= 1} class:down={l.delta <= -1}>{pct(l.wr)}</b>
-      <span class="muted">· geral {synergy.baseWr !== null ? pct(synergy.baseWr) : "?"} · {num(l.n)} partidas</span>
+      <span class="muted">{after}</span>
     </div>
   {:else}
-    <p class="muted small">Sem partidas suficientes com os aliados declarados.</p>
+    <p class="muted small">{t("synergy.empty")}</p>
   {/each}
 </div>
 

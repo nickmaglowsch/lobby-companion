@@ -1,6 +1,7 @@
 <script lang="ts">
   // Configurações por cima do layout (Grade, Abas e Por fase não têm rolagem para o formulário).
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import SettingsForm from "./SettingsForm.svelte";
 
   function onKey(e: KeyboardEvent) {
@@ -12,10 +13,10 @@
 
 {#if app.settingsOpen}
   <div class="backdrop" role="presentation" onclick={() => (app.settingsOpen = false)}></div>
-  <div class="dialog" role="dialog" aria-label="Configurações">
+  <div class="dialog" role="dialog" aria-label={t("parts.settings")}>
     <div class="head">
-      <h2>Configurações</h2>
-      <button class="close" onclick={() => (app.settingsOpen = false)} title="Fechar (Esc)">✕</button>
+      <h2>{t("parts.settings")}</h2>
+      <button class="close" onclick={() => (app.settingsOpen = false)} title={t("parts.closeEsc")}>✕</button>
     </div>
     <div class="body"><SettingsForm /></div>
   </div>

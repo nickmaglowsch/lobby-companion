@@ -2,8 +2,9 @@
   // Editor da página de runas própria, por cima do layout. Funciona sem o cliente do League:
   // usa a cópia dos dados da última conexão e só grava no arquivo do app (rune-pages.json).
   // O WR de cada runa (naquele lugar da página) vem do build em tela, quando há.
-  import { icon, pct, num, perkStat, ownRuneSet, type Style } from "$lib/api";
+  import { icon, pct, perkStat, ownRuneSet, type Style } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
 
   const styles = $derived(app.assets?.styles.filter((s) => s.slots.length >= 4 && s.slots[0].length) ?? []);
   const shardSlots = $derived(app.assets?.shardSlots ?? []);
@@ -73,9 +74,9 @@
   );
   const missing = $derived(
     [
-      primary.some((x) => !x) ? "uma runa de cada fileira da árvore principal" : null,
-      !sub ? "a árvore secundária" : secondary.length < 2 ? "duas runas da secundária" : null,
-      shards.some((x) => !x) ? "os 3 fragmentos" : null,
+      primary.some((x) => !x) ? t("runeEditor.missPrimary") : null,
+      !sub ? t("runeEditor.missTree") : secondary.length < 2 ? t("runeEditor.missSecondary") : null,
+      shards.some((x) => !x) ? t("runeEditor.missShards") : null,
     ].filter(Boolean).join(", "),
   );
 
@@ -86,7 +87,8 @@
   }
   function tip(id: number, i: number): string {
     const s = perkStat(app.build?.runeStats, id, i);
-    return `${perk(id)?.name ?? id}${s ? ` · WR ${pct(s.wr)} · PR ${pct(s.pr)} · ${num(s.n)} partidas` : ""}`;
+    const name = perk(id)?.name ?? String(id);
+    return s ? t("runeEditor.tip", { name, wr: pct(s.wr), pr: pct(s.pr), count: s.n }) : name;
   }
 
   async function save() {
@@ -114,15 +116,15 @@
 
 {#if app.editor}
   <div class="backdrop" role="presentation" onclick={() => (app.editor = null)}></div>
-  <div class="dialog" role="dialog" aria-label="Montar a minha página de runas">
+  <div class="dialog" role="dialog" aria-label={t("runeEditor.aria")}>
     <div class="head">
-      <h2>{editing ? "Editar página" : "Nova página"} · {app.champ?.name ?? "campeão"}</h2>
-      <input class="name" bind:value={name} maxlength="20" placeholder={editing?.name ?? `Página ${app.championPages.length + 1}`}
-        title="Nome da página (até 20 letras); vai no nome da página no cliente: LC: {app.champ?.name ?? ''} <nome>" />
-      <button class="close" onclick={() => (app.editor = null)} title="Fechar (Esc)">✕</button>
+      <h2>{t(editing ? "runeEditor.titleEdit" : "runeEditor.titleNew", { name: app.champ?.name ?? t("common.champion") })}</h2>
+      <input class="name" bind:value={name} maxlength="20" placeholder={editing?.name ?? t("runeEditor.defaultName", { n: app.championPages.length + 1 })}
+        title={t("runeEditor.nameTip", { name: app.champ?.name ?? "" })} />
+      <button class="close" onclick={() => (app.editor = null)} title={t("parts.closeEsc")}>✕</button>
     </div>
     {#if !styles.length}
-      <p class="body muted">Sem os dados das runas: abra o cliente do League uma vez com o app aberto (eles ficam guardados para depois).</p>
+      <p class="body muted">{t("runeEditor.noData")}</p>
     {:else}
       <div class="body cols">
         <section>
@@ -150,7 +152,7 @@
               <div class="row">{#each row as id (id)}{@render rune(id, 4, secondary.includes(id), () => toggleSecondary(id))}{/each}</div>
             {/each}
           {:else}
-            <p class="muted small">Escolha a árvore secundária.</p>
+            <p class="muted small">{t("runeEditor.chooseSub")}</p>
           {/if}
           <div class="shards">
             {#each shardSlots.slice(0, 3) as row, r (r)}
@@ -162,12 +164,12 @@
       <div class="foot">
         <span class="muted small">
           {#if app.ownError}<span class="bad">{app.ownError}</span>
-          {:else if !complete}Falta: {missing}.
-          {:else}Fica salva só neste computador (funciona sem o cliente aberto).{/if}
-          {#if app.build?.runeStats}WR de cada runa naquele lugar da página, no build em tela.{/if}
+          {:else if !complete}{t("runeEditor.missing", { list: missing })}
+          {:else}{t("runeEditor.localOnly")}{/if}
+          {#if app.build?.runeStats}{t("runeEditor.statsNote")}{/if}
         </span>
-        <button onclick={() => (app.editor = null)}>Cancelar</button>
-        <button class="primary" disabled={!complete || saving} onclick={save}>{saving ? "Salvando…" : "Salvar como minha"}</button>
+        <button onclick={() => (app.editor = null)}>{t("runeEditor.cancel")}</button>
+        <button class="primary" disabled={!complete || saving} onclick={save}>{saving ? t("runeEditor.saving") : t("runeEditor.save")}</button>
       </div>
     {/if}
   </div>

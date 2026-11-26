@@ -4,14 +4,12 @@ import {
   api, minGamesFor, ownRuneSet,
   type Assets, type Champion, type Composition, type OwnPage, type RuneChoice, type Settings, type Snapshot,
 } from "./api";
+import { compare, i18n, lower, setLocale, t } from "./i18n/index.svelte";
 
 export type Layout = "phase" | "grid" | "tabs" | "classic";
-export const LAYOUTS: [Layout, string][] = [
-  ["phase", "Por fase"],
-  ["grid", "Grade"],
-  ["tabs", "Abas"],
-  ["classic", "Clássico (lista)"],
-];
+/** Layouts com o nome no idioma da janela. */
+export const layouts = (): [Layout, string][] =>
+  (["phase", "grid", "tabs", "classic"] as Layout[]).map((l) => [l, t(`layout.${l}`)]);
 
 /** Etapa da seleção para os layouts de uma tela: bans → escolha → build (ou fora da seleção). */
 export type Stage = "bans" | "picks" | "build" | "idle";
@@ -38,12 +36,13 @@ class AppState {
   banBusy = $state<number | null>(null);
   banError = $state<string | null>(null);
   private compSeq = 0;
+  private savedLanguage = "";
   private compKey = "";
 
   build = $derived(this.snap?.build ?? null);
   champ = $derived(this.snap && this.assets ? this.assets.champions[this.snap.championId] : undefined);
   champions = $derived<Champion[]>(
-    this.assets ? Object.values(this.assets.champions).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) : [],
+    this.assets ? Object.values(this.assets.champions).sort((a, b) => compare(a.name, b.name)) : [],
   );
   layout = $derived<Layout>((this.settings?.layout as Layout) ?? "phase");
   /** Suas páginas do campeão em tela (cada uma vira uma opção ao lado de Mais jogada e Maior WR). */
@@ -72,18 +71,22 @@ class AppState {
   champName = (id: number) => this.assets?.champions[id]?.name ?? `#${id}`;
 
   findChampion(text: string): Champion | undefined {
-    const q = text.trim().toLocaleLowerCase("pt-BR");
+    const q = lower(text.trim());
     if (!q) return undefined;
     return (
-      this.champions.find((c) => c.name.toLocaleLowerCase("pt-BR") === q) ??
-      this.champions.find((c) => c.name.toLocaleLowerCase("pt-BR").startsWith(q))
+      this.champions.find((c) => lower(c.name) === q) ??
+      this.champions.find((c) => lower(c.name).startsWith(q))
     );
   }
 
   /** Carrega tudo e passa a ouvir o backend. Devolve a função que para de ouvir. */
   async init(): Promise<() => void> {
-    this.snap = await api.snapshot();
+    const snap = await api.snapshot();
+    // Idioma antes de qualquer texto: a tela só aparece com as configurações carregadas.
+    await setLocale(snap.locale);
+    this.snap = snap;
     this.settings = await api.settings();
+    this.savedLanguage = this.settings.language;
     this.version = await api.version();
     this.ownPages = await api.ownPages();
     await this.refreshAssets();
@@ -91,6 +94,8 @@ class AppState {
     return api.onSnapshot((s) => {
       // Seleção nova: esquece a lane de confronto escolhida na anterior.
       if (s.phase === "ChampSelect" && this.snap?.phase !== "ChampSelect") this.vsLaneChoice = null;
+      // Idioma trocado (configuração ou cliente aberto em outro idioma): carrega e só então mostra.
+      if (s.locale !== i18n.locale) setLocale(s.locale);
       this.snap = s;
       if (s.connected) this.refreshAssets();
       this.refreshComposition();
@@ -159,7 +164,14 @@ class AppState {
   }
 
   async save() {
-    if (this.settings) await api.saveSettings($state.snapshot(this.settings));
+    if (!this.settings) return;
+    await api.saveSettings($state.snapshot(this.settings));
+    // Idioma trocado: o backend também manda o locale novo no snapshot; lendo aqui, a troca
+    // aparece logo (e no navegador, onde não há evento).
+    if (this.settings.language === this.savedLanguage) return;
+    this.savedLanguage = this.settings.language;
+    const { locale } = await api.snapshot();
+    if (locale !== i18n.locale) await setLocale(locale);
   }
 
   /** Mais jogada / Maior WR / uma página sua. A troca já aparece; o backend grava e leva para o cliente. */
@@ -181,7 +193,7 @@ class AppState {
       // O cliente confirma pelo WebSocket; até lá, nada de segundo clique.
       if (this.snap) this.snap.canBan = false;
     } catch (e) {
-      this.banError = `Ban não feito: ${e}`;
+      this.banError = t("app.banFailed", { error: String(e) });
     } finally {
       this.banBusy = null;
     }
@@ -226,12 +238,12 @@ class AppState {
   }
 
   async checkUpdateNow() {
-    this.updateCheck = "Procurando…";
+    this.updateCheck = t("app.updateChecking");
     try {
       // Procurar à mão mostra o aviso de novo, mesmo se você clicou em "Depois".
       try { localStorage.removeItem("lc-update-later"); } catch { /* sem armazenamento */ }
       const u = await api.checkUpdate();
-      this.updateCheck = u ? `Versão ${u.version} disponível: veja o aviso.` : "Você está na versão mais nova.";
+      this.updateCheck = u ? t("app.updateFound", { version: u.version }) : t("app.updateNone");
     } catch (e) {
       this.updateCheck = String(e);
     }

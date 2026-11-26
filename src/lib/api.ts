@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { cdragonUrl } from "./mockIcons";
+import { t } from "./i18n/index.svelte";
 
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
@@ -131,6 +132,8 @@ export interface Snapshot {
   bans: BanAdvice | null;
   picks: PickAdvice | null;
   synergy: SynergyAdvice | null;
+  /** Idioma da janela (locale do cliente, ex. "pt_BR"): configuração, senão o do cliente, senão o do sistema. */
+  locale: string;
 }
 
 export type DamageType = "physical" | "magic" | "mixed";
@@ -180,6 +183,10 @@ export interface Settings {
   checkUpdates: boolean;
   /** "phase" | "grid" | "tabs" | "classic" */
   layout: string;
+  /** "" = automático (do cliente do League); senão um locale do cliente ("pt_BR"). */
+  language: string;
+  /** Último locale lido do cliente (`/riotclient/region-locale`), para quando ele está fechado. */
+  clientLocale: string;
 }
 
 /** Versão nova no GitHub Releases (`update.rs`). */
@@ -191,12 +198,26 @@ const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 let mockAssetsWithIcons: Promise<Assets> | undefined;
 let mockBanTurnSet = false;
+let mockLang: Promise<void> | undefined;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri) return invoke<T>(cmd, args);
   const m = await import("./mock");
   // Para ver cada layout e etapa no navegador: ?layout=phase|grid|tabs|classic&fase=bans|picks|build
   const q = new URLSearchParams(location.search);
+  // ?lang=xx_YY: idioma (como se o cliente estivesse nele); sem, pt_BR.
+  if (!mockLang) {
+    m.mockSettings.clientLocale = q.get("lang") ?? "pt_BR";
+    mockLang = m.mockLanguage(m.mockSettings.clientLocale);
+  }
+  await mockLang;
+  if (cmd === "save_settings") {
+    // Como o backend: idioma escolhido, senão o do "cliente".
+    const s = (args as { settings: Settings }).settings;
+    Object.assign(m.mockSettings, s, { clientLocale: m.mockSettings.clientLocale });
+    await m.mockLanguage(s.language || m.mockSettings.clientLocale);
+    return undefined as T;
+  }
   if (q.get("layout")) m.mockSettings.layout = q.get("layout")!;
   const fase = q.get("fase");
   if (fase) Object.assign(m.mockSnapshot, { banning: fase === "bans", locked: fase === "build" });
@@ -279,55 +300,48 @@ export function championIcon(id: number): string {
   return icon(`/lol-game-data/assets/v1/champion-icons/${id}.png`);
 }
 
-export const pct = (x: number) => `${x.toFixed(1).replace(".", ",")}%`;
-/** Pontos com sinal: "+1,20" / "−0,35". */
-export const pts = (x: number, digits = 2) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(digits).replace(".", ",")}`;
-export const num = (x: number) => x.toLocaleString("pt-BR");
+export { pct, pts, num } from "./i18n/index.svelte";
 
-export const LANES: Record<string, string> = {
-  top: "Topo",
-  jungle: "Selva",
-  middle: "Meio",
-  bottom: "Atirador",
-  support: "Suporte",
-};
-
-export const PHASES: Record<string, string> = {
-  None: "Cliente aberto",
-  Lobby: "No lobby",
-  Matchmaking: "Na fila",
-  ReadyCheck: "Partida encontrada",
-  ChampSelect: "Seleção de campeões",
-  GameStart: "Carregando",
-  InProgress: "Em partida",
-  Reconnect: "Reconectar",
-  WaitingForStats: "Fim de jogo",
-  PreEndOfGame: "Fim de jogo",
-  EndOfGame: "Fim de jogo",
-};
-
-export const TIERS: [string, string][] = [
-  ["emerald_plus", "Esmeralda+"],
-  ["platinum_plus", "Platina+"],
-  ["gold_plus", "Ouro+"],
-  ["diamond_plus", "Diamante+"],
-  ["d2_plus", "Diamante 2+"],
-  ["master_plus", "Mestre+"],
-  ["all", "Todos"],
+const LANE_IDS = ["top", "jungle", "middle", "bottom", "support"];
+const PHASE_IDS = [
+  "None", "Lobby", "Matchmaking", "ReadyCheck", "ChampSelect", "GameStart", "InProgress", "Reconnect",
+  "WaitingForStats", "PreEndOfGame", "EndOfGame",
 ];
 
-export const REGIONS: [string, string][] = [
-  ["all", "Global"],
+/** Objeto de leitura que traduz na hora (`LANES.jungle` = "Selva" em pt_BR); `undefined` fora da lista. */
+function translated(ids: string[], prefix: string): Record<string, string> {
+  return new Proxy({} as Record<string, string>, {
+    get: (_, k) => (typeof k === "string" && ids.includes(k) ? t(`${prefix}.${k}`) : undefined),
+    has: (_, k) => typeof k === "string" && ids.includes(k),
+    ownKeys: () => ids,
+    getOwnPropertyDescriptor: (_, k) =>
+      typeof k === "string" && ids.includes(k)
+        ? { enumerable: true, configurable: true, value: t(`${prefix}.${k}`) }
+        : undefined,
+  });
+}
+
+/** Nomes das lanes do lolalytics no idioma da janela. */
+export const LANES = translated(LANE_IDS, "lane");
+/** Fases do cliente (`gameflow-phase`) no idioma da janela. */
+export const PHASES = translated(PHASE_IDS, "phase");
+
+/** Filtros de elo (os nomes vêm da tradução). */
+export const tiers = (): [string, string][] =>
+  ["emerald_plus", "platinum_plus", "gold_plus", "diamond_plus", "d2_plus", "master_plus", "all"].map((v) => [v, t(`tier.${v}`)]);
+
+export const regions = (): [string, string][] => [
+  ["all", t("region.all")],
   ["br", "BR"],
   ["na", "NA"],
   ["euw", "EUW"],
   ["kr", "KR"],
 ];
 
-export const PATCHES: [string, string][] = [
-  ["", "Patch atual"],
-  ["7", "Últimos 7 dias"],
-  ["30", "Últimos 30 dias"],
+export const patches = (): [string, string][] => [
+  ["", t("patch.current")],
+  ["7", t("patch.days", { count: 7 })],
+  ["30", t("patch.days", { count: 30 })],
 ];
 
 // Mesmas regras de `import/itemset.rs` (núcleo, primeira volta, situacionais), para a janela

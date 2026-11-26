@@ -1,7 +1,8 @@
 <script lang="ts">
   // Confronto: atalhos dos inimigos visíveis (+ busca e lane no modo completo) e o resumo do WR contra ele.
-  import { championIcon, pct, num, LANES } from "$lib/api";
+  import { championIcon, pct, LANES } from "$lib/api";
   import { app } from "$lib/app.svelte";
+  import { t } from "$lib/i18n/index.svelte";
 
   let { full = false, size = 24 }: { full?: boolean; size?: number } = $props();
   let text = $state("");
@@ -11,34 +12,36 @@
 
 <div class="vs" class:full style="--s: {size}px">
   <div class="icons">
-    {#if !full}<span class="muted small">Contra:</span>{/if}
+    {#if !full}<span class="muted small">{t("vsPicker.against")}</span>{/if}
     {#each app.snap?.enemyPicks ?? [] as e (e)}
       <button class="pick" class:on={e === app.snap?.vsChampionId} onclick={() => app.chooseVs(e === app.snap?.vsChampionId ? null : e)}
-        title={e === app.snap?.vsChampionId ? "Voltar ao build geral" : `Build contra ${app.champName(e)}`}>
+        title={e === app.snap?.vsChampionId ? t("vsPicker.backToGeneral") : t("vsPicker.buildVs", { name: app.champName(e) })}>
         <img src={championIcon(e)} alt={app.champName(e)} />
         {#if full}<span>{app.champName(e)}</span>{/if}
       </button>
     {/each}
-    {#if !full && !app.snap?.enemyPicks.length}<span class="muted small">nenhum inimigo visível</span>{/if}
+    {#if !full && !app.snap?.enemyPicks.length}<span class="muted small">{t("vsPicker.noEnemy")}</span>{/if}
   </div>
   {#if full}
     <form onsubmit={(e) => { e.preventDefault(); const c = app.findChampion(text); if (c) { app.chooseVs(c.id); text = ""; } }}>
-      <input list={id} placeholder="Outro campeão…" bind:value={text} disabled={!app.assets} />
+      <input list={id} placeholder={t("vsPicker.otherChampion")} bind:value={text} disabled={!app.assets} />
       <datalist {id}>{#each app.champions as c (c.id)}<option value={c.name}></option>{/each}</datalist>
-      <select value={app.vsLane ?? ""} onchange={(e) => app.changeVsLane(e.currentTarget.value)} title="Lane do campeão do outro lado">
+      <select value={app.vsLane ?? ""} onchange={(e) => app.changeVsLane(e.currentTarget.value)} title={t("vsPicker.laneTip")}>
         {#each Object.entries(LANES) as [v, l] (v)}<option value={v}>{l}</option>{/each}
       </select>
     </form>
   {/if}
   {#if b?.vs}
+    {@const head = t("vsPicker.vsHead", { lane: LANES[b.vs.lane] ?? b.vs.lane }).split("{name}")}
+    <!-- O nome fica em negrito: o texto traduzido é cortado no "{name}". -->
     <p class="line">
-      Contra <b>{app.champName(b.vs.championId)}</b> ({LANES[b.vs.lane] ?? b.vs.lane}):
+      <span>{head[0]}<b>{app.champName(b.vs.championId)}</b>{head.slice(1).join("")}</span>
       <b class:up={b.wr - b.vs.usualWr >= 1} class:down={b.wr - b.vs.usualWr <= -1}>{pct(b.wr)}</b>
-      <span class="muted">· geral {pct(b.vs.usualWr)} · {num(b.n)} partidas</span>
-      <button class="link" onclick={() => app.chooseVs(null)}>build geral</button>
+      <span class="muted">{t("vsPicker.vsRest", { base: pct(b.vs.usualWr), count: b.n })}</span>
+      <button class="link" onclick={() => app.chooseVs(null)}>{t("vsPicker.general")}</button>
     </p>
   {:else if full}
-    <p class="muted small">Escolha o campeão do outro lado: runas, feitiços e itens passam a ser desse confronto.</p>
+    <p class="muted small">{t("vsPicker.hint")}</p>
   {/if}
 </div>
 

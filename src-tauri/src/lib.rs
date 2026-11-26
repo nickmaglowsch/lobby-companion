@@ -6,6 +6,7 @@ pub mod assets;
 pub mod bans;
 pub mod champselect;
 pub mod composition;
+pub mod i18n;
 pub mod import;
 pub mod lcu;
 pub mod lola;
@@ -73,11 +74,11 @@ pub fn close_main(app: &AppHandle) {
 
 /// Menu da bandeja; com versão nova, o primeiro item avisa (e abre a janela, onde fica o botão).
 fn tray_menu(app: &AppHandle, update: Option<&str>) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "open", "Abrir", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", t!("tray.open"), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", t!("tray.quit"), true, None::<&str>)?;
     match update {
         Some(v) => {
-            let label = format!("Atualizar para a v{}…", v.trim_start_matches('v'));
+            let label = t!("tray.update", version = v.trim_start_matches('v'));
             let up = MenuItem::with_id(app, "update", label, true, None::<&str>)?;
             Menu::with_items(app, &[&up, &open, &quit])
         }
@@ -94,10 +95,16 @@ pub fn set_tray_update(app: &AppHandle, version: Option<&str>) {
         let _ = tray.set_menu(Some(menu));
     }
     let tip = match version {
-        Some(v) => format!("Lobby Companion: v{} disponível", v.trim_start_matches('v')),
+        Some(v) => t!("tray.tipUpdate", version = v.trim_start_matches('v')),
         None => "Lobby Companion".into(),
     };
     let _ = tray.set_tooltip(Some(tip));
+}
+
+/// Menu e dica da bandeja no idioma atual (depois de trocar o idioma).
+pub async fn refresh_tray(app: &AppHandle) {
+    let version = update::pending(app).await.map(|u| u.version);
+    set_tray_update(app, version.as_deref());
 }
 
 fn create_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -147,13 +154,15 @@ async fn get_settings(shared: State<'_, Arc<Shared>>) -> Result<Settings, String
 async fn save_settings(
     app: AppHandle,
     shared: State<'_, Arc<Shared>>,
-    settings: Settings,
+    mut settings: Settings,
 ) -> Result<(), String> {
-    settings
-        .save(&shared.settings_path)
-        .map_err(|e| e.to_string())?;
     let (filters_changed, runes_changed, items_changed, bans_changed, picks_changed) = {
         let mut cur = shared.settings.lock().await;
+        // O locale do cliente é do backend (`detect_locale`): a cópia da janela pode estar velha.
+        settings.client_locale.clone_from(&cur.client_locale);
+        settings
+            .save(&shared.settings_path)
+            .map_err(|e| e.to_string())?;
         let changed = (
             cur.tier != settings.tier
                 || cur.region != settings.region
@@ -174,6 +183,8 @@ async fn save_settings(
         (s.champion_id, s.lane.clone(), s.in_champ_select)
     };
     let shared = shared.inner().clone();
+    // Idioma: a janela recebe o locale novo no snapshot; bandeja e notas mudam junto.
+    app::apply_locale(&app, &shared).await;
     if picks_changed || filters_changed {
         let (app, shared) = (app.clone(), shared.clone());
         tauri::async_runtime::spawn(async move { app::refresh_picks(&app, &shared).await });
@@ -262,6 +273,7 @@ async fn get_composition(
         build.as_ref(),
         assets.as_deref(),
         min_games,
+        i18n::Lang::current(),
     ))
 }
 
@@ -474,6 +486,17 @@ async fn diag() {
     match client.get("/lol-gameflow/v1/gameflow-phase").await {
         Ok(p) => println!("fase: {p}"),
         Err(e) => println!("fase: erro {e}"),
+    }
+    // Idioma do cliente (o app usa `locale`; os outros campos só para conferir o formato).
+    match client.get("/riotclient/region-locale").await {
+        Ok(v) => println!(
+            "idioma: {v} → {}",
+            v.get("locale")
+                .and_then(|l| l.as_str())
+                .and_then(i18n::from_tag)
+                .unwrap_or("(não reconhecido)")
+        ),
+        Err(e) => println!("idioma: erro {e}"),
     }
     match client.get("/lol-perks/v1/inventory").await {
         Ok(v) => println!("runas: {v}"),

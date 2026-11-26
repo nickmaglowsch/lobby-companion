@@ -1,2 +1,5 @@
 // Formatos curtos usados nos layouts compactos.
-export const signed = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2).replace(".", ",")}`;
+import { pts } from "../../i18n/index.svelte";
+
+/** Pontos com sinal e duas casas, no formato do idioma ("+1,20" / "−0,35"). */
+export const signed = (x: number) => pts(x, 2);
