@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lobby Companion</title>
+  <meta name="description" content="Runas, feitiços e conjunto de itens do lolalytics importados na seleção de campeões do League of Legends. Leve, sem overlay, gratuito e de código aberto." />
+  <meta property="og:title" content="Lobby Companion" />
+  <meta property="og:description" content="Runas, feitiços e itens do lolalytics na seleção de campeões. Leve, sem overlay." />
+  <meta property="og:image" content="img/fase-build.png" />
+  <link rel="icon" href="favicon.png" />
+  <style>
+    /* Mesmos tokens e componentes da janela do app (src/routes/+page.svelte e src/lib/views). */
+    :root {
+      --bg: #010a13; --panel: #0a1428; --panel-2: #091428; --line: #1e2328;
+      --text: #f0e6d2; --muted: #a09b8c; --gold: #c8aa6e; --gold-dim: #785a28;
+      --good: #2fbf71; --bad: #e84057; --warn: #e5a93b;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif; }
+    a { color: var(--gold); }
+    img { max-width: 100%; height: auto; display: block; }
+    .wrap { width: min(1120px, 100% - 32px); margin: 0 auto; }
+    .muted { color: var(--muted); }
+
+    /* barra de cima: como a TopBar do app (ponto de conexão + título) */
+    nav.top { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+    nav.top .wrap { display: flex; align-items: center; gap: 10px; height: 48px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); text-decoration: none; }
+    .brand img { width: 24px; height: 24px; border: 1px solid var(--gold); border-radius: 4px; }
+    nav.top .links { margin-left: auto; display: flex; gap: 2px; align-self: stretch; }
+    nav.top .links a { display: flex; align-items: center; padding: 0 12px; color: var(--muted); text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; }
+    nav.top .links a:hover { color: var(--gold); border-bottom-color: var(--gold); }
+    @media (max-width: 640px) { nav.top .links a:not(.gh) { display: none; } }
+
+    /* botões: os mesmos do app */
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; text-decoration: none;
+      background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); cursor: pointer; }
+    .btn:hover { border-color: var(--gold); }
+    .btn.primary { background: #1e282d; border-color: var(--gold); color: var(--gold); font-size: 16px; padding: 10px 20px; }
+    .btn svg { width: 18px; height: 18px; }
+
+    /* títulos: dourado em maiúsculas, como os h2 dos layouts */
+    .eyebrow, .card h3, .panel-text h3 { color: var(--gold); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .eyebrow { font-size: 13px; }
+    h1 { font-size: clamp(32px, 4.6vw, 48px); line-height: 1.12; margin: 10px 0 14px; }
+    h1 span { color: var(--gold); }
+    h2 { font-size: clamp(24px, 3.2vw, 30px); margin: 0 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 28px; max-width: 44em; }
+
+    /* topo */
+    .hero { padding: 56px 0 40px; border-bottom: 1px solid var(--line); }
+    .hero .wrap { display: grid; grid-template-columns: 1fr 1.15fr; gap: 44px; align-items: center; }
+    @media (max-width: 900px) { .hero .wrap { grid-template-columns: minmax(0, 1fr); } }
+    .hero .wrap > *, .showcase > *, .two > * { min-width: 0; }
+    .lead { color: var(--muted); font-size: 17px; margin: 0 0 24px; max-width: 34em; }
+    .cta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .meta { margin-top: 14px; font-size: 12px; color: var(--muted); }
+    .meta strong { color: var(--text); }
+    .meta code { font-size: 11px; word-break: break-all; }
+    .shot { border: 1px solid var(--gold-dim); border-radius: 6px; overflow: hidden; background: var(--bg); box-shadow: 0 6px 24px rgb(0 0 0 / 0.6); }
+
+    section { padding: 56px 0; }
+    section.alt { background: var(--panel-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+
+    /* layouts: abas sublinhadas e passos numerados, como no app */
+    .tabs { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 18px; border-bottom: 1px solid var(--gold-dim); }
+    .tabs button { font: inherit; font-size: 14px; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
+    .tabs button[aria-selected="true"] { color: var(--gold); border-bottom-color: var(--gold); }
+    .showcase { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+    @media (max-width: 900px) { .showcase { grid-template-columns: minmax(0, 1fr); } }
+    .panel-text { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+    .panel-text h3 { margin: 0 0 8px; font-size: 14px; }
+    .panel-text p { color: var(--muted); margin: 0 0 10px; }
+    .panel-text p:last-child { margin-bottom: 0; }
+    .panel-text strong { color: var(--text); }
+    .steps { display: flex; gap: 4px; margin: 12px 0; flex-wrap: wrap; }
+    .steps button { display: flex; align-items: center; gap: 6px; font: inherit; font-size: 14px; border: none; background: none; color: var(--muted); padding: 4px 10px; border-radius: 14px; cursor: pointer; }
+    .steps .n { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--muted); display: grid; place-items: center; font-size: 11px; }
+    .steps button[aria-pressed="true"] { color: var(--gold); background: #1e282d; }
+    .steps button[aria-pressed="true"] .n { border-color: var(--gold); }
+    .classic-shot { max-width: 380px; }
+    [hidden] { display: none !important; }
+
+    /* recursos: cartões como os do app */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+    .card:hover { border-color: var(--gold-dim); }
+    .card h3 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+    .ic { width: 26px; height: 26px; border-radius: 4px; display: grid; place-items: center; border: 1px solid var(--gold-dim); color: var(--gold); flex: none; }
+    .ic svg { width: 15px; height: 15px; }
+
+    /* segurança */
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 760px) { .two { grid-template-columns: minmax(0, 1fr); } }
+    ul.check { list-style: none; margin: 0; display: grid; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+    ul.check li { padding-left: 24px; position: relative; color: var(--muted); }
+    ul.check li strong { color: var(--text); }
+    ul.check li::before { content: "✓"; position: absolute; left: 0; color: var(--good); font-weight: 700; }
+    ul.check.no li::before { content: "✗"; color: var(--bad); }
+
+    /* instalar: passos numerados como o stepper */
+    ol.install { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+    ol.install li { counter-increment: s; display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
+    ol.install li::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--gold); color: var(--gold); display: grid; place-items: center; font-size: 12px; margin-top: 1px; }
+    ol.install p { margin: 2px 0 0; color: var(--muted); }
+    /* aviso: como o aviso de atualização do app */
+    .note { margin-top: 22px; padding: 10px 12px; border: 1px solid var(--gold); background: var(--panel); border-radius: 6px; font-size: 14px; }
+
+    details { border-top: 1px solid var(--line); padding: 12px 0; }
+    details:last-of-type { border-bottom: 1px solid var(--line); }
+    summary { cursor: pointer; color: var(--gold); }
+    details p { color: var(--muted); margin: 8px 0 0; }
+
+    footer { padding: 28px 0; color: var(--muted); font-size: 12px; background: var(--panel); border-top: 1px solid var(--line); }
+    footer .wrap { display: grid; gap: 8px; }
+    footer .legal { font-size: 11px; opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <nav class="top">
+    <div class="wrap">
+      <span class="dot" title="Conectado"></span>
+      <a class="brand" href="#"><img src="img/icon.png" alt="" />Lobby Companion</a>
+      <div class="links">
+        <a href="#layouts">Layouts</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#seguranca">Segurança</a>
+        <a href="#instalar">Instalar</a>
+        <a class="gh" href="https://github.com/nickmaglowsch/lobby-companion">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <div>
+        <div class="eyebrow">League of Legends · seleção de campeões</div>
+        <h1>Trave o campeão.<br /><span>O build já está no cliente.</span></h1>
+        <p class="lead">Runas, feitiços e um conjunto de itens com o win rate de cada item, direto do lolalytics, importados assim que você trava o campeão. Sugere bans e picks para o seu time. Leve, sem overlay e sem nada durante a partida.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/nickmaglowsch/lobby-companion/releases/latest/download/LobbyCompanion-setup.exe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
+            Baixar para Windows
+          </a>
+          <a class="btn" href="https://github.com/nickmaglowsch/lobby-companion">Código no GitHub</a>
+        </div>
+        <div class="meta">
+          Versão <strong data-release="version">0.5.0</strong> · <span data-release="date">26/11/2026</span> · Windows 10/11 · grátis e de código aberto (MIT)<br />
+          <a href="https://github.com/nickmaglowsch/lobby-companion/releases/latest">Notas da versão</a> · SHA-256 <code data-release="sha256">1569C2EEF4C1DE5D1FC21A617DD270B9F8735FCB6F39F7186885D92A08C4835B</code>
+        </div>
+      </div>
+      <div class="shot"><img src="img/fase-build.png" width="1440" height="1200" alt="Janela do Lobby Companion no layout Por fase, etapa Build: runas, feitiços, ordem de habilidades e o caminho de itens com win rate" /></div>
+    </div>
+  </header>
+
+  <section id="layouts">
+    <div class="wrap">
+      <h2>Quatro jeitos de ver a seleção</h2>
+      <p class="sub">Escolha o layout nas configurações. Os três primeiros cabem numa janela de 720×600, sem rolagem. As imagens usam dados de exemplo.</p>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="fase">Por fase</button>
+        <button role="tab" aria-selected="false" data-tab="grade">Grade</button>
+        <button role="tab" aria-selected="false" data-tab="abas">Abas</button>
+        <button role="tab" aria-selected="false" data-tab="classico">Clássico</button>
+      </div>
+
+      <div class="showcase" data-panel="fase">
+        <div class="shot"><img data-step-img src="img/fase-bans.png" width="1440" height="1200" alt="Layout Por fase" /></div>
+        <div class="panel-text">
+          <h3>Por fase <span class="muted" style="text-transform: none; font-weight: 400">· padrão</span></h3>
+          <p>A janela mostra só o que importa agora e avança sozinha junto com o cliente.</p>
+          <div class="steps">
+            <button aria-pressed="true" data-step="img/fase-bans.png"><span class="n">1</span>Bans</button>
+            <button aria-pressed="false" data-step="img/fase-escolha.png"><span class="n">2</span>Escolha</button>
+            <button aria-pressed="false" data-step="img/fase-build.png"><span class="n">3</span>Build</button>
+          </div>
+          <p><strong>Bans:</strong> duas listas de 5, pelo seu time e contra o seu pick.<br />
+             <strong>Escolha:</strong> sugestões de pick com a nota de cada confronto e dupla, mais a composição de dano dos times.<br />
+             <strong>Build:</strong> runas, feitiços, habilidades e o caminho de itens com o win rate de cada um.</p>
+        </div>
+      </div>
+      <div class="showcase" data-panel="grade" hidden>
+        <div class="shot"><img src="img/grade.png" width="1440" height="1200" alt="Layout Grade: três colunas com draft, runas e itens" loading="lazy" /></div>
+        <div class="panel-text">
+          <h3>Grade</h3>
+          <p>Tudo sempre à vista em três colunas: draft (bans, picks e dano), runas com feitiços e habilidades, e itens. A coluna da etapa atual fica em destaque, e os números de apoio ficam no tooltip.</p>
+        </div>
+      </div>
+      <div class="showcase" data-panel="abas" hidden>
+        <div class="shot"><img src="img/abas.png" width="1440" height="1200" alt="Layout Abas, aba Draft com bans e sugestões de pick" loading="lazy" /></div>
+        <div class="panel-text">
+          <h3>Abas</h3>
+          <p>O campeão e o botão Importar ficam fixos no topo. Embaixo, uma aba por vez: Draft, Build, Runas (com o win rate das alternativas de cada fileira) e Confronto. A aba acompanha a etapa da seleção até você clicar em outra.</p>
+        </div>
+      </div>
+      <div class="showcase" data-panel="classico" hidden>
+        <div class="shot classic-shot"><img src="img/classico.png" width="960" height="1560" alt="Layout Clássico: uma coluna com rolagem" loading="lazy" /></div>
+        <div class="panel-text">
+          <h3>Clássico</h3>
+          <p>Uma coluna com tudo, com rolagem: bans com o motivo de cada um, picks, build completo, tendência de win rate, perfil de dano e configurações no fim.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recursos" class="alt">
+    <div class="wrap">
+      <h2>O que ele faz</h2>
+      <p class="sub">Dados do lolalytics (ranqueada solo, Esmeralda+ global por padrão; elo, região e período configuráveis), com cache de 6 horas.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/></svg></span>Importa ao travar</h3><p>Página de runas, feitiços (com o Flash na tecla de sempre) e conjunto de itens na loja, com o win rate no título de cada bloco.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg></span>Bans em duas listas</h3><p>Quem mais derruba o win rate do seu time e, à parte, os oponentes da sua lane que vão bem contra o seu campeão e aparecem com frequência.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>Sugestão de pick</h3><p>Do seu pool (maestria) ou da tier list, somando força na lane, counter contra cada inimigo visível e sinergia com cada aliado declarado.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h6l2-6 2 12 2-6h4"/></svg></span>Build contra o oponente</h3><p>Escolha o campeão do outro lado e veja runas, feitiços e itens daquele confronto, com o win rate comparado ao geral.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18M6 16V9m6 7V4m6 12v-5"/></svg></span>Win rate de tudo</h3><p>Por item e posição na build, núcleo de 3 itens, primeira volta, situacionais, ordem de habilidades e alternativas de runa.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 3"/></svg></span>Composição de dano</h3><p>Quanto do time inimigo é físico ou mágico, e quais itens de armadura ou resistência mágica do seu build estão indo melhor.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></span>Atualiza no clique</h3><p>Avisa quando sai versão nova e instala quando você clicar, conferindo a assinatura do pacote. Nunca sozinho, nunca na seleção.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg></span>Leve e sem overlay</h3><p>A janela abre na seleção e é destruída quando a partida começa. Durante o jogo fica só um ícone na bandeja.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="seguranca">
+    <div class="wrap">
+      <h2>O que ele nunca faz</h2>
+      <p class="sub">Usa só a API local do próprio cliente do League, sem ler memória do jogo e sem nada desenhado por cima da partida.</p>
+      <div class="two">
+        <ul class="check no">
+          <li><strong>Não escolhe nem bane por você.</strong> Nada de hover, pick, ban, aceitar fila ou trocar posição: as sugestões são só sugestões.</li>
+          <li><strong>Não revela ninguém.</strong> Dos outros jogadores lê só campeões e posições, o que a própria tela mostra. Nunca nomes ou Riot IDs.</li>
+          <li><strong>Não roda na partida.</strong> Sem overlay, sem timers, sem informação ao vivo do jogo.</li>
+        </ul>
+        <ul class="check">
+          <li><strong>Escreve só o que você importaria à mão:</strong> página de runas, conjunto de itens e feitiços. Suas páginas e conjuntos ficam intactos.</li>
+          <li><strong>Privacidade:</strong> conversa com o cliente no seu PC, com o lolalytics (campeão, lane e filtros) e com o GitHub, para saber se há versão nova. Nada pessoal é enviado.</li>
+          <li><strong>Código aberto:</strong> o instalador é gerado pelo GitHub Actions a partir do código de cada versão, com SHA-256 publicado.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="instalar" class="alt">
+    <div class="wrap">
+      <h2>Instalar</h2>
+      <ol class="install">
+        <li><div><strong><a href="https://github.com/nickmaglowsch/lobby-companion/releases/latest/download/LobbyCompanion-setup.exe">Baixe o instalador</a> e execute.</strong>
+          <p>Instala só para o seu usuário, sem pedir administrador. Por cima de uma versão anterior, mantém as configurações.</p></div></li>
+        <li><div><strong>Se o Windows avisar "editor desconhecido":</strong> clique em <em>Mais informações</em> → <em>Executar assim mesmo</em>.
+          <p>O instalador ainda não tem certificado de assinatura do Windows. Confira o SHA-256 nas notas da versão, se quiser.</p></div></li>
+        <li><div><strong>Abra o cliente do League e entre numa fila.</strong>
+          <p>O ponto verde no topo da janela indica que o app achou o cliente. Na seleção, trave o campeão: runas, feitiços e itens entram sozinhos.</p></div></li>
+      </ol>
+      <div class="note">Já tem a versão 0.4.0 ou mais nova? Não precisa baixar de novo: o app avisa quando sai versão nova e atualiza com um clique.</div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <h2>Perguntas</h2>
+      <details><summary>É permitido pela Riot?</summary>
+        <p>O app usa a API local do cliente para importar runas, itens e feitiços, como os apps conhecidos de build. Ele segue as regras de não agir pelo jogador, não revelar nomes ocultos e não mostrar nada durante a partida. Não é afiliado nem endossado pela Riot Games.</p></details>
+      <details><summary>Por que o Smart App Control ou o SmartScreen bloqueiam?</summary>
+        <p>Porque o instalador ainda não tem certificado de assinatura de código do Windows, que é pago. O SmartScreen deixa executar em "Mais informações"; o Smart App Control, quando ligado, pode bloquear.</p></details>
+      <details><summary>De onde vêm os números?</summary>
+        <p>Do lolalytics.com, com cache de 6 horas e no máximo uma consulta por segundo. São tendência estatística das partidas do elo escolhido, não leitura do outro time. O app sempre mostra o link para a página original.</p></details>
+      <details><summary>Funciona em Mac ou Linux?</summary>
+        <p>Por enquanto só Windows 10 e 11.</p></details>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div>Lobby Companion · <a href="https://github.com/nickmaglowsch/lobby-companion">GitHub</a> · <a href="https://github.com/nickmaglowsch/lobby-companion/issues">Relatar um problema</a> · Licença MIT · Dados de <a href="https://lolalytics.com">lolalytics.com</a></div>
+      <div class="legal">Lobby Companion isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc. Não afiliado ao lolalytics.</div>
+    </div>
+  </footer>
+
+  <script>
+    // Abas dos layouts e etapas do "Por fase" (a página funciona sem isto: mostra o Por fase).
+    const tabs = document.querySelectorAll("[data-tab]");
+    tabs.forEach((t) => t.addEventListener("click", () => {
+      tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
+      document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== t.dataset.tab; });
+    }));
+    const steps = document.querySelectorAll("[data-step]");
+    const stepImg = document.querySelector("[data-step-img]");
+    steps.forEach((s) => s.addEventListener("click", () => {
+      steps.forEach((x) => x.setAttribute("aria-pressed", String(x === s)));
+      stepImg.src = s.dataset.step;
+    }));
+  </script>
+</body>
+</html>

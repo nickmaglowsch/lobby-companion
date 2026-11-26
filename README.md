@@ -1,6 +1,8 @@
 # Lobby Companion
 
 Companion **leve** de League of Legends para a **seleção de campeões**, com dados do [lolalytics](https://lolalytics.com).
+**[Site e download](https://nickmaglowsch.github.io/lobby-companion/)** · [Última versão (Windows)](https://github.com/nickmaglowsch/lobby-companion/releases/latest/download/LobbyCompanion-setup.exe)
+
 Quando você trava o campeão, ele importa para o cliente:
 
 - a **página de runas** (a mais jogada ou a de maior win rate);
