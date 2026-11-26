@@ -1,7 +1,9 @@
 <script lang="ts">
   // Janela do app: escolhe o layout pela configuração (Por fase, Grade, Abas ou Clássico).
   // O estado e as ações ficam em `$lib/app.svelte.ts`, compartilhados pelos layouts.
+  // A janela "overlay" (partida) só mostra o overlay (`Overlay.svelte`).
   import { onMount } from "svelte";
+  import { isOverlayWindow } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import UpdateBanner from "$lib/UpdateBanner.svelte";
   import Classic from "$lib/views/Classic.svelte";
@@ -10,15 +12,21 @@
   import Phase from "$lib/views/Phase.svelte";
   import SettingsDialog from "$lib/views/parts/SettingsDialog.svelte";
   import RuneEditor from "$lib/views/parts/RuneEditor.svelte";
+  import Overlay from "$lib/views/Overlay.svelte";
+
+  const overlay = isOverlayWindow();
 
   onMount(() => {
+    if (overlay) return;
     let un: (() => void) | undefined;
     app.init().then((u) => (un = u));
     return () => un?.();
   });
 </script>
 
-{#if app.settings}
+{#if overlay}
+  <Overlay />
+{:else if app.settings}
   {#if app.layout === "classic"}
     <div class="classic-banner"><UpdateBanner inChampSelect={app.snap?.inChampSelect ?? false} /></div>
     <Classic />

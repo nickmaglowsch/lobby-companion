@@ -239,6 +239,8 @@
   "settings.importItems": "Tárgykészlet (WR a blokkcímekben)",
   "settings.replaceCurrentPage": "Nincs hely új oldalnak: a jelenlegi cseréje",
   "settings.closeInGame": "Ablak bezárása, amikor a meccs indul",
+  "settings.overlay": "Játék közbeni overlay: következő tárgy, CS/perc és gátlók",
+  "settings.overlayTip": "Csak a játék hivatalos API-ját és csak a saját adataidat használja. Keret nélküli vagy ablakos módban látszik.",
   "settings.suggestBans": "Kitiltások javaslása a csapatom hősei alapján",
   "settings.suggestPicks": "Pick javaslása a szerepkörömre (counter + szinergia)",
   "settings.pickPool": "Jelöltek",
@@ -361,5 +363,17 @@
   "metric.setting": "Kitiltások, választások és tárgyak mérőszáma",
   "metric.optWpa": "WPA (hozzáadott győzelmi valószínűség)",
   "metric.optWr": "Win rate (átlag feletti pontok)",
-  "metric.settingTip": "WPA: mennyit változtat egy döntés a győzelmi esélyen ahhoz képest, ha nem hoznád meg; tárgyaknál a pozíció tipikus tárgyához képest. WR: átlag feletti win rate pontok (az eredeti számítás). A választás közben is átállítható."
+  "metric.settingTip": "WPA: mennyit változtat egy döntés a győzelmi esélyen ahhoz képest, ha nem hoznád meg; tárgyaknál a pozíció tipikus tárgyához képest. WR: átlag feletti win rate pontok (az eredeti számítás). A választás közben is átállítható.",
+  "overlay.next": "Következő tárgy",
+  "overlay.missing": "Még {gold} arany kell",
+  "overlay.ready": "Megveheted: ideje visszamenni a bázisra",
+  "overlay.csMin": "CS/perc",
+  "overlay.inhib": "{side} gátló · {lane}",
+  "overlay.ally": "Saját",
+  "overlay.enemy": "Ellenséges",
+  "overlay.blue": "Kék",
+  "overlay.red": "Piros",
+  "overlay.top": "Felső",
+  "overlay.mid": "Középső",
+  "overlay.bot": "Alsó"
 }

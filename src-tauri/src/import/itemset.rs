@@ -80,7 +80,7 @@ fn pick_items(list: &[ItemStat], assets: &Assets, min_games: u64) -> Vec<ItemSta
 }
 
 /// Item conhecido do cliente que faz parte de uma build (nada de poção, sentinela, berloque).
-fn is_build_item(assets: &Assets, id: i64) -> bool {
+pub(crate) fn is_build_item(assets: &Assets, id: i64) -> bool {
     assets.items.contains_key(&id) && !NOT_BUILD.iter().any(|c| assets.item_has(id, c))
 }
 

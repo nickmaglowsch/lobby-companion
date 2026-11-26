@@ -55,6 +55,7 @@
     <label><input type="checkbox" bind:checked={settings.importSpells} onchange={() => app.save()} /> {t("common.spells")}</label>
     <label><input type="checkbox" bind:checked={settings.replaceCurrentPage} onchange={() => app.save()} /> {t("settings.replaceCurrentPage")}</label>
     <label><input type="checkbox" bind:checked={settings.closeInGame} onchange={() => app.save()} /> {t("settings.closeInGame")}</label>
+    <label title={t("settings.overlayTip")}><input type="checkbox" bind:checked={settings.overlay} onchange={() => app.save()} /> {t("settings.overlay")}</label>
     <label><input type="checkbox" bind:checked={settings.suggestBans} onchange={() => app.save()} /> {t("settings.suggestBans")}</label>
     <label><input type="checkbox" bind:checked={settings.suggestPicks} onchange={() => app.save()} /> {t("settings.suggestPicks")}</label>
     {#if settings.suggestPicks}

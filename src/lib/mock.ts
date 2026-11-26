@@ -1,6 +1,6 @@
 // Dados sintéticos para ver a interface no navegador (`npm run dev`), fora do Tauri.
 // Números inventados: não redistribuímos dados do lolalytics.
-import type { Assets, Composition, OwnPage, Settings, Snapshot, UpdateInfo } from "./api";
+import type { Assets, Composition, OverlayState, OwnPage, Settings, Snapshot, UpdateInfo } from "./api";
 
 const item = (name: string, categories: string[] = []) => ({ name, icon: "", categories });
 
@@ -202,7 +202,7 @@ export const mockComposition: Composition = {
 
 export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
-  importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
+  importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true, overlay: false,
   suggestBans: true, suggestPicks: true, pickPool: "mastery", metric: "wpa", checkUpdates: true, layout: "phase",
   language: "", clientLocale: "pt_BR",
 };
@@ -227,6 +227,16 @@ export async function mockLanguage(locale: string) {
   for (const it of mockComposition.items) it.slot = tr("itemset.itemN", { n: Number(it.slot[0]) });
   mockComposition.note = tr("comp.armorItem", { item: mockAssets.items["3742"]?.name ?? "", wr: pct(55.6) });
 }
+
+/** Overlay no navegador (`?view=overlay`): 12 min de jogo, faltando ouro para o próximo item. */
+export const mockOverlay: OverlayState = {
+  visible: true, locale: "pt_BR", gameTime: 742, cs: 98, csPerMin: 7.9, gold: 1640,
+  next: { id: 3742, name: "Couraça do Defunto", icon: "", price: 2900, cost: 2500, missing: 860 },
+  inhibs: [
+    { side: "enemy", lane: "top", respawnIn: 134 },
+    { side: "ally", lane: "bot", respawnIn: 251 },
+  ],
+};
 
 export const mockUpdate: UpdateInfo = {
   version: "0.4.0", current: "0.3.1", notes: null,

@@ -221,6 +221,8 @@
   "settings.importItems": "Set item (WR di judul blok)",
   "settings.replaceCurrentPage": "Tidak ada ruang untuk halaman baru: ganti halaman saat ini",
   "settings.closeInGame": "Tutup jendela saat game dimulai",
+  "settings.overlay": "Overlay dalam game: item berikutnya, CS/menit, dan inhibitor",
+  "settings.overlayTip": "Hanya memakai API resmi game dan hanya datamu sendiri. Tampil di mode borderless atau jendela.",
   "settings.suggestBans": "Sarankan ban berdasarkan champion timku",
   "settings.suggestPicks": "Sarankan pick untuk role-ku (counter + sinergi)",
   "settings.pickPool": "Kandidat",
@@ -333,5 +335,17 @@
   "metric.setting": "Metrik untuk ban, pick, dan item",
   "metric.optWpa": "WPA (peluang menang tambahan)",
   "metric.optWr": "Win rate (poin di atas rata-rata)",
-  "metric.settingTip": "WPA: seberapa besar sebuah pilihan mengubah peluang menang dibanding tidak memilihnya; untuk item, dibanding item umum di posisi itu. WR: poin win rate di atas rata-rata (perhitungan awal). Bisa juga diganti saat pemilihan champion."
+  "metric.settingTip": "WPA: seberapa besar sebuah pilihan mengubah peluang menang dibanding tidak memilihnya; untuk item, dibanding item umum di posisi itu. WR: poin win rate di atas rata-rata (perhitungan awal). Bisa juga diganti saat pemilihan champion.",
+  "overlay.next": "Item berikutnya",
+  "overlay.missing": "Kurang {gold} gold",
+  "overlay.ready": "Bisa dibeli: saatnya recall",
+  "overlay.csMin": "CS/menit",
+  "overlay.inhib": "Inhibitor {side} · {lane}",
+  "overlay.ally": "sekutu",
+  "overlay.enemy": "musuh",
+  "overlay.blue": "biru",
+  "overlay.red": "merah",
+  "overlay.top": "Top",
+  "overlay.mid": "Mid",
+  "overlay.bot": "Bot"
 }

@@ -221,6 +221,8 @@
   "settings.importItems": "裝備組合 (區塊標題顯示 WR)",
   "settings.replaceCurrentPage": "沒有空位新增符文頁時: 取代目前的頁面",
   "settings.closeInGame": "遊戲開始時關閉視窗",
+  "settings.overlay": "遊戲內浮動視窗：下一件裝備、每分鐘補兵與兵營",
+  "settings.overlayTip": "只使用遊戲官方 API，只用你自己的資料。在無邊框或視窗模式下顯示。",
   "settings.suggestBans": "依我方英雄建議禁用",
   "settings.suggestPicks": "為我的位置建議英雄 (克制 + 搭配)",
   "settings.pickPool": "候選",
@@ -333,5 +335,17 @@
   "metric.setting": "禁用、選用與裝備的指標",
   "metric.optWpa": "WPA（勝率貢獻）",
   "metric.optWr": "勝率（高於平均的點數）",
-  "metric.settingTip": "WPA：與不做這個選擇相比，獲勝機率變化了多少；裝備則與該位置的典型裝備比較。WR：高於平均水準的勝率點數（原始算法）。在英雄選擇期間也可以切換。"
+  "metric.settingTip": "WPA：與不做這個選擇相比，獲勝機率變化了多少；裝備則與該位置的典型裝備比較。WR：高於平均水準的勝率點數（原始算法）。在英雄選擇期間也可以切換。",
+  "overlay.next": "下一件裝備",
+  "overlay.missing": "還差 {gold} 金幣",
+  "overlay.ready": "可以購買：該回城了",
+  "overlay.csMin": "每分鐘補兵",
+  "overlay.inhib": "{side}兵營 · {lane}",
+  "overlay.ally": "我方",
+  "overlay.enemy": "敵方",
+  "overlay.blue": "藍方",
+  "overlay.red": "紅方",
+  "overlay.top": "上路",
+  "overlay.mid": "中路",
+  "overlay.bot": "下路"
 }

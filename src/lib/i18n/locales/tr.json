@@ -239,6 +239,8 @@
   "settings.importItems": "Eşya seti (blok başlıklarında WR)",
   "settings.replaceCurrentPage": "Yeni sayfa için yer yoksa: güncel sayfanın yerine yaz",
   "settings.closeInGame": "Maç başlayınca pencereyi kapat",
+  "settings.overlay": "Oyun içi overlay: sıradaki eşya, CS/dk ve inhibitörler",
+  "settings.overlayTip": "Yalnızca oyunun resmi API'sini ve yalnızca senin verilerini kullanır. Kenarlıksız veya pencere modunda görünür.",
   "settings.suggestBans": "Takımımın şampiyonlarına göre yasak öner",
   "settings.suggestPicks": "Rolüm için seçim öner (counter + sinerji)",
   "settings.pickPool": "Adaylar",
@@ -361,5 +363,17 @@
   "metric.setting": "Yasaklama, seçim ve eşya ölçütü",
   "metric.optWpa": "WPA (eklenen kazanma olasılığı)",
   "metric.optWr": "Kazanma oranı (ortalamanın üzerindeki puanlar)",
-  "metric.settingTip": "WPA: bir seçimin, yapılmamasına kıyasla kazanma şansını ne kadar değiştirdiği; eşyalarda o konumun tipik eşyasına kıyasla. WR: ortalamanın üzerindeki kazanma oranı puanları (orijinal hesap). Seçim sırasında da değiştirilebilir."
+  "metric.settingTip": "WPA: bir seçimin, yapılmamasına kıyasla kazanma şansını ne kadar değiştirdiği; eşyalarda o konumun tipik eşyasına kıyasla. WR: ortalamanın üzerindeki kazanma oranı puanları (orijinal hesap). Seçim sırasında da değiştirilebilir.",
+  "overlay.next": "Sıradaki eşya",
+  "overlay.missing": "{gold} altın kaldı",
+  "overlay.ready": "Alabilirsin: üsse dönme zamanı",
+  "overlay.csMin": "CS/dk",
+  "overlay.inhib": "{side} inhibitör · {lane}",
+  "overlay.ally": "Dost",
+  "overlay.enemy": "Rakip",
+  "overlay.blue": "Mavi",
+  "overlay.red": "Kırmızı",
+  "overlay.top": "Üst",
+  "overlay.mid": "Orta",
+  "overlay.bot": "Alt"
 }

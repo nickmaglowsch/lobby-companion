@@ -1,5 +1,6 @@
 //! Lobby Companion: importa runas, feitiços e conjuntos de itens do lolalytics na seleção de campeões.
-//! Sem overlay: a janela abre na seleção e fecha quando a partida começa; fora disso, só o ícone na bandeja.
+//! A janela abre na seleção e fecha quando a partida começa; fora disso, só o ícone na bandeja.
+//! Na partida, só o overlay opcional (`overlay.rs`, desligado por padrão), pela API oficial do jogo.
 
 pub mod app;
 pub mod assets;
@@ -11,6 +12,7 @@ pub mod import;
 pub mod lcu;
 pub mod lola;
 pub mod metric;
+pub mod overlay;
 pub mod own_runes;
 pub mod picks;
 pub mod settings;
@@ -24,6 +26,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 const MAIN: &str = "main";
+/// Janela do overlay da partida (`overlay.rs`).
+pub const OVERLAY: &str = "overlay";
 
 /// Tamanho da janela pelo layout escolhido (padrão se as configurações estiverem ocupadas).
 fn window_size(app: &AppHandle) -> (f64, f64, f64, f64) {
@@ -68,6 +72,55 @@ pub fn close_main(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if let Some(w) = handle.get_webview_window(MAIN) {
+            let _ = w.destroy();
+        }
+    });
+}
+
+/// Abre o overlay da partida: janela pequena, transparente, sempre por cima, sem foco e sem
+/// clique (o mouse passa para o jogo), no canto de cima à esquerda da tela principal.
+/// Só aparece por cima do jogo no modo de tela sem bordas ou em janela.
+pub fn show_overlay(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = handle.get_webview_window(OVERLAY) {
+            let _ = w.show();
+            return;
+        }
+        let (x, y) = handle
+            .primary_monitor()
+            .ok()
+            .flatten()
+            .map(|m| {
+                let scale = m.scale_factor();
+                let p = m.position();
+                (f64::from(p.x) / scale, f64::from(p.y) / scale)
+            })
+            .unwrap_or((0.0, 0.0));
+        let built =
+            WebviewWindowBuilder::new(&handle, OVERLAY, WebviewUrl::App("index.html".into()))
+                .title("Lobby Companion overlay")
+                .inner_size(250.0, 150.0)
+                .position(x + 16.0, y + 16.0)
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .focused(false)
+                .build();
+        if let Ok(w) = built {
+            let _ = w.set_ignore_cursor_events(true);
+        }
+    });
+}
+
+/// Destrói o overlay (fim da partida ou configuração desligada).
+pub fn close_overlay(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = handle.get_webview_window(OVERLAY) {
             let _ = w.destroy();
         }
     });
@@ -139,6 +192,12 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 #[tauri::command]
 async fn get_snapshot(shared: State<'_, Arc<Shared>>) -> Result<Snapshot, String> {
     Ok(shared.snapshot.lock().await.clone())
+}
+
+/// Estado atual do overlay (a janela do overlay pede ao abrir; depois vem no evento "overlay").
+#[tauri::command]
+async fn get_overlay(shared: State<'_, Arc<Shared>>) -> Result<overlay::OverlayState, String> {
+    Ok(shared.overlay.lock().await.clone())
 }
 
 #[tauri::command]
@@ -405,10 +464,12 @@ pub fn run() {
             show_main(app.handle());
             tauri::async_runtime::spawn(app::worker(app.handle().clone()));
             tauri::async_runtime::spawn(update::watcher(app.handle().clone()));
+            tauri::async_runtime::spawn(overlay::run(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            get_overlay,
             get_assets,
             get_settings,
             save_settings,

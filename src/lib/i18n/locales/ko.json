@@ -221,6 +221,8 @@
   "settings.importItems": "아이템 세트 (블록 제목에 승률)",
   "settings.replaceCurrentPage": "새 페이지 자리가 없으면 현재 페이지를 교체",
   "settings.closeInGame": "게임이 시작되면 창 닫기",
+  "settings.overlay": "게임 중 오버레이: 다음 아이템, 분당 CS, 억제기",
+  "settings.overlayTip": "게임 공식 API와 내 데이터만 사용합니다. 테두리 없는 창 또는 창 모드에서 보입니다.",
   "settings.suggestBans": "우리 팀 챔피언을 기준으로 밴 추천",
   "settings.suggestPicks": "내 포지션 픽 추천 (카운터 + 시너지)",
   "settings.pickPool": "후보",
@@ -333,5 +335,17 @@
   "metric.setting": "밴·픽·아이템 지표",
   "metric.optWpa": "WPA(승리 확률 기여)",
   "metric.optWr": "승률(평균 대비 포인트)",
-  "metric.settingTip": "WPA: 그 선택을 하지 않았을 때와 비교해 승리 확률이 얼마나 바뀌는지. 아이템은 해당 순서의 일반적인 아이템과 비교. WR: 평균보다 높은 승률 포인트(기존 계산). 챔피언 선택 중에도 바꿀 수 있습니다."
+  "metric.settingTip": "WPA: 그 선택을 하지 않았을 때와 비교해 승리 확률이 얼마나 바뀌는지. 아이템은 해당 순서의 일반적인 아이템과 비교. WR: 평균보다 높은 승률 포인트(기존 계산). 챔피언 선택 중에도 바꿀 수 있습니다.",
+  "overlay.next": "다음 아이템",
+  "overlay.missing": "{gold}골드 부족",
+  "overlay.ready": "구매 가능: 귀환할 타이밍",
+  "overlay.csMin": "분당 CS",
+  "overlay.inhib": "{side} 억제기 · {lane}",
+  "overlay.ally": "아군",
+  "overlay.enemy": "적",
+  "overlay.blue": "블루",
+  "overlay.red": "레드",
+  "overlay.top": "탑",
+  "overlay.mid": "미드",
+  "overlay.bot": "바텀"
 }

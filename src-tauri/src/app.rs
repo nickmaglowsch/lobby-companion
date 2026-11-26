@@ -220,6 +220,8 @@ pub struct Shared {
     own_runes_path: PathBuf,
     /// Idioma do sistema operacional (último recurso do idioma automático).
     system_locale: Option<String>,
+    /// Último estado do overlay da partida (a janela do overlay pede ao abrir).
+    pub overlay: Mutex<crate::overlay::OverlayState>,
 }
 
 impl Shared {
@@ -260,6 +262,7 @@ impl Shared {
             own_runes: Mutex::new(OwnPages::load(&own_runes_path)),
             own_runes_path,
             system_locale,
+            overlay: Mutex::new(Default::default()),
         }
     }
 }
@@ -306,6 +309,17 @@ async fn detect_locale(app: &AppHandle, shared: &Arc<Shared>, client: &Lcu) {
         let _ = s.save(&shared.settings_path);
     }
     apply_locale(app, shared).await;
+}
+
+/// Seu campeão e o lado do seu time (da última seleção; `(0, 0)` se o app abriu no meio da
+/// partida). Só o overlay usa.
+pub async fn my_champion_team(shared: &Shared) -> (i64, i64) {
+    shared
+        .me
+        .lock()
+        .await
+        .as_ref()
+        .map_or((0, 0), |m| (m.champion_id, m.team))
 }
 
 async fn update(app: &AppHandle, shared: &Shared, f: impl FnOnce(&mut Snapshot)) {
