@@ -1,0 +1,79 @@
+name: auto-release
+
+# A cada merge na main sai uma versão nova, já PUBLICADA (o atualizador avisa todo mundo):
+# 1. version: próxima versão (patch; label "minor" ou "major" num PR mesclado sobe esse nível),
+#    commit "Versão X [skip ci]" na main e tag vX (script .github/scripts/next-version.sh).
+#    Se um PR já trocou a versão para acima da última tag, ela é usada como está.
+# 2. release: build, testes, latest.json e release publicada com as notas de
+#    .github/release-notes.md (release.yml, chamado como workflow reutilizável).
+# 3. site: dispara o pages.yml (release criada pelo GITHUB_TOKEN não dispara o evento "published").
+# Mudança só no site, na documentação ou nos workflows não gera versão.
+# À mão (Actions → auto-release → Run workflow), "dry_run" (padrão) só mostra a versão e as notas
+# e faz o build sem tag nem release, para testar o fluxo.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "site/**"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+      - ".github/**"
+      - ".signpath/**"
+      - ".vscode/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só simular (sem commit, tag nem release)"
+        type: boolean
+        default: true
+
+# Uma por vez, na ordem: duas mescladas seguidas viram uma versão (a segunda acha a main já com tag).
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      changes: ${{ steps.v.outputs.changes }}
+      dry: ${{ steps.v.outputs.dry }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: bash .github/scripts/next-version.sh
+
+  release:
+    needs: version
+    if: needs.version.outputs.tag != '' || needs.version.outputs.dry == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      publish: ${{ needs.version.outputs.tag != '' }}
+      changes: ${{ needs.version.outputs.changes }}
+    secrets: inherit
+
+  site:
+    needs: [version, release]
+    if: needs.version.outputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Atualiza a landing page (versão, data e SHA-256)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "${{ github.repository }}" --ref main

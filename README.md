@@ -50,6 +50,8 @@ npm run dev              # só a interface no navegador, com dados sintéticos
 npm run tauri build      # instalador NSIS em src-tauri/target/release/bundle/
 ```
 
+**Versões:** cada merge na `main` gera e publica uma versão nova sozinho (`.github/workflows/auto-release.yml`): sobe o último número (label `minor` ou `major` no PR sobe os outros), cria a tag, roda os testes, gera o instalador e publica a release com o SHA-256; o app avisa os usuários. Mudanças só no site, na documentação ou nos workflows não geram versão.
+
 Diagnóstico pelo terminal (sem abrir janela):
 
 ```bash
