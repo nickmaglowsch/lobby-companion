@@ -9,6 +9,7 @@
   import Notices from "./parts/Notices.svelte";
   import BanList from "./parts/BanList.svelte";
   import PickList from "./parts/PickList.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
   import RunePage from "./parts/RunePage.svelte";
   import SkillGrid from "./parts/SkillGrid.svelte";
   import Item from "./parts/Item.svelte";
@@ -31,13 +32,14 @@
     <section class:focus={draftFocus || !b}>
       {#if bans}
         <h2>Bans <span class="muted">{bans.byTier ? `tier list${bans.lane ? ` · ${LANES[bans.lane] ?? bans.lane}` : ""}` : "pelo time"}</span>
+          <MetricToggle />
           {#if bans.loading}<span class="muted">…</span>{/if}</h2>
         {#if bans.picks.length}<BanList list={bans.picks} variant="strip" />{:else if bans.note}<p class="muted small">{bans.note}</p>{/if}
         <h2>Bans <span class="muted">contra você</span></h2>
         {#if bans.lanePicks.length}<BanList list={bans.lanePicks} variant="strip" />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
       {/if}
       {#if app.snap?.inChampSelect && app.snap.picks}
-        <h2>Pick <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? "tier list" : "seu pool"}</span></h2>
+        <h2>Pick <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? "tier list" : "seu pool"}</span>{#if !bans}<MetricToggle />{/if}</h2>
         <PickList variant="rows" max={3} />
       {/if}
       {#if app.composition}

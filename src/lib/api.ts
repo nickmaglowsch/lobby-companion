@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { cdragonUrl } from "./mockIcons";
+import type { Metric } from "./metric";
 
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
@@ -74,6 +75,8 @@ export interface BanAdvice {
   byTier: boolean; lane: string | null; pageUrl: string | null;
   /** Contra o seu pick: oponentes da sua lane com confronto ruim e pick provável (sem repetir `picks`). */
   lanePicks: BanPick[]; laneFor: Ally | null; laneNote: string | null;
+  /** Métrica dos ganhos (`metric.rs`): "wpa" = pontos percentuais de chance; "wr" = pontos de WR. */
+  metric: Metric;
 }
 
 /** Parte da nota de um pick: contra um inimigo ou com um aliado (pontos já encolhidos pela amostra). */
@@ -87,6 +90,8 @@ export interface PickAdvice {
   /** "mastery" = seu pool; "tier" = tier list da lane. */
   pool: string;
   suggestions: PickSuggestion[]; enemies: number[]; allies: Ally[]; note: string | null; pageUrl: string | null;
+  /** Métrica de `total`/`base`/`delta`. */
+  metric: Metric;
 }
 export interface SynergyLine { allyChampionId: number; lane: string; wr: number; delta: number; n: number }
 export interface SynergyAdvice { championId: number; lane: string; baseWr: number | null; lines: SynergyLine[]; pageUrl: string | null }
@@ -163,6 +168,8 @@ export interface Settings {
   suggestBans: boolean;
   suggestPicks: boolean;
   pickPool: "mastery" | "tier";
+  /** Métrica das sugestões de ban e pick. */
+  metric: Metric;
   checkUpdates: boolean;
   /** "phase" | "grid" | "tabs" | "classic" */
   layout: string;

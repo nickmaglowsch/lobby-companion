@@ -15,6 +15,7 @@ A janela mostra o build completo: runas, feitiços, ordem de habilidades, iníci
 - **Confronto:** escolha o campeão do outro lado (retrato do time inimigo ou busca) para ver e importar runas, feitiços e itens daquele confronto (dados globais do lolalytics, amostra menor).
 - **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um; antes de alguém declarar, pela força geral na sua lane (tier list).
 - **Sugestão de pick:** para a sua posição, entre os campeões do seu pool (maestria) ou da tier list, somando força na lane, counter contra os inimigos visíveis e sinergia com os aliados; só sugere, nunca escolhe.
+- **Métrica das sugestões:** **WPA** (padrão, *win probability added*: quanto a escolha muda a chance de vitória em relação ao campeão típico da lane, ou à vaga sem o banido, no draft atual) ou **WR** (pontos de win rate acima da média, a conta original). Dá para trocar no botão **WPA | WR** ao lado dos bans e dos picks, durante a seleção.
 - **Build mais completo:** núcleo de 3 itens, primeira volta e situacionais (também no conjunto de itens), habilidades até o 6/10, WR das runas alternativas, tendência de WR e perfil de dano.
 - **Composição:** tipo de dano dos dois times e destaque dos itens de armadura/resistência mágica do seu build quando o inimigo concentra um tipo.
 
@@ -32,7 +33,7 @@ A janela mostra o build completo: runas, feitiços, ordem de habilidades, iníci
 4. Fora da seleção, use a busca para ver o build de qualquer campeão/lane.
 5. **Atualizações** (a partir da 0.4.0): quando sai versão nova, aparece um aviso no topo da janela e no menu do ícone da bandeja. **Atualizar agora** baixa o instalador, confere a assinatura do atualizador e instala; o app fecha e abre de novo sozinho. Nada é instalado sem o clique. Da 0.3.x para a 0.4.0 a instalação é manual (as versões antigas não têm o atualizador).
 
-Configurações (na própria janela, ⚙): **layout** (Por fase, padrão: a janela mostra só a etapa da seleção, bans → escolha → build; Grade: três colunas; Abas; Clássico: a lista completa com rolagem), elo (padrão **Esmeralda+**), região (padrão **global**), período (patch atual / 7 / 30 dias), o que importar, amostra mínima por item, tecla do Flash, substituir a página atual quando não houver espaço para uma nova.
+Configurações (na própria janela, ⚙): **layout** (Por fase, padrão: a janela mostra só a etapa da seleção, bans → escolha → build; Grade: três colunas; Abas; Clássico: a lista completa com rolagem), elo (padrão **Esmeralda+**), região (padrão **global**), período (patch atual / 7 / 30 dias), o que importar, amostra mínima por item, métrica dos bans e picks (WPA ou WR), tecla do Flash, substituir a página atual quando não houver espaço para uma nova.
 
 O app **nunca** escolhe, bane, aceita fila nem lê nomes de outros jogadores. Ele só escreve em:
 `/lol-perks/v1/pages`, `/lol-perks/v1/currentpage`, `/lol-item-sets/v1/item-sets/{id}/sets` e `/lol-champ-select/v1/session/my-selection`.

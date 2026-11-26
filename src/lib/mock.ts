@@ -93,11 +93,13 @@ export const mockSnapshot: Snapshot = {
       { championId: 104, gain: 0.03, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 52.4, baseWr: 53.3, n: 1400 }] },
     ],
     laneNote: null,
+    metric: "wpa",
   },
   picks: {
     loading: false,
     lane: "jungle",
     pool: "mastery",
+    metric: "wpa",
     enemies: [234, 122],
     allies: [{ championId: 99, lane: "middle", me: false }],
     note: null,
@@ -197,7 +199,7 @@ export const mockComposition: Composition = {
 export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
-  suggestBans: true, suggestPicks: true, pickPool: "mastery", checkUpdates: true, layout: "phase",
+  suggestBans: true, suggestPicks: true, pickPool: "mastery", metric: "wpa", checkUpdates: true, layout: "phase",
 };
 
 export const mockUpdate: UpdateInfo = {

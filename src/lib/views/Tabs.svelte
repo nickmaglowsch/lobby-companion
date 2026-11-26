@@ -8,6 +8,8 @@
   import Notices from "./parts/Notices.svelte";
   import BanList from "./parts/BanList.svelte";
   import PickList from "./parts/PickList.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
+  import { banExplain } from "$lib/metric";
   import RunePage from "./parts/RunePage.svelte";
   import SkillGrid from "./parts/SkillGrid.svelte";
   import Item from "./parts/Item.svelte";
@@ -76,7 +78,7 @@
     {#if tab === "draft"}
       <div class="two">
         <section>
-          <h2>Bans {#if bans?.loading}<span class="muted">calculando…</span>{/if}</h2>
+          <h2>Bans {#if bans}<MetricToggle />{/if} {#if bans?.loading}<span class="muted">calculando…</span>{/if}</h2>
           {#if bans}
             <div class="bans">
               <div>
@@ -88,14 +90,14 @@
                 {#if bans.lanePicks.length}<BanList list={bans.lanePicks} />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
               </div>
             </div>
-            <p class="muted small">Pts = WR recuperado sem ele no jogo. Passe o mouse para ver o porquê.</p>
+            <p class="muted small">{banExplain(bans.metric, bans.byTier)} Passe o mouse para ver o porquê.</p>
           {:else}
             <p class="muted small">Os bans aparecem na seleção de campeões.</p>
           {/if}
         </section>
         <section>
           {#if app.snap?.inChampSelect && app.snap.picks}
-            <h2>Pick para {LANES[app.snap.picks.lane ?? ""] ?? "sua posição"}</h2>
+            <h2>Pick para {LANES[app.snap.picks.lane ?? ""] ?? "sua posição"} <MetricToggle /></h2>
             <PickList variant="detailed" />
           {/if}
           {#if app.snap?.synergy?.lines.length}

@@ -8,6 +8,8 @@
     type Assets, type PickAdvice, type PickPart, type SynergyAdvice,
   } from "./api";
   import Synergy from "./Synergy.svelte";
+  import MetricToggle from "./views/parts/MetricToggle.svelte";
+  import { pickExplain, unit } from "./metric";
 
   let { advice, synergy, assets, locked, onPick }: {
     advice: PickAdvice | null;
@@ -28,6 +30,7 @@
 <section class="card">
   <div class="card-head">
     <h2>Sugestão de pick</h2>
+    <MetricToggle />
     {#if advice?.loading}<span class="muted small">calculando…</span>{/if}
     {#if locked && advice?.suggestions.length}
       <button class="link small" onclick={() => (open = !open)}>{open ? "Esconder" : "Mostrar"}</button>
@@ -53,7 +56,7 @@
         <div class="body">
           <div>
             <b>{name(s.championId)}</b>
-            <span class="total" class:up={s.total >= 0} class:down={s.total < 0}>{pts(s.total)} pts</span>
+            <span class="total" class:up={s.total >= 0} class:down={s.total < 0}>{pts(s.total)} {unit(advice?.metric)}</span>
             {#if s.mastery !== null}<span class="muted small">· {num(s.mastery)} de maestria</span>{/if}
           </div>
           <div class="part muted small">{pts(s.base)} força na lane · {pct(s.wr)} em {num(s.games)} partidas</div>
@@ -70,7 +73,7 @@
   {#if advice?.note}<p class="muted small">{advice.note}</p>{/if}
   {#if showList && advice?.suggestions.length}
     <p class="muted small">
-      Pts = win rate a mais (ou a menos) que a média: força na lane + cada confronto e dupla além da força geral dos dois (amostra pequena conta menos). Tendência estatística; clicar só mostra o build.
+      {pickExplain(advice.metric)} Tendência estatística; clicar só mostra o build.
       {#if advice.pageUrl}<button class="link small" onclick={() => openUrl(advice!.pageUrl!)}>Tier list no lolalytics ↗</button>{/if}
     </p>
   {/if}

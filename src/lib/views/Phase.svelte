@@ -8,6 +8,7 @@
   import Notices from "./parts/Notices.svelte";
   import BanList from "./parts/BanList.svelte";
   import PickList from "./parts/PickList.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
   import RunePage from "./parts/RunePage.svelte";
   import Item from "./parts/Item.svelte";
   import ImportButton from "./parts/ImportButton.svelte";
@@ -50,7 +51,7 @@
     <main class="bans">
       {#if bans}
         <section>
-          <h2>{bans.byTier ? "Mais fortes na lane" : "Pelo seu time"} {#if bans.loading}<span class="muted small">calculando…</span>{/if}</h2>
+          <h2>{bans.byTier ? "Mais fortes na lane" : "Pelo seu time"} <MetricToggle /> {#if bans.loading}<span class="muted small">calculando…</span>{/if}</h2>
           <p class="muted small sub">
             {#if bans.byTier}
               Ninguém declarou ainda: tier list{bans.lane ? ` da ${LANES[bans.lane] ?? bans.lane}` : ""}.
@@ -79,6 +80,7 @@
         {@const p = app.snap.picks}
         <h2>Para {LANES[p.lane ?? ""] ?? "sua posição"}
           <span class="muted small">· {p.pool === "tier" ? "tier list da lane" : "do seu pool"}{p.enemies.length ? `, contra ${p.enemies.map(app.champName).join(", ")}` : ""}</span>
+          <MetricToggle />
           {#if p.loading}<span class="muted small">calculando…</span>{/if}</h2>
         <PickList variant="cards" />
         <p class="muted small">Clicar mostra o build do campeão (não muda nada no cliente). Passe o mouse para ver o porquê da nota.</p>

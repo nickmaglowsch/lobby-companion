@@ -15,6 +15,8 @@
   import Composition from "$lib/Composition.svelte";
   import PickSuggest from "$lib/PickSuggest.svelte";
   import SettingsForm from "./parts/SettingsForm.svelte";
+  import MetricToggle from "./parts/MetricToggle.svelte";
+  import { banExplain, unit } from "$lib/metric";
 
   const snap = $derived(app.snap);
   const assets = $derived(app.assets);
@@ -83,6 +85,7 @@
     <section class="card">
       <div class="card-head">
         <h2>Sugestão de bans</h2>
+        <MetricToggle />
         {#if bans.loading}<span class="muted small">calculando…</span>{/if}
       </div>
       {#snippet banList(list: BanPick[])}
@@ -90,7 +93,7 @@
           <div class="ban">
             <img class="ban-icon" src={championIcon(p.championId)} alt={champName(p.championId)} />
             <div>
-              <div><b>{champName(p.championId)}</b> <span class="gain" title="pontos de win rate recuperados, em média, sem ele no jogo">{signed(p.gain)} pts</span></div>
+              <div><b>{champName(p.championId)}</b> <span class="gain" title={banExplain(bans.metric, bans.byTier)}>{signed(p.gain)} {unit(bans.metric)}</span></div>
               {#if p.tier}
                 <div class="reason muted small">{pct(p.tier.wr)} na lane · pick {pct(p.tier.pr)} · ban {pct(p.tier.br)} · {num(p.tier.games)} partidas</div>
               {/if}
@@ -131,11 +134,11 @@
       {@render banList(bans.lanePicks)}
       {#if bans.laneNote}<p class="muted small">{bans.laneNote}</p>{/if}
       {#if bans.picks.length && bans.byTier}
-        <p class="muted small">Pts = win rate acima da média da lane × chance de ele cair na sua lane (pick rate); amostra pequena conta menos. Troca sozinho para a conta pelo time quando alguém declarar.
+        <p class="muted small">{banExplain(bans.metric, true)} Troca sozinho para a conta pelo time quando alguém declarar.
           {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>Tier list ↗</button>{/if}
         </p>
       {:else if bans.picks.length || bans.lanePicks.length}
-        <p class="muted small">Pts = win rate recuperado, em média, sem esse campeão no jogo: frequência dele × queda do WR (amostra pequena conta menos). Tendência estatística, não leitura do outro time.</p>
+        <p class="muted small">{banExplain(bans.metric, false)} Tendência estatística, não leitura do outro time.</p>
       {/if}
     </section>
   {/if}

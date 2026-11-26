@@ -22,6 +22,12 @@
     <label>Período <select bind:value={settings.patch} onchange={() => app.save()}>{#each PATCHES as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
     <label>Runas <select bind:value={settings.runeChoice} onchange={() => app.save()}><option value="pick">Mais jogada</option><option value="win">Maior WR</option></select></label>
     <label>Amostra mínima <input type="number" min="0" step="50" bind:value={settings.minGames} onchange={() => app.save()} /></label>
+    <label class="wide" title="WPA: quanto a escolha muda a chance de vitória em relação ao que aconteceria sem ela. WR: pontos de win rate acima da média (a conta original). Também dá para trocar na seleção.">Métrica dos bans e picks
+      <select bind:value={settings.metric} onchange={() => app.save()}>
+        <option value="wpa">WPA (probabilidade de vitória adicionada)</option>
+        <option value="wr">Win rate (pontos acima da média)</option>
+      </select>
+    </label>
     <label>Flash na tecla <select bind:value={settings.flashSlot} onchange={() => app.save()}><option value={1}>D</option><option value={2}>F</option></select></label>
   </div>
   <div class="checks">

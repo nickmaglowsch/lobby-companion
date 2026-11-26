@@ -4,6 +4,7 @@ import {
   api, minGamesFor,
   type Assets, type Champion, type Composition, type Settings, type Snapshot,
 } from "./api";
+import type { Metric } from "./metric";
 
 export type Layout = "phase" | "grid" | "tabs" | "classic";
 export const LAYOUTS: [Layout, string][] = [
@@ -38,6 +39,8 @@ class AppState {
   );
   layout = $derived<Layout>((this.settings?.layout as Layout) ?? "phase");
   runeTab = $derived(this.settings?.runeChoice ?? "pick");
+  /** Métrica escolhida (o botão); os números na tela vêm com a métrica de cada conta (`bans.metric`). */
+  metric = $derived<Metric>(this.settings?.metric ?? "wpa");
   runeSet = $derived(
     this.build ? (this.runeTab === "win" ? this.build.runesWin ?? this.build.runesPick : this.build.runesPick) : null,
   );
@@ -148,6 +151,13 @@ class AppState {
   chooseRunes(choice: "pick" | "win") {
     if (!this.settings || this.settings.runeChoice === choice) return;
     this.settings.runeChoice = choice;
+    this.save();
+  }
+
+  /** WPA ↔ WR: grava e o backend recalcula bans e picks (com o cache, sem requisição nova). */
+  setMetric(m: Metric) {
+    if (!this.settings || this.settings.metric === m) return;
+    this.settings.metric = m;
     this.save();
   }
 

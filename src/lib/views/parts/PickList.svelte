@@ -3,6 +3,7 @@
   import { championIcon, pct, num, LANES, type PickPart, type PickSuggestion } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { signed } from "./fmt";
+  import { unit, pickExplain } from "$lib/metric";
 
   let { variant = "rows", max = 5 }: { variant?: "rows" | "detailed" | "cards"; max?: number } = $props();
   const advice = $derived(app.snap?.picks ?? null);
@@ -10,7 +11,13 @@
   const partText = (p: PickPart) =>
     `${signed(p.delta)} ${p.kind === "counter" ? "contra" : "com"} ${app.champName(p.championId)} (${LANES[p.lane] ?? p.lane}) · ${pct(p.wr)} · ${num(p.n)} partidas`;
   const why = (s: PickSuggestion) =>
-    [`${signed(s.base)} força na lane · ${pct(s.wr)} em ${num(s.games)} partidas`, ...s.parts.map(partText)].join("\n");
+    [
+      `${signed(s.total)} ${unit(advice?.metric)} no total`,
+      `${signed(s.base)} força na lane · ${pct(s.wr)} em ${num(s.games)} partidas`,
+      ...s.parts.map(partText),
+      "",
+      pickExplain(advice?.metric),
+    ].join("\n");
   const best = (s: PickSuggestion) => [...s.parts].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
   const pick = (id: number) => app.lookup(id, advice?.lane ?? null);
 </script>

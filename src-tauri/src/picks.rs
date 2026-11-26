@@ -12,11 +12,18 @@
 //!
 //! Como o `d2` já desconta a força geral de cada campeão, as partes somam sem contar a força do
 //! candidato duas vezes. É tendência de estatística, não leitura do outro time.
+//!
+//! Com a métrica WPA (`metric.rs`) as mesmas partes viram log-odds e somam lá; o total é a chance
+//! de vitória com o candidato **menos** a chance com o campeão típico da lane (média ponderada
+//! pelo pick rate da tier list) no mesmo draft. O counter pesa pela chance de o inimigo estar
+//! na lane usada (`lanes` do `ep=counter`). Cada parte mostra quanto a chance cai sem ela.
 
 use crate::bans::BanPick;
 use crate::champselect::Ally;
-use crate::lola::extra::{Counters, Team, TierEntry, TierList};
+use crate::lola::extra::{Counters, PairStat, Team, TierEntry, TierList};
+use crate::metric::{self, Metric};
 use serde::Serialize;
+use std::collections::HashMap;
 
 /// Mesmo encolhimento de `bans.rs`.
 pub const SHRINK: f64 = 300.0;
@@ -132,7 +139,93 @@ pub fn pool_from_tier(list: &TierList, exclude: &[i64], max: usize) -> Vec<i64> 
     c.into_iter().take(max).map(|e| e.id).collect()
 }
 
+/// Efeito de um par (confronto ou dupla) em log-odds: `wr` contra o esperado `wr − d2`,
+/// encolhido pela amostra.
+fn pair_logit(r: &PairStat) -> f64 {
+    (metric::logit(r.wr) - metric::logit(r.wr - r.d2)) * metric::shrink_factor(r.n, SHRINK)
+}
+
+/// Chance (0–1) de o inimigo estar na lane usada na conta (`lanes` do `ep=counter`, em %).
+/// Sem a distribuição, supõe que está.
+fn lane_share(c: &Counters, lane: &str) -> f64 {
+    c.lanes
+        .iter()
+        .find(|(l, _)| l == lane)
+        .map(|(_, v)| (v / 100.0).clamp(0.0, 1.0))
+        .unwrap_or(1.0)
+}
+
+/// Counters e sinergias do candidato `id`. O `delta` sai pronto na métrica WR; no WPA fica 0 e
+/// o segundo valor é o efeito em log-odds (o counter já pesado pela chance da lane do inimigo).
+fn raw_parts(
+    my_lane: &str,
+    id: i64,
+    enemies: &[Enemy],
+    mates: &[Mate],
+    metric: Metric,
+) -> Vec<(PickPart, f64)> {
+    let wr_mode = metric == Metric::Wr;
+    let mut parts = Vec::new();
+    for e in enemies {
+        if let Some(r) = e.counters.row(id).filter(|r| r.n > 0) {
+            // A linha é do ponto de vista do inimigo: o efeito do candidato é o oposto.
+            let share = if wr_mode {
+                1.0
+            } else {
+                lane_share(e.counters, &e.lane)
+            };
+            parts.push((
+                PickPart {
+                    kind: PartKind::Counter,
+                    champion_id: e.champion_id,
+                    lane: e.lane.clone(),
+                    delta: if wr_mode { shrunk(-r.d2, r.n) } else { 0.0 },
+                    wr: 100.0 - r.wr,
+                    n: r.n,
+                },
+                -pair_logit(r) * share,
+            ));
+        }
+    }
+    for m in mates {
+        if let Some(r) = m.team.row(my_lane, id).filter(|r| r.n > 0) {
+            parts.push((
+                PickPart {
+                    kind: PartKind::Synergy,
+                    champion_id: m.champion_id,
+                    lane: m.lane.clone(),
+                    delta: if wr_mode { shrunk(r.d2, r.n) } else { 0.0 },
+                    wr: r.wr,
+                    n: r.n,
+                },
+                pair_logit(r),
+            ));
+        }
+    }
+    parts
+}
+
+/// Log-odds da chance de vitória com `e` na sua lane, nesse draft (WPA).
+fn wpa_logit(list: &TierList, e: &TierEntry, parts: &[(PickPart, f64)]) -> f64 {
+    let base = metric::logit(list.avg_wr);
+    base + (metric::logit(e.wr) - base) * metric::shrink_factor(e.games, SHRINK)
+        + parts.iter().map(|p| p.1).sum::<f64>()
+}
+
+/// Chance de vitória (%) com o campeão típico da lane nesse draft: média das chances de cada
+/// campeão da tier list, ponderada pelo pick rate (o contrafactual do WPA).
+fn wpa_baseline(my_lane: &str, list: &TierList, enemies: &[Enemy], mates: &[Mate]) -> f64 {
+    let (mut sum, mut w) = (0.0, 0.0);
+    for e in list.entries.values().filter(|e| e.pr > 0.0) {
+        let parts = raw_parts(my_lane, e.id, enemies, mates, Metric::Wpa);
+        sum += e.pr * metric::prob(wpa_logit(list, e, &parts));
+        w += e.pr;
+    }
+    if w > 0.0 { sum / w } else { list.avg_wr }
+}
+
 /// Pontua os candidatos e devolve os `top` melhores.
+#[allow(clippy::too_many_arguments)]
 pub fn suggest(
     my_lane: &str,
     list: &TierList,
@@ -141,38 +234,38 @@ pub fn suggest(
     mates: &[Mate],
     mastery: &[(i64, u64)],
     top: usize,
+    metric: Metric,
 ) -> Vec<PickSuggestion> {
+    let baseline = match metric {
+        Metric::Wpa => wpa_baseline(my_lane, list, enemies, mates),
+        Metric::Wr => 0.0,
+    };
     let mut out: Vec<PickSuggestion> = candidates
         .iter()
         .filter_map(|&id| {
             let entry = list.get(id)?;
-            let base = base_delta(list, entry);
-            let mut parts: Vec<PickPart> = Vec::new();
-            for e in enemies {
-                if let Some(r) = e.counters.row(id).filter(|r| r.n > 0) {
-                    // A linha é do ponto de vista do inimigo: o efeito do candidato é o oposto.
-                    parts.push(PickPart {
-                        kind: PartKind::Counter,
-                        champion_id: e.champion_id,
-                        lane: e.lane.clone(),
-                        delta: shrunk(-r.d2, r.n),
-                        wr: 100.0 - r.wr,
-                        n: r.n,
-                    });
+            let raw = raw_parts(my_lane, id, enemies, mates, metric);
+            let (base, mut parts): (f64, Vec<PickPart>) = match metric {
+                Metric::Wr => (
+                    base_delta(list, entry),
+                    raw.into_iter().map(|p| p.0).collect(),
+                ),
+                Metric::Wpa => {
+                    let full = wpa_logit(list, entry, &raw);
+                    let p = metric::prob(full);
+                    let parts: Vec<PickPart> = raw
+                        .into_iter()
+                        .map(|(part, x)| PickPart {
+                            // quanto a chance cai sem essa parte
+                            delta: p - metric::prob(full - x),
+                            ..part
+                        })
+                        .collect();
+                    // a força na lane fica com o resto: total = chance − contrafactual
+                    let sum: f64 = parts.iter().map(|x| x.delta).sum();
+                    (p - baseline - sum, parts)
                 }
-            }
-            for m in mates {
-                if let Some(r) = m.team.row(my_lane, id).filter(|r| r.n > 0) {
-                    parts.push(PickPart {
-                        kind: PartKind::Synergy,
-                        champion_id: m.champion_id,
-                        lane: m.lane.clone(),
-                        delta: shrunk(r.d2, r.n),
-                        wr: r.wr,
-                        n: r.n,
-                    });
-                }
-            }
+            };
             parts.sort_by(|a, b| b.delta.abs().total_cmp(&a.delta.abs()));
             let total = base + parts.iter().map(|p| p.delta).sum::<f64>();
             Some(PickSuggestion {
@@ -196,20 +289,52 @@ pub fn suggest(
 }
 
 /// Bans sem campeões declarados no seu time: pela força geral na sua lane.
-/// `ganho = chance de ele estar na vaga (pr / soma dos pr) × (WR − média) × n/(n + 300)`,
-/// na mesma escala de `bans::suggest` (pontos de WR que você recupera, em média, sem ele).
-pub fn tier_bans(list: &TierList, unavailable: &[i64], top: usize) -> Vec<BanPick> {
+/// - WR: `ganho = chance de ele estar na vaga (pr / soma dos pr) × (WR − média) × n/(n + 300)`,
+///   na mesma escala de `bans::suggest` (pontos de WR que você recupera, em média, sem ele).
+/// - WPA: a vaga do oponente é a tier list (sem os indisponíveis); o ganho é quanto a chance do
+///   oponente cai quando ela fica com os outros (`metric::ban_gains` do lado dele, invertido).
+pub fn tier_bans(list: &TierList, unavailable: &[i64], top: usize, metric: Metric) -> Vec<BanPick> {
     let total = list.pr_total();
     if total <= 0.0 {
         return Vec::new();
     }
-    let mut out: Vec<BanPick> = list
+    let open: Vec<&TierEntry> = list
         .entries
         .values()
         .filter(|e| !unavailable.contains(&e.id))
+        .collect();
+    let gains: HashMap<i64, f64> = match metric {
+        Metric::Wr => open
+            .iter()
+            .map(|e| (e.id, e.pr / total * base_delta(list, e)))
+            .collect(),
+        Metric::Wpa => {
+            let slot: Vec<(i64, f64, f64)> = open
+                .iter()
+                .map(|e| {
+                    let p = metric::shrunk_prob(list.avg_wr, e.wr, e.games, SHRINK);
+                    (e.id, e.pr, p)
+                })
+                .collect();
+            // A vaga é a lane inteira (os pick rates somam ~200: dois por lane), menos os
+            // indisponíveis; quem faltar na lista entra com a média da lane.
+            let gone: f64 = list
+                .entries
+                .values()
+                .filter(|e| unavailable.contains(&e.id))
+                .map(|e| e.pr)
+                .sum();
+            metric::ban_gains(&slot, total.max(200.0) - gone, list.avg_wr)
+                .into_iter()
+                .map(|(id, g)| (id, -g))
+                .collect()
+        }
+    };
+    let mut out: Vec<BanPick> = open
+        .into_iter()
         .map(|e| BanPick {
             champion_id: e.id,
-            gain: e.pr / total * base_delta(list, e),
+            gain: gains.get(&e.id).copied().unwrap_or(0.0),
             reasons: Vec::new(),
             tier: Some(e.clone()),
         })
@@ -316,6 +441,7 @@ mod tests {
             &mates,
             &[(31, 1000)],
             5,
+            Metric::Wr,
         );
         // 4242 não está na tier list: fica de fora
         assert_eq!(picks.len(), 4);
@@ -346,7 +472,89 @@ mod tests {
         let order: Vec<i64> = picks.iter().map(|p| p.champion_id).collect();
         assert_eq!(order, vec![31, 14, 876, 64]);
         // top corta
-        assert_eq!(suggest("jungle", &l, &[31, 64], &[], &[], &[], 1).len(), 1);
+        assert_eq!(
+            suggest("jungle", &l, &[31, 64], &[], &[], &[], 1, Metric::Wr).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn wpa_compares_with_the_typical_pick_in_the_same_draft() {
+        let l = parse_list(&list_fixture()).unwrap();
+        let viego = parse_counter(&counter_fixture()).unwrap();
+        let lux = parse_build_team(&team_fixture()).unwrap();
+        let enemies = [Enemy {
+            champion_id: 234,
+            lane: "jungle".into(),
+            counters: &viego,
+        }];
+        let mates = [Mate {
+            champion_id: 99,
+            lane: "middle".into(),
+            team: &lux,
+        }];
+        let cands = [31, 64, 14, 876];
+        let run = |enemies: &[Enemy], m: Metric| {
+            suggest("jungle", &l, &cands, enemies, &mates, &[], 5, m)
+        };
+        let wpa = run(&enemies, Metric::Wpa);
+        let wr = run(&enemies, Metric::Wr);
+        let cho = wpa.iter().find(|p| p.champion_id == 31).unwrap();
+        let cho_wr = wr.iter().find(|p| p.champion_id == 31).unwrap();
+        // total = chance com o Cho − chance com o típico da lane, no mesmo draft
+        let raw = raw_parts("jungle", 31, &enemies, &mates, Metric::Wpa);
+        let chance = metric::prob(wpa_logit(&l, l.get(31).unwrap(), &raw));
+        let typical = wpa_baseline("jungle", &l, &enemies, &mates);
+        assert!(close(cho.total, chance - typical));
+        assert!(close(
+            cho.total,
+            cho.base + cho.parts.iter().map(|p| p.delta).sum::<f64>()
+        ));
+        // counter a favor do Cho, um pouco menor que na conta por WR (Viego joga 96% na selva)
+        let counter = |s: &PickSuggestion| {
+            s.parts
+                .iter()
+                .find(|p| p.kind == PartKind::Counter)
+                .unwrap()
+                .delta
+        };
+        assert!(counter(cho) > 0.0 && counter(cho) < counter(cho_wr));
+        // um Viego que só joga metade das partidas na selva pesa metade
+        let mut half = viego.clone();
+        half.lanes = vec![("jungle".into(), 50.0), ("top".into(), 50.0)];
+        let half_enemy = [Enemy {
+            champion_id: 234,
+            lane: "jungle".into(),
+            counters: &half,
+        }];
+        let ratio = counter(
+            run(&half_enemy, Metric::Wpa)
+                .iter()
+                .find(|p| p.champion_id == 31)
+                .unwrap(),
+        ) / counter(cho);
+        assert!((ratio - 50.0 / 96.0).abs() < 0.01, "{ratio}");
+        // a Lillia perde com a Lux (d2 −4 em 900 partidas)
+        let lillia = wpa.iter().find(|p| p.champion_id == 876).unwrap();
+        assert!(
+            lillia
+                .parts
+                .iter()
+                .any(|p| p.kind == PartKind::Synergy && p.delta < 0.0)
+        );
+        assert_eq!(wpa[0].champion_id, 31);
+    }
+
+    #[test]
+    fn wpa_tier_bans_renormalize_the_lane() {
+        let l = parse_list(&list_fixture()).unwrap();
+        let wpa = tier_bans(&l, &[], 5, Metric::Wpa);
+        let wr = tier_bans(&l, &[], 5, Metric::Wr);
+        let ids = |v: &[BanPick]| v.iter().map(|b| b.champion_id).collect::<Vec<_>>();
+        assert_eq!(ids(&wpa), ids(&wr));
+        // tirar alguém da vaga muda a média de quem sobra
+        assert_eq!(tier_bans(&l, &[876], 1, Metric::Wpa)[0].champion_id, 31);
+        assert!(wpa.iter().all(|b| b.gain > 0.0));
     }
 
     #[test]
@@ -360,7 +568,7 @@ mod tests {
     #[test]
     fn tier_bans_weight_win_rate_by_pick_rate() {
         let l = parse_list(&list_fixture()).unwrap();
-        let bans = tier_bans(&l, &[], 5);
+        let bans = tier_bans(&l, &[], 5, Metric::Wr);
         let total = l.pr_total();
         // Lillia: 55% (+4) e 6% das vagas; Cho: +2 e 5%; Viego: +1 e 9%; Sion: +3 mas 0,9%
         let ids: Vec<i64> = bans.iter().map(|b| b.champion_id).collect();
@@ -369,7 +577,7 @@ mod tests {
         assert_eq!(bans[0].tier.as_ref().unwrap().br, 5.0);
         // abaixo da média (Nunu, Darius, Lux) não entra; indisponível também não
         assert!(!ids.contains(&64) && !ids.contains(&99));
-        assert_eq!(tier_bans(&l, &[876], 1)[0].champion_id, 31);
+        assert_eq!(tier_bans(&l, &[876], 1, Metric::Wr)[0].champion_id, 31);
     }
 
     #[test]

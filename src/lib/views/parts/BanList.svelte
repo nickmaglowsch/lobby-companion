@@ -4,6 +4,7 @@
   import { championIcon, pct, num, LANES, type BanPick } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { signed } from "./fmt";
+  import { unit } from "$lib/metric";
 
   let { list, variant = "rows", max = 5 }: { list: BanPick[]; variant?: "strip" | "rows" | "cards"; max?: number } = $props();
 
@@ -19,12 +20,13 @@
     return r ? `${app.champName(r.allyChampionId)} ${pct(r.wr)} contra · ${num(r.n)}` : "";
   }
   const shown = $derived(list.slice(0, max));
+  const u = $derived(unit(app.snap?.bans?.metric));
 </script>
 
 {#if variant === "strip"}
   <div class="strip">
     {#each shown as p (p.championId)}
-      <div class="s" title="{app.champName(p.championId)} {signed(p.gain)} pts&#10;{why(p)}">
+      <div class="s" title="{app.champName(p.championId)} {signed(p.gain)} {u}&#10;{why(p)}">
         <img src={championIcon(p.championId)} alt={app.champName(p.championId)} />
         <span class="up">{signed(p.gain)}</span>
       </div>
@@ -32,7 +34,7 @@
   </div>
 {:else if variant === "rows"}
   {#each shown as p (p.championId)}
-    <div class="row" title={why(p)}>
+    <div class="row" title="{signed(p.gain)} {u}&#10;{why(p)}">
       <img src={championIcon(p.championId)} alt="" />
       <span class="nm">{app.champName(p.championId)}</span>
       <span class="up">{signed(p.gain)}</span>
@@ -40,7 +42,7 @@
   {/each}
 {:else}
   {#each shown as p, i (p.championId)}
-    <div class="card" class:top={i === 0} title={why(p)}>
+    <div class="card" class:top={i === 0} title="{signed(p.gain)} {u}&#10;{why(p)}">
       <img src={championIcon(p.championId)} alt="" />
       <div>
         <div class="bn">{app.champName(p.championId)} <span class="up">{signed(p.gain)}</span></div>

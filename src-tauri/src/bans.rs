@@ -6,10 +6,15 @@
 //! ou seja, quantos pontos de win rate somem em média por causa de `e`; o fator `n/(n+300)`
 //! puxa para zero os confrontos com pouca amostra. O ganho do time é a média ponderada
 //! (o seu campeão pesa 2). É tendência de estatística, não leitura do outro time.
+//!
+//! Com a métrica WPA (`metric.rs`), cada lane do inimigo vira uma vaga: a sua chance contra cada
+//! um (encolhida em log-odds) e o ganho de banir = quanto a sua chance média sobe quando a vaga
+//! fica com os outros (sem os indisponíveis, renormalizada).
 
 use crate::champselect::Ally;
 use crate::lola::extra::TierEntry;
-use crate::lola::model::Build;
+use crate::lola::model::{Build, Matchup};
+use crate::metric::{self, Metric};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -42,7 +47,51 @@ pub struct BanPick {
     pub tier: Option<TierEntry>,
 }
 
-pub fn suggest(inputs: &[(Ally, &Build)], unavailable: &[i64], top: usize) -> Vec<BanPick> {
+/// Ganho de banir cada inimigo de uma lane, para um campeão do seu time.
+fn lane_gains<'a>(
+    build: &Build,
+    list: &'a [Matchup],
+    unavailable: &[i64],
+    metric: Metric,
+) -> Vec<(&'a Matchup, f64)> {
+    let rows: Vec<&Matchup> = list
+        .iter()
+        .filter(|m| m.n > 0 && !unavailable.contains(&m.id))
+        .collect();
+    match metric {
+        Metric::Wr => rows
+            .into_iter()
+            .map(|m| {
+                let harm = (build.wr - m.wr) * metric::shrink_factor(m.n, SHRINK);
+                (m, m.pr / 100.0 * harm)
+            })
+            .collect(),
+        Metric::Wpa => {
+            // A vaga é a lane inteira (100% das suas partidas), menos quem já está indisponível.
+            let listed: f64 = list.iter().filter(|m| m.n > 0).map(|m| m.pr).sum();
+            let gone: f64 = list
+                .iter()
+                .filter(|m| m.n > 0 && unavailable.contains(&m.id))
+                .map(|m| m.pr)
+                .sum();
+            let slot: Vec<(i64, f64, f64)> = rows
+                .iter()
+                .map(|m| (m.id, m.pr, metric::shrunk_prob(build.wr, m.wr, m.n, SHRINK)))
+                .collect();
+            rows.into_iter()
+                .zip(metric::ban_gains(&slot, listed.max(100.0) - gone, build.wr))
+                .map(|(m, (_, g))| (m, g))
+                .collect()
+        }
+    }
+}
+
+pub fn suggest(
+    inputs: &[(Ally, &Build)],
+    unavailable: &[i64],
+    top: usize,
+    metric: Metric,
+) -> Vec<BanPick> {
     let weight = |a: &Ally| if a.me { ME_WEIGHT } else { 1.0 };
     let total: f64 = inputs.iter().map(|(a, _)| weight(a)).sum();
     if total <= 0.0 {
@@ -52,12 +101,7 @@ pub fn suggest(inputs: &[(Ally, &Build)], unavailable: &[i64], top: usize) -> Ve
     for (ally, build) in inputs {
         let w = weight(ally);
         for (lane, list) in &build.matchups {
-            for m in list {
-                if m.n == 0 || unavailable.contains(&m.id) {
-                    continue;
-                }
-                let harm = (build.wr - m.wr) * m.n as f64 / (m.n as f64 + SHRINK);
-                let contrib = m.pr / 100.0 * harm;
+            for (m, contrib) in lane_gains(build, list, unavailable, metric) {
                 let e = acc.entry(m.id).or_default();
                 e.0 += w * contrib;
                 if contrib > 0.0 {
@@ -99,13 +143,15 @@ pub fn suggest(inputs: &[(Ally, &Build)], unavailable: &[i64], top: usize) -> Ve
 
 /// Bans contra o **seu** pick: só os oponentes da sua lane, com a mesma conta de [`suggest`]
 /// (`pr × queda de WR × encolhimento`), ou seja, confronto ruim **e** provável de aparecer.
-/// `exclude` tira quem já está na lista do time, para as duas listas não se repetirem.
+/// `exclude` tira quem já está na lista do time, para as duas listas não se repetirem (só da
+/// lista: na conta do WPA eles continuam na vaga).
 pub fn lane_suggest(
     me: &Ally,
     build: &Build,
     unavailable: &[i64],
     exclude: &[i64],
     top: usize,
+    metric: Metric,
 ) -> Vec<BanPick> {
     let lane = if build.lane.is_empty() {
         me.lane.clone().unwrap_or_default()
@@ -114,8 +160,10 @@ pub fn lane_suggest(
     };
     let mut mine = build.clone();
     mine.matchups.retain(|(l, _)| *l == lane);
-    let skip: Vec<i64> = unavailable.iter().chain(exclude).copied().collect();
-    suggest(&[(me.clone(), &mine)], &skip, top)
+    let mut out = suggest(&[(me.clone(), &mine)], unavailable, usize::MAX, metric);
+    out.retain(|p| !exclude.contains(&p.champion_id));
+    out.truncate(top);
+    out
 }
 
 #[cfg(test)]
@@ -136,7 +184,7 @@ mod tests {
         // Fixture: WR geral 53,4. Inimigos da selva: 234 (47% em 1.100, 9% das partidas),
         // 64 (55%, favorável), 28 (40% mas 12 partidas e 0,1%); topo: 122 (50%, 6%).
         let b = parse_build_full(&fixture()).unwrap();
-        let picks = suggest(&[(ally(31, true), &b)], &[], 5);
+        let picks = suggest(&[(ally(31, true), &b)], &[], 5, Metric::Wr);
         let ids: Vec<i64> = picks.iter().map(|p| p.champion_id).collect();
         assert_eq!(ids, vec![234, 122, 28]);
         let first = &picks[0];
@@ -147,7 +195,7 @@ mod tests {
         // confronto favorável não vira sugestão
         assert!(!ids.contains(&64));
         // banido/escolhido some da lista
-        let without = suggest(&[(ally(31, true), &b)], &[234], 5);
+        let without = suggest(&[(ally(31, true), &b)], &[234], 5, Metric::Wr);
         assert_eq!(without[0].champion_id, 122);
     }
 
@@ -156,11 +204,42 @@ mod tests {
         let b = parse_build_full(&fixture()).unwrap();
         let mut other = b.clone();
         other.matchups.clear();
-        let solo = suggest(&[(ally(31, true), &b)], &[], 1)[0].gain;
+        let solo = suggest(&[(ally(31, true), &b)], &[], 1, Metric::Wr)[0].gain;
         // o meu campeão pesa 2, o aliado sem dados pesa 1: 2/3 do ganho
-        let team = suggest(&[(ally(31, true), &b), (ally(99, false), &other)], &[], 1)[0].gain;
+        let team = suggest(
+            &[(ally(31, true), &b), (ally(99, false), &other)],
+            &[],
+            1,
+            Metric::Wr,
+        )[0]
+        .gain;
         assert!((team - solo * 2.0 / 3.0).abs() < 1e-9);
-        assert!(suggest(&[], &[], 5).is_empty());
+        assert!(suggest(&[], &[], 5, Metric::Wr).is_empty());
+    }
+
+    #[test]
+    fn wpa_renormalizes_each_enemy_lane() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let picks = suggest(&[(ally(31, true), &b)], &[], 5, Metric::Wpa);
+        let ids: Vec<i64> = picks.iter().map(|p| p.champion_id).collect();
+        assert_eq!(ids, vec![234, 122, 28]);
+        // selva: 234 (9%), 64 (8%), 28 (0,1%); o resto dos 100% entra com o WR geral (53,4)
+        let p = |wr: f64, n: u64| metric::shrunk_prob(53.4, wr, n, SHRINK);
+        let now =
+            (9.0 * p(47.0, 1100) + 8.0 * p(55.0, 1000) + 0.1 * p(40.0, 12) + 82.9 * 53.4) / 100.0;
+        assert!((picks[0].gain - 9.0 * (now - p(47.0, 1100)) / 91.0).abs() < 1e-9);
+        // e vale mais do que a conta por WR (a vaga que sobra fica com os outros)
+        let wr = suggest(&[(ally(31, true), &b)], &[], 1, Metric::Wr)[0].gain;
+        assert!(picks[0].gain > wr);
+        // indisponível sai da vaga e da lista
+        let without = suggest(&[(ally(31, true), &b)], &[234], 5, Metric::Wpa);
+        assert_eq!(without[0].champion_id, 122);
+        // a lista "contra você" tira os do time só da exibição: a conta da vaga não muda
+        let me = ally(31, true);
+        let lane = lane_suggest(&me, &b, &[], &[234], 5, Metric::Wpa);
+        let full = lane_suggest(&me, &b, &[], &[], 5, Metric::Wpa);
+        assert_eq!(lane[0].champion_id, 28);
+        assert!((lane[0].gain - full[1].gain).abs() < 1e-12);
     }
 
     #[test]
@@ -170,12 +249,18 @@ mod tests {
         let me = ally(31, true);
         let ids = |v: Vec<BanPick>| v.iter().map(|p| p.champion_id).collect::<Vec<_>>();
         // o topo (122) fica de fora: só oponentes da sua lane
-        assert_eq!(ids(lane_suggest(&me, &b, &[], &[], 5)), vec![234, 28]);
+        assert_eq!(
+            ids(lane_suggest(&me, &b, &[], &[], 5, Metric::Wr)),
+            vec![234, 28]
+        );
         // mesma conta da lista do time para o campeão em comum
-        let solo = suggest(&[(me.clone(), &b)], &[], 1)[0].gain;
-        assert!((lane_suggest(&me, &b, &[], &[], 1)[0].gain - solo).abs() < 1e-9);
+        let solo = suggest(&[(me.clone(), &b)], &[], 1, Metric::Wr)[0].gain;
+        assert!((lane_suggest(&me, &b, &[], &[], 1, Metric::Wr)[0].gain - solo).abs() < 1e-9);
         // sem repetir o que já está na lista do time, nem indisponíveis
-        assert_eq!(ids(lane_suggest(&me, &b, &[], &[234], 5)), vec![28]);
-        assert!(lane_suggest(&me, &b, &[28], &[234], 5).is_empty());
+        assert_eq!(
+            ids(lane_suggest(&me, &b, &[], &[234], 5, Metric::Wr)),
+            vec![28]
+        );
+        assert!(lane_suggest(&me, &b, &[28], &[234], 5, Metric::Wr).is_empty());
     }
 }
