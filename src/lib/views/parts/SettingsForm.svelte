@@ -1,12 +1,14 @@
 <script lang="ts">
   // Formulário de configurações (no Clássico fica no fim da página; nos outros, numa janela por cima).
-  import { TIERS, REGIONS, PATCHES } from "$lib/api";
+  import { TIERS, REGIONS, PATCHES, LANES, championIcon } from "$lib/api";
   import { app, LAYOUTS } from "$lib/app.svelte";
 
   async function toggleUpdates() {
     await app.save();
     if (app.settings?.checkUpdates) app.checkUpdateNow();
   }
+  /** "campeão:lane" da página própria esperando a confirmação para apagar. */
+  let confirmDelete = $state<string | null>(null);
 </script>
 
 {#if app.settings}
@@ -20,7 +22,7 @@
     <label>Elo <select bind:value={settings.tier} onchange={() => app.save()}>{#each TIERS as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
     <label>Região <select bind:value={settings.region} onchange={() => app.save()}>{#each REGIONS as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
     <label>Período <select bind:value={settings.patch} onchange={() => app.save()}>{#each PATCHES as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
-    <label>Runas <select bind:value={settings.runeChoice} onchange={() => app.save()}><option value="pick">Mais jogada</option><option value="win">Maior WR</option></select></label>
+    <label title="Para campeões sem página sua escolhida">Runas <select bind:value={settings.runeChoice} onchange={() => app.save()}><option value="pick">Mais jogada</option><option value="win">Maior WR</option></select></label>
     <label>Amostra mínima <input type="number" min="0" step="50" bind:value={settings.minGames} onchange={() => app.save()} /></label>
     <label>Flash na tecla <select bind:value={settings.flashSlot} onchange={() => app.save()}><option value={1}>D</option><option value={2}>F</option></select></label>
   </div>
@@ -38,6 +40,24 @@
     {/if}
     <label><input type="checkbox" bind:checked={settings.checkUpdates} onchange={toggleUpdates} /> Procurar atualizações no GitHub (só avisa; instala quando você clicar)</label>
   </div>
+  <div class="own">
+    <span class="muted small">Minhas páginas de runas</span>
+    {#each [...app.ownPages].sort((a, b) => app.champName(a.championId).localeCompare(app.champName(b.championId), "pt-BR")) as p (`${p.championId}:${p.lane}`)}
+      {@const key = `${p.championId}:${p.lane}`}
+      <div class="own-row">
+        <img src={championIcon(p.championId)} alt="" />
+        <span>{app.champName(p.championId)} <span class="muted">· {LANES[p.lane] ?? p.lane} · {p.active ? "em uso" : "guardada"}</span></span>
+        {#if confirmDelete === key}
+          <button class="link bad" onclick={() => { confirmDelete = null; app.deleteOwnRunes(p.championId, p.lane); }}>Apagar mesmo</button>
+          <button class="link" onclick={() => (confirmDelete = null)}>Não</button>
+        {:else}
+          <button class="link" onclick={() => (confirmDelete = key)}>Apagar</button>
+        {/if}
+      </div>
+    {:else}
+      <span class="muted small">Nenhuma. Monte a página no cliente e use "Salvar a página do cliente como minha" no cartão de runas: ela aparece como "Minha" para aquele campeão e lane.</span>
+    {/each}
+  </div>
   <div class="version">
     <span class="muted small">Versão {app.version}</span>
     <button onclick={() => app.checkUpdateNow()}>Procurar agora</button>
@@ -52,6 +72,13 @@
   .grid .wide { grid-column: 1 / -1; }
   .checks { display: grid; gap: 4px; font-size: 13px; }
   .checks .sub { padding-left: 22px; color: var(--muted); }
+  .own { display: grid; gap: 4px; margin-top: 10px; font-size: 13px; }
+  .own-row { display: flex; align-items: center; gap: 6px; }
+  .own-row img { width: 20px; height: 20px; border-radius: 3px; }
+  .own-row button { margin-left: auto; }
+  .own-row button + button { margin-left: 0; }
+  button.link { border: none; background: none; color: var(--gold); padding: 0 2px; cursor: pointer; font: inherit; font-size: 12px; }
+  .bad { color: var(--bad) !important; }
   .version { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   .muted { color: var(--muted); }
   .small { font-size: 12px; }

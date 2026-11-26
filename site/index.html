@@ -181,7 +181,7 @@
           </div>
           <p><strong>Bans:</strong> duas listas de 5, pelo seu time e contra o seu pick.<br />
              <strong>Escolha:</strong> sugestões de pick com a nota de cada confronto e dupla, mais a composição de dano dos times.<br />
-             <strong>Build:</strong> runas, feitiços, habilidades e o caminho de itens com o win rate de cada um.</p>
+             <strong>Build:</strong> runas (a mais jogada, a de maior win rate ou a sua), feitiços, habilidades e o caminho de itens com o win rate de cada um.</p>
         </div>
       </div>
       <div class="showcase" data-panel="grade" hidden>
@@ -219,6 +219,8 @@
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg></span>Bans em duas listas</h3><p>Quem mais derruba o win rate do seu time e, à parte, os oponentes da sua lane que vão bem contra o seu campeão e aparecem com frequência.</p></div>
         <div class="card">
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>Sugestão de pick</h3><p>Do seu pool (maestria) ou da tier list, somando força na lane, counter contra cada inimigo visível e sinergia com cada aliado declarado.</p></div>
+        <div class="card">
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg></span>Suas runas <span class="muted" style="text-transform: none; font-weight: 400">· novo na 0.6.0</span></h3><p>Para quem é mono: salve a página do cliente para o seu campeão e lane. Ela aparece como "Minha" ao lado da mais jogada e da de maior WR, com quantos pontos de WR cada runa diferente muda.</p></div>
         <div class="card">
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h6l2-6 2 12 2-6h4"/></svg></span>Build contra o oponente</h3><p>Escolha o campeão do outro lado e veja runas, feitiços e itens daquele confronto, com o win rate comparado ao geral.</p></div>
         <div class="card">
@@ -274,6 +276,8 @@
         <p>O app usa a API local do cliente para importar runas, itens e feitiços, como os apps conhecidos de build. Ele segue as regras de não agir pelo jogador, não revelar nomes ocultos e não mostrar nada durante a partida. Não é afiliado nem endossado pela Riot Games.</p></details>
       <details><summary>Por que o Smart App Control ou o SmartScreen bloqueiam?</summary>
         <p>Porque o instalador ainda não tem certificado de assinatura de código do Windows, que é pago. O SmartScreen deixa executar em "Mais informações"; o Smart App Control, quando ligado, pode bloquear.</p></details>
+      <details><summary>Dá para usar as minhas próprias runas?</summary>
+        <p>Sim, a partir da 0.6.0. Monte a página no editor de runas do cliente (pode ser na própria seleção de campeões) e clique em "Salvar a página do cliente como minha" no cartão de runas. Ela fica guardada para aquele campeão e lane e passa a ser importada no lugar da do lolalytics; dá para voltar à mais jogada, trocar ou apagar quando quiser. Salvar só lê a página do cliente, não muda nada lá.</p></details>
       <details><summary>De onde vêm os números?</summary>
         <p>Do lolalytics.com, com cache de 6 horas e no máximo uma consulta por segundo. São tendência estatística das partidas do elo escolhido, não leitura do outro time. O app sempre mostra o link para a página original.</p></details>
       <details><summary>Funciona em Mac ou Linux?</summary>

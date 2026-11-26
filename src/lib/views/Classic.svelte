@@ -2,7 +2,7 @@
   // Layout "Clássico": a coluna completa com rolagem (a interface original).
   import { openUrl } from "@tauri-apps/plugin-opener";
   import {
-    api, championIcon, icon, pct, num, LANES, PHASES, firstBack, situationalItems, type BanPick,
+    api, championIcon, icon, pct, num, LANES, PHASES, firstBack, situationalItems, type BanPick, type RuneChoice,
   } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import Runes from "$lib/Runes.svelte";
@@ -15,6 +15,7 @@
   import Composition from "$lib/Composition.svelte";
   import PickSuggest from "$lib/PickSuggest.svelte";
   import SettingsForm from "./parts/SettingsForm.svelte";
+  import OwnRunes from "./parts/OwnRunes.svelte";
 
   const snap = $derived(app.snap);
   const assets = $derived(app.assets);
@@ -45,7 +46,7 @@
   }
   const changeLane = (lane: string) => app.changeLane(lane);
   const importNow = () => app.importNow();
-  const chooseRunes = (c: "pick" | "win") => app.chooseRunes(c);
+  const chooseRunes = (c: RuneChoice) => app.chooseRunes(c);
 </script>
 
 <main>
@@ -224,11 +225,14 @@
       <div class="card-head">
         <h2>Runas</h2>
         <div class="tabs">
+          {#if app.ownPage}<button class:active={runeTab === "mine"} onclick={() => chooseRunes("mine")} title="A sua página para este campeão e lane">Minha</button>{/if}
           <button class:active={runeTab === "pick"} onclick={() => chooseRunes("pick")}>Mais jogada</button>
           <button class:active={runeTab === "win"} onclick={() => chooseRunes("win")}>Maior WR</button>
         </div>
       </div>
       {#if runeSet}<Runes set={runeSet} {assets} />{:else}<p class="muted">Sem runas.</p>{/if}
+      {#if runeTab === "mine" && app.ownPage}<p class="muted small own-meta">Sua página · salva em {new Date(app.ownPage.savedAt * 1000).toLocaleDateString("pt-BR")}</p>{/if}
+      <OwnRunes compact={false} />
       {#if runeSet}<RuneAlternatives set={runeSet} stats={build.runeStats} {assets} {minGames} />{/if}
     </section>
 
@@ -328,6 +332,7 @@
   .card-head { display: flex; justify-content: space-between; align-items: center; }
   .tabs { display: flex; gap: 4px; }
   .tabs button { padding: 1px 8px; font-size: 12px; }
+  .own-meta { margin: 4px 0; }
   .row2 { display: grid; grid-template-columns: auto 1fr; gap: 16px; }
   .combo { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
   .combo img { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--gold-dim); }

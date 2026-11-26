@@ -30,7 +30,7 @@ pub struct ItemStat {
     pub n: u64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RuneSet {
     pub primary: Vec<i64>,

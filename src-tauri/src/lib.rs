@@ -9,6 +9,7 @@ pub mod composition;
 pub mod import;
 pub mod lcu;
 pub mod lola;
+pub mod own_runes;
 pub mod picks;
 pub mod settings;
 pub mod update;
@@ -264,6 +265,43 @@ async fn get_composition(
     ))
 }
 
+/// Páginas de runas próprias (todas, para a janela e as configurações).
+#[tauri::command]
+async fn get_own_pages(shared: State<'_, Arc<Shared>>) -> Result<Vec<own_runes::OwnEntry>, String> {
+    Ok(app::own_pages(&shared).await)
+}
+
+/// Lê a página atual do cliente (GET) e guarda como a sua para o campeão e lane.
+#[tauri::command]
+async fn save_own_runes(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    champion_id: i64,
+    lane: String,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::save_own_runes(&app, shared.inner(), champion_id, lane).await
+}
+
+#[tauri::command]
+async fn delete_own_runes(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    champion_id: i64,
+    lane: String,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::delete_own_runes(&app, shared.inner(), champion_id, lane).await
+}
+
+/// "pick" | "win" | "mine" para o build em tela.
+#[tauri::command]
+async fn choose_runes(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    choice: String,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::choose_runes(&app, shared.inner(), choice).await
+}
+
 #[tauri::command]
 async fn get_update(app: AppHandle) -> Result<Option<update::UpdateInfo>, String> {
     Ok(update::pending(&app).await)
@@ -329,6 +367,10 @@ pub fn run() {
             set_vs,
             reimport,
             get_composition,
+            get_own_pages,
+            save_own_runes,
+            delete_own_runes,
+            choose_runes,
             get_update,
             check_update,
             install_update

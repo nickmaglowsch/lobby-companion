@@ -162,7 +162,7 @@
       <div class="two">
         <section>
           <h2>Página</h2>
-          <RunePage size={32} />
+          <RunePage size={32} compact={false} />
         </section>
         <section class="alts">
           <h2>Alternativas</h2>
