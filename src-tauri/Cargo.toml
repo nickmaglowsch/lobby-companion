@@ -1,6 +1,6 @@
 [package]
 name = "lobby-companion"
-version = "0.6.0"
+version = "0.6.1"
 description = "Companion leve de League of Legends para a seleção de campeões: runas, feitiços e conjuntos de itens com dados do lolalytics"
 authors = ["nickmaglowsch"]
 license = "MIT"
