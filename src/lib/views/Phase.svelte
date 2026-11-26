@@ -128,10 +128,10 @@
         <ImportButton big />
       </section>
       <section class="right">
-        <h2>Caminho</h2>
+        <h2>Caminho <MetricToggle /></h2>
         <div class="path">
           {#if b.startSets[0]}
-            <div class="pstep"><span class="lbl">Início · {pct(b.startSets[0].wr)}</span>
+            <div class="pstep"><span class="lbl">Início · {app.startText(0)}</span>
               <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div></div>
           {/if}
           {#if firstBack(b, app.assets, app.minGames).length}
@@ -141,16 +141,16 @@
           {/if}
           {#if core}
             <span class="arrow">›</span>
-            <div class="pstep"><span class="lbl">Núcleo · {pct(core.combo.wr)}</span>
+            <div class="pstep"><span class="lbl">Núcleo · {app.coreText(core.combo)}</span>
               <div class="icons">{#each core.ids as id (id)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div></div>
           {/if}
         </div>
         <h2>Depois</h2>
         <div class="table">
-          {#each [["Botas", b.boots], ["4º item", b.slots[3] ?? []], ["5º item", b.slots[4] ?? []], ["Situac.", situationalItems(b, app.assets, app.minGames)]] as const as [label, list] (label)}
+          {#each [["Botas", b.boots, b.boots, true], ["4º item", b.slots[3] ?? [], b.slots[3] ?? [], true], ["5º item", b.slots[4] ?? [], b.slots[4] ?? [], true], ["Situac.", situationalItems(b, app.assets, app.minGames, app.metric), b.winningItems ?? [], false]] as const as [label, list, from, slot] (label)}
             {#if list.length}
               <span class="lbl">{label}</span>
-              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} size={32} />{/each}</div>
+              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} {from} {slot} size={32} />{/each}</div>
             {/if}
           {/each}
         </div>

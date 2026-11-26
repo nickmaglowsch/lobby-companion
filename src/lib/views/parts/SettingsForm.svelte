@@ -22,7 +22,7 @@
     <label>Período <select bind:value={settings.patch} onchange={() => app.save()}>{#each PATCHES as [v, l] (v)}<option value={v}>{l}</option>{/each}</select></label>
     <label>Runas <select bind:value={settings.runeChoice} onchange={() => app.save()}><option value="pick">Mais jogada</option><option value="win">Maior WR</option></select></label>
     <label>Amostra mínima <input type="number" min="0" step="50" bind:value={settings.minGames} onchange={() => app.save()} /></label>
-    <label class="wide" title="WPA: quanto a escolha muda a chance de vitória em relação ao que aconteceria sem ela. WR: pontos de win rate acima da média (a conta original). Também dá para trocar na seleção.">Métrica dos bans e picks
+    <label class="wide" title="WPA: quanto a escolha muda a chance de vitória em relação ao que aconteceria sem ela. WR: pontos de win rate acima da média (a conta original). Nos itens, WPA compara com o item típico daquela posição. Também dá para trocar na seleção.">Métrica dos bans, picks e itens
       <select bind:value={settings.metric} onchange={() => app.save()}>
         <option value="wpa">WPA (probabilidade de vitória adicionada)</option>
         <option value="wr">Win rate (pontos acima da média)</option>
@@ -33,7 +33,7 @@
   <div class="checks">
     <label><input type="checkbox" bind:checked={settings.autoImport} onchange={() => app.save()} /> Importar sozinho (ao travar e ao mudar runa, lane ou filtro)</label>
     <label><input type="checkbox" bind:checked={settings.importRunes} onchange={() => app.save()} /> Página de runas</label>
-    <label><input type="checkbox" bind:checked={settings.importItems} onchange={() => app.save()} /> Conjunto de itens (WR no título dos blocos)</label>
+    <label><input type="checkbox" bind:checked={settings.importItems} onchange={() => app.save()} /> Conjunto de itens (WR ou WPA no título dos blocos)</label>
     <label><input type="checkbox" bind:checked={settings.importSpells} onchange={() => app.save()} /> Feitiços</label>
     <label><input type="checkbox" bind:checked={settings.replaceCurrentPage} onchange={() => app.save()} /> Sem espaço para página nova: substituir a página atual</label>
     <label><input type="checkbox" bind:checked={settings.closeInGame} onchange={() => app.save()} /> Fechar a janela quando a partida começar</label>

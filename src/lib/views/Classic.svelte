@@ -16,7 +16,7 @@
   import PickSuggest from "$lib/PickSuggest.svelte";
   import SettingsForm from "./parts/SettingsForm.svelte";
   import MetricToggle from "./parts/MetricToggle.svelte";
-  import { banExplain, unit } from "$lib/metric";
+  import { banExplain, unit, itemLegend } from "$lib/metric";
 
   const snap = $derived(app.snap);
   const assets = $derived(app.assets);
@@ -265,24 +265,24 @@
     </section>
 
     <section class="card">
-      <h2>Itens <small class="muted">WR · PR por posição na build</small></h2>
+      <h2>Itens <small class="muted">{app.metric === "wpa" ? "WPA" : "WR"} · PR por posição na build</small> <MetricToggle /></h2>
       {#each build.startSets.slice(0, 2) as s, i (i)}
         <div class="start">
           <span class="label">{i === 0 ? "Início" : "Alt."}</span>
           <div class="combo">
             {#each s.ids as id, j (j)}<img src={icon(assets?.items[id]?.icon)} alt={assets?.items[id]?.name} title={assets?.items[id]?.name} />{/each}
-            <span>{pct(s.wr)}</span><span class="muted">{pct(s.pr)}</span>
+            <span>{app.startText(i)}</span><span class="muted">{pct(s.pr)}</span>
           </div>
         </div>
       {/each}
       <CoreBuild {build} {assets} {minGames} />
-      <ItemRow label="1ª volta" items={firstBack(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
+      <ItemRow label="1ª volta" items={firstBack(build, assets, minGames)} from={build.earlyItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
       <ItemRow label="Botas" items={build.boots} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {#each build.slots as slot, i (i)}
         <ItemRow label="{i + 1}º item" items={slot} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {/each}
-      <ItemRow label="Situac." items={situationalItems(build, assets, minGames)} {assets} avgWr={build.wr} {minGames} />
-      <p class="muted small">Verde/vermelho = ≥1 ponto acima/abaixo do WR do campeão. Apagado = menos de {minGames} partidas.</p>
+      <ItemRow label="Situac." items={situationalItems(build, assets, minGames, app.metric)} from={build.winningItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
+      <p class="muted small">{itemLegend(app.metric, minGames)}</p>
     </section>
   {/if}
 

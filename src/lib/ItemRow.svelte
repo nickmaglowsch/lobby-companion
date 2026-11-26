@@ -1,7 +1,9 @@
 <script lang="ts">
   import { icon, pct, num, type Assets, type ItemStat } from "./api";
+  import { app } from "./app.svelte";
+  import { itemWpa, pp } from "./metric";
 
-  let { label, items, assets, avgWr, minGames, highlight = [] }: {
+  let { label, items, assets, avgWr, minGames, highlight = [], from, slot = true }: {
     label: string;
     items: ItemStat[];
     assets: Assets | null;
@@ -9,7 +11,12 @@
     minGames: number;
     /** Itens destacados (defesa contra o dano do time inimigo, `Composition.svelte`). */
     highlight?: number[];
+    /** Lista de onde os itens vieram, para o WPA (padrão: `items`). */
+    from?: ItemStat[];
+    /** Uma linha por partida (posição, botas) ou várias (1ª volta, situacionais). */
+    slot?: boolean;
   } = $props();
+  const scores = $derived(app.metric === "wpa" ? itemWpa(from ?? items, avgWr, slot) : null);
 
   const known = $derived(items.filter((i) => assets?.items[i.id]).slice(0, 5));
   const delta = (wr: number) => wr - avgWr;
@@ -21,10 +28,15 @@
     <div class="items">
       {#each known as it (it.id)}
         {@const item = assets?.items[it.id]}
+        {@const sc = scores?.get(it.id)}
         <div class="item" class:low={it.n < minGames} class:def={highlight.includes(it.id)}
-          title="{item?.name} · {num(it.n)} partidas{highlight.includes(it.id) ? ' · defesa contra o time inimigo' : ''}">
+          title="{item?.name} · {pct(it.wr)} · {num(it.n)} partidas{highlight.includes(it.id) ? ' · defesa contra o time inimigo' : ''}">
           <img src={icon(item?.icon)} alt={item?.name} />
-          <span class="wr" class:up={delta(it.wr) >= 1} class:down={delta(it.wr) <= -1}>{pct(it.wr)}</span>
+          {#if sc !== undefined}
+            <span class="wr" class:up={sc >= 0.5} class:down={sc <= -0.5}>{pp(sc)}</span>
+          {:else}
+            <span class="wr" class:up={delta(it.wr) >= 1} class:down={delta(it.wr) <= -1}>{pct(it.wr)}</span>
+          {/if}
           <span class="pr">{pct(it.pr)}</span>
         </div>
       {/each}

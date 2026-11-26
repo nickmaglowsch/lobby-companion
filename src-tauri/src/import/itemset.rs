@@ -6,7 +6,9 @@
 use crate::assets::Assets;
 use crate::lcu::Lcu;
 use crate::lola::model::{Build, Combo, ItemStat};
+use crate::metric::{self, Metric};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 pub const UID_PREFIX: &str = "lc-";
 pub const TITLE_PREFIX: &str = "LC:";
@@ -20,6 +22,42 @@ const EXTRA_ITEMS: usize = 4;
 /// `53.456` → `"53,5%"` (pt-BR).
 pub fn pct(x: f64) -> String {
     format!("{:.1}%", x).replace('.', ",")
+}
+
+/// `0.84` → `"+0,8"`, `-0.4` → `"-0,4"` (pontos percentuais; hífen comum, que a loja mostra bem).
+pub fn pp(x: f64) -> String {
+    let r = (x * 10.0).round() / 10.0;
+    let sign = if r < 0.0 { "-" } else { "+" };
+    format!("{sign}{:.1}", r.abs()).replace('.', ",")
+}
+
+/// WPA (pp) de cada item de uma lista do build (`metric::list_wpa`).
+pub fn item_wpa(list: &[ItemStat], champ_wr: f64, one_per_game: bool) -> HashMap<i64, f64> {
+    let rows: Vec<(f64, f64, u64)> = list.iter().map(|i| (i.wr, i.pr, i.n)).collect();
+    list.iter()
+        .map(|i| i.id)
+        .zip(metric::list_wpa(&rows, champ_wr, one_per_game))
+        .collect()
+}
+
+/// WPA (pp) de cada combinação (inícios, núcleos), na ordem da lista: uma por partida.
+pub fn combo_wpa(list: &[Combo], champ_wr: f64) -> Vec<f64> {
+    let rows: Vec<(f64, f64, u64)> = list.iter().map(|c| (c.wr, c.pr, c.n)).collect();
+    metric::list_wpa(&rows, champ_wr, true)
+}
+
+/// Texto do título do bloco: `WR 53,5% / 53,2%` ou `+0,8 / -0,4 pp`.
+fn tag(metric: Metric, values: &[(f64, f64)]) -> String {
+    match metric {
+        Metric::Wr => {
+            let v: Vec<String> = values.iter().map(|(wr, _)| pct(*wr)).collect();
+            format!("WR {}", v.join(" / "))
+        }
+        Metric::Wpa => {
+            let v: Vec<String> = values.iter().map(|(_, w)| pp(*w)).collect();
+            format!("{} pp", v.join(" / "))
+        }
+    }
 }
 
 fn item(id: i64, count: u32) -> Value {
@@ -89,10 +127,19 @@ pub fn first_back(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemSta
         .collect()
 }
 
-/// Situacionais: os de maior WR (`winningItem`) com amostra mínima que não estão entre os mais
-/// jogados dos slots, das botas e do núcleo (botas ficam de fora: já têm bloco próprio).
+/// Situacionais: fora dos mais jogados dos slots, das botas e do núcleo (botas ficam de fora: já
+/// têm bloco próprio), sem consumíveis.
+/// - WR: os de maior WR (`winningItem`) com amostra mínima;
+/// - WPA: os de maior WPA contra o WR do campeão (a amostra pequena já pesa pouco, sem corte),
+///   só os positivos.
+///
 /// Mesma regra na janela (`situationalItems` em `api.ts`).
-pub fn situational(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemStat> {
+pub fn situational(
+    build: &Build,
+    assets: &Assets,
+    min_games: u64,
+    metric: Metric,
+) -> Vec<ItemStat> {
     let mut usual: Vec<i64> = build
         .slots
         .iter()
@@ -103,28 +150,49 @@ pub fn situational(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemSt
     if let Some((_, ids)) = core_set(build, assets, min_games) {
         usual.extend(ids);
     }
-    build
-        .winning_items
-        .iter()
-        .filter(|i| {
-            i.n >= min_games
-                && !usual.contains(&i.id)
-                && is_build_item(assets, i.id)
-                && !assets.item_has(i.id, "Boots")
-        })
-        .take(EXTRA_ITEMS)
-        .cloned()
-        .collect()
+    let open = |i: &&ItemStat| {
+        !usual.contains(&i.id) && is_build_item(assets, i.id) && !assets.item_has(i.id, "Boots")
+    };
+    match metric {
+        Metric::Wr => build
+            .winning_items
+            .iter()
+            .filter(|i| i.n >= min_games)
+            .filter(open)
+            .take(EXTRA_ITEMS)
+            .cloned()
+            .collect(),
+        Metric::Wpa => {
+            let score = item_wpa(&build.winning_items, build.wr, false);
+            let s = |i: &ItemStat| score.get(&i.id).copied().unwrap_or(0.0);
+            let mut c: Vec<&ItemStat> = build
+                .winning_items
+                .iter()
+                .filter(open)
+                .filter(|i| s(i) > 0.0)
+                .collect();
+            c.sort_by(|a, b| s(b).total_cmp(&s(a)).then(a.id.cmp(&b.id)));
+            c.into_iter().take(EXTRA_ITEMS).cloned().collect()
+        }
+    }
 }
 
-fn wr_block(label: &str, items: &[ItemStat]) -> Option<Value> {
+/// Bloco com o WR (ou o WPA de `scores`) de cada item, na mesma ordem dos ícones.
+fn wr_block(
+    label: &str,
+    items: &[ItemStat],
+    scores: &HashMap<i64, f64>,
+    metric: Metric,
+) -> Option<Value> {
     if items.is_empty() {
         return None;
     }
-    // WR na mesma ordem dos ícones do bloco.
-    let wrs: Vec<String> = items.iter().map(|i| pct(i.wr)).collect();
+    let values: Vec<(f64, f64)> = items
+        .iter()
+        .map(|i| (i.wr, scores.get(&i.id).copied().unwrap_or(0.0)))
+        .collect();
     Some(json!({
-        "type": format!("{label} · WR {}", wrs.join(" / ")),
+        "type": format!("{label} · {}", tag(metric, &values)),
         "hideIfSummonerSpell": "",
         "showIfSummonerSpell": "",
         "items": items.iter().map(|i| item(i.id, 1)).collect::<Vec<_>>(),
@@ -138,13 +206,17 @@ pub fn build_item_set(
     lane_label: &str,
     assets: &Assets,
     min_games: u64,
+    metric: Metric,
 ) -> Value {
     let mut blocks: Vec<Value> = Vec::new();
+    let champ = build.wr;
     // Inícios: o mais jogado e uma alternativa.
-    for (i, start) in build
+    let start_wpa = combo_wpa(&build.start_sets, champ);
+    for (i, (start, wpa)) in build
         .start_sets
         .iter()
-        .filter(|s| s.n >= 1)
+        .zip(start_wpa)
+        .filter(|(s, _)| s.n >= 1)
         .take(2)
         .enumerate()
     {
@@ -163,7 +235,7 @@ pub fn build_item_set(
         }
         let label = if i == 0 { "Início" } else { "Início alt." };
         blocks.push(json!({
-            "type": format!("{label} · WR {}", pct(start.wr)),
+            "type": format!("{label} · {}", tag(metric, &[(start.wr, wpa)])),
             "hideIfSummonerSpell": "",
             "showIfSummonerSpell": "",
             "items": counts.iter().map(|(id, c)| item(*id, *c)).collect::<Vec<_>>(),
@@ -171,30 +243,46 @@ pub fn build_item_set(
     }
     // Núcleo logo depois dos inícios: é o que a maioria compra primeiro.
     if let Some((core, ids)) = core_set(build, assets, min_games) {
+        let wpa = build
+            .core
+            .iter()
+            .position(|c| c.ids == core.ids)
+            .and_then(|k| combo_wpa(&build.core, champ).get(k).copied())
+            .unwrap_or(0.0);
         blocks.push(json!({
-            "type": format!("Núcleo · WR {}", pct(core.wr)),
+            "type": format!("Núcleo · {}", tag(metric, &[(core.wr, wpa)])),
             "hideIfSummonerSpell": "",
             "showIfSummonerSpell": "",
             "items": ids.iter().map(|id| item(*id, 1)).collect::<Vec<_>>(),
         }));
     }
+    // Primeira volta e situacionais: vários por partida, contra o WR do campeão; botas e
+    // posições: contra o item típico da posição.
     blocks.extend(wr_block(
         "Primeira volta",
         &first_back(build, assets, min_games),
+        &item_wpa(&build.early_items, champ, false),
+        metric,
     ));
     blocks.extend(wr_block(
         "Botas",
         &pick_items(&build.boots, assets, min_games),
+        &item_wpa(&build.boots, champ, true),
+        metric,
     ));
     for (i, slot) in build.slots.iter().enumerate() {
         blocks.extend(wr_block(
             &format!("{}º item", i + 1),
             &pick_items(slot, assets, min_games),
+            &item_wpa(slot, champ, true),
+            metric,
         ));
     }
     blocks.extend(wr_block(
         "Situacionais",
-        &situational(build, assets, min_games),
+        &situational(build, assets, min_games, metric),
+        &item_wpa(&build.winning_items, champ, false),
+        metric,
     ));
     let cons: Vec<Value> = CONSUMABLES
         .iter()
@@ -291,7 +379,15 @@ mod tests {
     #[test]
     fn builds_blocks_with_wr() {
         let b = parse_build_full(&fixture()).unwrap();
-        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &sample_assets(), 200);
+        let set = build_item_set(
+            &b,
+            31,
+            "Cho'Gath",
+            "Selva",
+            &sample_assets(),
+            200,
+            Metric::Wr,
+        );
         assert_eq!(set["uid"], "lc-31");
         assert_eq!(set["title"], "LC: Cho'Gath Selva · 16.23");
         assert_eq!(set["associatedMaps"], json!([11]));
@@ -313,7 +409,7 @@ mod tests {
     fn core_first_back_and_situational_blocks() {
         let b = parse_build_full(&fixture()).unwrap();
         let assets = sample_assets();
-        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200);
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, Metric::Wr);
         let blocks = set["blocks"].as_array().unwrap();
         let titles: Vec<&str> = blocks.iter().map(|b| b["type"].as_str().unwrap()).collect();
         // ordem: inícios, núcleo, primeira volta, botas, itens, situacionais, consumíveis
@@ -341,8 +437,42 @@ mod tests {
         assert_eq!(fb, vec![1028, 1001, 3068]);
         // situacionais (por WR): 2003 consumível, 2525 abaixo do mínimo, 3009 botas,
         // 3742 já é o 2º item e 3152 o 1º → sobram 3075 e 3065
-        let sit: Vec<i64> = situational(&b, &assets, 200).iter().map(|i| i.id).collect();
+        let sit: Vec<i64> = situational(&b, &assets, 200, Metric::Wr)
+            .iter()
+            .map(|i| i.id)
+            .collect();
         assert_eq!(sit, vec![3075, 3065]);
+    }
+
+    #[test]
+    fn wpa_titles_and_situational() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let assets = sample_assets();
+        let set = build_item_set(&b, 31, "Cho'Gath", "Selva", &assets, 200, Metric::Wpa);
+        let titles: Vec<String> = set["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["type"].as_str().unwrap().to_string())
+            .collect();
+        // mesmos blocos e itens; o número é o WPA em pp contra o típico da posição
+        let slot1 = item_wpa(&b.slots[0], b.wr, true);
+        let want = format!("1º item · {} / {} pp", pp(slot1[&3084]), pp(slot1[&3152]));
+        assert!(titles.contains(&want), "{titles:?}");
+        assert!(
+            titles
+                .iter()
+                .all(|t| t == "Consumíveis" || t.ends_with(" pp"))
+        );
+        // situacionais: só WPA positivo, do maior para o menor, sem os de sempre e sem botas
+        let sit = situational(&b, &assets, 200, Metric::Wpa);
+        let score = item_wpa(&b.winning_items, b.wr, false);
+        assert!(!sit.is_empty());
+        assert!(sit.iter().all(|i| score[&i.id] > 0.0));
+        assert!(sit.windows(2).all(|w| score[&w[0].id] >= score[&w[1].id]));
+        assert!(sit.iter().all(|i| ![3152, 3742, 3009].contains(&i.id)));
+        assert_eq!(pp(-0.04), "+0,0");
+        assert_eq!(pp(-0.36), "-0,4");
     }
 
     #[test]

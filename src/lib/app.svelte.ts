@@ -2,9 +2,9 @@
 // Os dados vêm do backend (`api`): snapshot do cliente + build do lolalytics, assets e configurações.
 import {
   api, minGamesFor,
-  type Assets, type Champion, type Composition, type Settings, type Snapshot,
+  type Assets, type Champion, type Combo, type Composition, type Settings, type Snapshot,
 } from "./api";
-import type { Metric } from "./metric";
+import { comboWpa, scoreText, type Metric } from "./metric";
 
 export type Layout = "phase" | "grid" | "tabs" | "classic";
 export const LAYOUTS: [Layout, string][] = [
@@ -55,6 +55,22 @@ class AppState {
       ? this.build ? "build" : "idle"
       : this.snap.banning ? "bans" : this.snap.locked ? "build" : "picks",
   );
+
+  /** Número do início `i` (WR ou WPA contra o início típico). */
+  startText = (i: number) => {
+    const b = this.build;
+    const s = b?.startSets[i];
+    return b && s ? scoreText(this.metric, s.wr, comboWpa(b.startSets, b.wr)[i]) : "";
+  };
+
+  /** Número de um núcleo (WR ou WPA contra o núcleo típico). */
+  coreText = (c: Combo) => {
+    const b = this.build;
+    if (!b) return "";
+    const list = b.core ?? [];
+    const k = list.findIndex((x) => x.ids.join() === c.ids.join());
+    return scoreText(this.metric, c.wr, k >= 0 ? comboWpa(list, b.wr)[k] : undefined);
+  };
 
   champName = (id: number) => this.assets?.champions[id]?.name ?? `#${id}`;
 

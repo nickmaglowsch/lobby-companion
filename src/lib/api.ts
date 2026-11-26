@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { cdragonUrl } from "./mockIcons";
-import type { Metric } from "./metric";
+import { itemWpa, type Metric } from "./metric";
 
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
@@ -331,12 +331,21 @@ export function firstBack(build: Build, assets: Assets | null, minGames: number)
     .slice(0, EXTRA_ITEMS);
 }
 
-/** Situacionais: maior WR com amostra mínima, fora dos mais jogados (slots, botas, núcleo) e sem botas. */
-export function situationalItems(build: Build, assets: Assets | null, minGames: number): ItemStat[] {
+/**
+ * Situacionais, fora dos mais jogados (slots, botas, núcleo) e sem botas. WR: maior WR com amostra
+ * mínima. WPA: maior WPA contra o WR do campeão (sem corte de amostra), só os positivos.
+ */
+export function situationalItems(build: Build, assets: Assets | null, minGames: number, metric: Metric): ItemStat[] {
   const usual = new Set<number>([...build.slots, build.boots].flatMap((s) => pickItems(s, assets, minGames).map((i) => i.id)));
   coreSets(build, assets, minGames)[0]?.ids.forEach((id) => usual.add(id));
-  return (build.winningItems ?? [])
-    .filter((i) => i.n >= minGames && !usual.has(i.id) && isBuildItem(assets, i.id) && !itemHas(assets, i.id, "Boots"))
+  const open = (i: ItemStat) => !usual.has(i.id) && isBuildItem(assets, i.id) && !itemHas(assets, i.id, "Boots");
+  const list = build.winningItems ?? [];
+  if (metric === "wr") return list.filter((i) => i.n >= minGames && open(i)).slice(0, EXTRA_ITEMS);
+  const score = itemWpa(list, build.wr, false);
+  const s = (i: ItemStat) => score.get(i.id) ?? 0;
+  return list
+    .filter((i) => open(i) && s(i) > 0)
+    .sort((a, b) => s(b) - s(a) || a.id - b.id)
     .slice(0, EXTRA_ITEMS);
 }
 

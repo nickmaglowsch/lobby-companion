@@ -1193,6 +1193,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             &set_label,
             &assets,
             build.min_games(settings.min_games),
+            Metric::from_setting(&settings.metric),
         );
         rep.items = Some(Outcome::from(itemset::apply(&lcu, set).await));
     }

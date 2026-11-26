@@ -159,7 +159,7 @@ async fn save_settings(
                 || cur.region != settings.region
                 || cur.patch != settings.patch,
             cur.rune_choice != settings.rune_choice,
-            cur.min_games != settings.min_games,
+            cur.min_games != settings.min_games || cur.metric != settings.metric,
             cur.suggest_bans != settings.suggest_bans || cur.metric != settings.metric,
             cur.suggest_picks != settings.suggest_picks
                 || cur.pick_pool != settings.pick_pool

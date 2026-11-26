@@ -71,12 +71,12 @@
 
     <section class:focus={app.stage === "build"}>
       {#if b}
-        <h2>Itens</h2>
+        <h2>Itens <MetricToggle /></h2>
         {#if b.startSets[0]}
           <div class="irow">
             <span class="lbl">Início</span>
             <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
-            <span class="small">{pct(b.startSets[0].wr)}</span>
+            <span class="small">{app.startText(0)}</span>
           </div>
         {/if}
         {#if firstBack(b, app.assets, app.minGames).length}
@@ -89,21 +89,21 @@
           <div class="irow">
             <span class="lbl">Núcleo</span>
             <div class="icons">{#each core.ids as id (id)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
-            <span class="small">{pct(core.combo.wr)}</span>
+            <span class="small">{app.coreText(core.combo)}</span>
           </div>
         {/if}
         {#each [["Botas", b.boots], ["4º item", b.slots[3] ?? []], ["5º item", b.slots[4] ?? []]] as const as [label, list] (label)}
           {#if list.length}
             <div class="irow">
               <span class="lbl">{label}</span>
-              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} size={28} />{/each}</div>
+              <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} from={list} size={28} />{/each}</div>
             </div>
           {/if}
         {/each}
-        {#if situationalItems(b, app.assets, app.minGames).length}
+        {#if situationalItems(b, app.assets, app.minGames, app.metric).length}
           <div class="irow">
             <span class="lbl">Situac.</span>
-            <div class="icons">{#each situationalItems(b, app.assets, app.minGames).slice(0, 3) as it (it.id)}<Item {it} size={28} />{/each}</div>
+            <div class="icons">{#each situationalItems(b, app.assets, app.minGames, app.metric).slice(0, 3) as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={28} />{/each}</div>
           </div>
         {/if}
       {/if}

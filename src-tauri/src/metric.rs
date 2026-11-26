@@ -1,4 +1,7 @@
-//! Métrica das sugestões de ban e pick (configuração `metric`).
+//! Métrica das sugestões de ban e pick e dos itens (configuração `metric`).
+//! Nos itens (`list_wpa`, usado em `import/itemset.rs` e espelhado em `src/lib/metric.ts`): o item
+//! contra o item típico daquela posição da build (ou contra o WR do campeão na primeira volta e
+//! nos situacionais).
 //!
 //! - **`wr`** (a conta original): pontos de win rate acima da média, somados. Ban = `pr × (WR do
 //!   seu campeão − WR dele contra o inimigo)`; pick = `(WR − média da lane) + Σ d2`.
@@ -83,9 +86,60 @@ pub fn ban_gains(rows: &[(i64, f64, f64)], slot: f64, rest: f64) -> Vec<(i64, f6
         .collect()
 }
 
+/// Encolhimento dos itens (o mesmo dos bans e picks).
+pub const ITEM_SHRINK: f64 = 300.0;
+
+/// WPA de cada linha `(wr, pr, n)` de uma lista de itens do build, em pontos percentuais: a chance
+/// com ela (encolhida em log-odds para o WR do campeão) menos o contrafactual.
+/// - `one_per_game` (posição da build, botas, início, núcleo: uma linha por partida): a média da
+///   própria lista pelo pick rate, e quem falta para 100% entra com o WR do campeão. Compara com
+///   o item típico **daquela posição**, o que tira o viés de tempo (todo 5º item tem WR alto
+///   porque a partida durou).
+/// - senão (primeira volta, situacionais: vários por partida): o WR do campeão.
+///
+/// Não tira o viés de "comprou porque estava ganhando": isso exigiria a chance no momento da
+/// compra, que o lolalytics não dá.
+pub fn list_wpa(rows: &[(f64, f64, u64)], champ_wr: f64, one_per_game: bool) -> Vec<f64> {
+    let p: Vec<f64> = rows
+        .iter()
+        .map(|&(wr, _, n)| shrunk_prob(champ_wr, wr, n, ITEM_SHRINK))
+        .collect();
+    let base = if one_per_game {
+        let listed: f64 = rows.iter().map(|r| r.1.max(0.0)).sum();
+        let s = listed.max(100.0);
+        (rows
+            .iter()
+            .zip(&p)
+            .map(|(r, p)| r.1.max(0.0) * p)
+            .sum::<f64>()
+            + (s - listed) * champ_wr)
+            / s
+    } else {
+        champ_wr
+    };
+    p.into_iter().map(|x| x - base).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn item_wpa_compares_with_the_slot() {
+        // 5º item: todo mundo ganha mais (partida longa). Lista com 100% das partidas:
+        // A 60% (50% das partidas), B 56% (50%); campeão 52%. Amostra enorme.
+        let rows = [(60.0, 50.0, 10_000_000), (56.0, 50.0, 10_000_000)];
+        let slot = list_wpa(&rows, 52.0, true);
+        // contra a posição: ±2 (o típico do 5º item é 58%), não +8/+4 contra o campeão
+        assert!((slot[0] - 2.0).abs() < 0.01 && (slot[1] + 2.0).abs() < 0.01);
+        let champ = list_wpa(&rows, 52.0, false);
+        assert!((champ[0] - 8.0).abs() < 0.01);
+        // lista incompleta: o resto da posição entra com o WR do campeão
+        let part = list_wpa(&[(60.0, 50.0, 10_000_000)], 52.0, true);
+        assert!((part[0] - 4.0).abs() < 0.01);
+        // amostra pequena fica perto de zero: 80% em 10 partidas vale ~1 pp, não 28
+        assert!(list_wpa(&[(80.0, 1.0, 10)], 52.0, false)[0] < 1.5);
+    }
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9

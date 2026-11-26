@@ -1,10 +1,18 @@
 <script lang="ts">
   import { coreSets, icon, pct, num, type Assets, type Build } from "./api";
+  import { app } from "./app.svelte";
+  import { comboWpa, pp } from "./metric";
 
   // Núcleo: os 3 primeiros itens (botas incluídas) na ordem de compra, com WR do conjunto.
   let { build, assets, minGames }: { build: Build; assets: Assets | null; minGames: number } = $props();
 
   const sets = $derived(coreSets(build, assets, minGames).slice(0, 3));
+  // WPA contra o núcleo típico (todos os núcleos guardados, pelo pick rate)
+  const wpa = $derived(app.metric === "wpa" ? comboWpa(build.core ?? [], build.wr) : null);
+  const scoreOf = (ids: string[]) => {
+    const k = (build.core ?? []).findIndex((c) => c.ids.join() === ids.join());
+    return wpa && k >= 0 ? wpa[k] : undefined;
+  };
 </script>
 
 {#if sets.length}
@@ -12,12 +20,17 @@
     <div class="label">Núcleo</div>
     <div class="list">
       {#each sets as { combo, ids }, i (combo.ids.join())}
+        {@const sc = scoreOf(combo.ids)}
         <div class="row" class:first={i === 0} title="{num(combo.n)} partidas{i === 0 ? ' · vai para o conjunto de itens' : ''}">
           {#each ids as id, j (j)}
             {#if j > 0}<span class="arrow">›</span>{/if}
             <img src={icon(assets?.items[id]?.icon)} alt={assets?.items[id]?.name} title={assets?.items[id]?.name} />
           {/each}
-          <span class="wr" class:up={combo.wr - build.wr >= 1} class:down={combo.wr - build.wr <= -1}>{pct(combo.wr)}</span>
+          {#if sc !== undefined}
+            <span class="wr" class:up={sc >= 0.5} class:down={sc <= -0.5} title="WR {pct(combo.wr)}">{pp(sc)} pp</span>
+          {:else}
+            <span class="wr" class:up={combo.wr - build.wr >= 1} class:down={combo.wr - build.wr <= -1}>{pct(combo.wr)}</span>
+          {/if}
           <span class="muted">{pct(combo.pr)} · {num(combo.n)}</span>
         </div>
       {/each}
