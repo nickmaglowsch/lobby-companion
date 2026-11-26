@@ -288,6 +288,29 @@ async fn save_own_runes(
     app::save_own_runes(&app, shared.inner(), champion_id, lane).await
 }
 
+/// Página montada na janela (editor): funciona sem o cliente aberto.
+#[tauri::command]
+async fn save_own_runes_page(
+    app: AppHandle,
+    shared: State<'_, Arc<Shared>>,
+    champion_id: i64,
+    lane: String,
+    primary_style: i64,
+    sub_style: i64,
+    perks: Vec<i64>,
+) -> Result<Vec<own_runes::OwnEntry>, String> {
+    app::save_own_runes_page(
+        &app,
+        shared.inner(),
+        champion_id,
+        lane,
+        primary_style,
+        sub_style,
+        perks,
+    )
+    .await
+}
+
 #[tauri::command]
 async fn delete_own_runes(
     app: AppHandle,
@@ -376,6 +399,7 @@ pub fn run() {
             ban_champion,
             get_own_pages,
             save_own_runes,
+            save_own_runes_page,
             delete_own_runes,
             choose_runes,
             get_update,

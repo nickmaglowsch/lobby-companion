@@ -207,7 +207,9 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     m.mockSnapshot.canBan = false;
     return undefined as T;
   }
-  if (["get_own_pages", "save_own_runes", "delete_own_runes", "choose_runes"].includes(cmd)) {
+  // ?offline=1: só a janela aberta, sem o cliente do League (montar a página no app).
+  if (q.get("offline") === "1") Object.assign(m.mockSnapshot, { connected: false, phase: "None", inChampSelect: false, canBan: false });
+  if (["get_own_pages", "save_own_runes", "save_own_runes_page", "delete_own_runes", "choose_runes"].includes(cmd)) {
     return m.mockOwnCommand(cmd, args ?? {}) as T;
   }
   if (cmd === "get_assets") {
@@ -240,6 +242,9 @@ export const api = {
   ownPages: () => call<OwnPage[]>("get_own_pages"),
   /** Lê a página atual do cliente (só GET) e guarda como a sua para o campeão e lane. */
   saveOwnRunes: (championId: number, lane: string) => call<OwnPage[]>("save_own_runes", { championId, lane }),
+  /** Página montada na janela (funciona sem o cliente aberto). */
+  saveOwnRunesPage: (championId: number, lane: string, primaryStyle: number, subStyle: number, perks: number[]) =>
+    call<OwnPage[]>("save_own_runes_page", { championId, lane, primaryStyle, subStyle, perks }),
   deleteOwnRunes: (championId: number, lane: string) => call<OwnPage[]>("delete_own_runes", { championId, lane }),
   /** Mais jogada / Maior WR / Minha para o build em tela (o backend leva para o cliente). */
   chooseRunes: (choice: RuneChoice) => call<OwnPage[]>("choose_runes", { choice }),

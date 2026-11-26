@@ -2,6 +2,9 @@
 # Próxima versão para o auto-release.yml (roda no ubuntu do Actions, com gh, jq, node e perl).
 # Saídas em $GITHUB_OUTPUT: tag (vazia = nada a lançar), changes (lista de novidades), dry.
 # Com DRY_RUN=true só mostra o que faria: nada de commit, tag ou push.
+# O commit com a versão nova fica FORA da main (só a tag aponta para ele): a main pode exigir o CI
+# (auto-merge dos PRs) sem barrar o bot. Por isso a versão nos arquivos da main fica para trás;
+# a que vale é a da última tag.
 set -euo pipefail
 
 out="${GITHUB_OUTPUT:-/dev/stdout}"
@@ -14,17 +17,18 @@ git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git fetch --tags --force origin main
 git checkout -q -B main origin/main
 
-if git tag --points-at HEAD | grep -q '^v[0-9]'; then
-  echo "a main já tem tag ($(git tag --points-at HEAD | tr '\n' ' ')): nada a lançar"
-  echo "tag=" >> "$out"
-  exit 0
-fi
-
 last=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -1)
 lastv=${last#v}
 lastv=${lastv:-0.0.0}
 cur=$(node -p "require('./src-tauri/tauri.conf.json').version")
 range="${last:+$last..}HEAD"
+
+# Nada novo desde a última tag (a tag aponta para a main ou para o commit de versão logo acima dela).
+if [ -n "$last" ] && [ -z "$(git rev-list "$range")" ]; then
+  echo "nada novo desde $last: nada a lançar"
+  echo "tag=" >> "$out"
+  exit 0
+fi
 
 # Novidades: título dos PRs mesclados desde a última tag; o nível sobe com label minor/major.
 level=patch
@@ -72,7 +76,6 @@ else
     perl -0pi -e "s/(name = \"lobby-companion\"\nversion = )\"[^\"]+\"/\${1}\"$version\"/" src-tauri/Cargo.lock
     git diff --stat
     git commit -qam "Versão $version [skip ci]"
-    git push origin HEAD:main
   fi
   git tag -a "v$version" -m "v$version"
   git push origin "v$version"
