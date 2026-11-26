@@ -11,6 +11,12 @@ export const mockAssets: Assets = {
     "876": { id: 876, name: "Lillia", alias: "Lillia" }, "99": { id: 99, name: "Lux", alias: "Lux" },
     "64": { id: 64, name: "Lee Sin", alias: "LeeSin" }, "60": { id: 60, name: "Elise", alias: "Elise" },
     "19": { id: 19, name: "Warwick", alias: "Warwick" }, "14": { id: 14, name: "Sion", alias: "Sion" },
+    "254": { id: 254, name: "Vi", alias: "Vi" }, "59": { id: 59, name: "Jarvan IV", alias: "JarvanIV" },
+    "91": { id: 91, name: "Talon", alias: "Talon" }, "104": { id: 104, name: "Graves", alias: "Graves" },
+    "266": { id: 266, name: "Aatrox", alias: "Aatrox" }, "245": { id: 245, name: "Ekko", alias: "Ekko" },
+    "901": { id: 901, name: "Smolder", alias: "Smolder" }, "887": { id: 887, name: "Gwen", alias: "Gwen" },
+    "121": { id: 121, name: "Kha'Zix", alias: "Khazix" }, "412": { id: 412, name: "Thresh", alias: "Thresh" },
+    "222": { id: 222, name: "Jinx", alias: "Jinx" },
   },
   items: {
     "1102": item("Filhote de Brasa", ["Jungle"]), "2003": item("Poção de Vida", ["Consumable"]), "3009": item("Botas da Rapidez", ["Boots"]),
@@ -44,6 +50,7 @@ export const mockSnapshot: Snapshot = {
   connected: true,
   phase: "ChampSelect",
   inChampSelect: true,
+  banning: false,
   locked: true,
   championId: 31,
   lane: "jungle",
@@ -69,6 +76,9 @@ export const mockSnapshot: Snapshot = {
         { allyChampionId: 31, lane: "jungle", wr: 49.0, baseWr: 53.3, n: 700 },
         { allyChampionId: 99, lane: "middle", wr: 48.2, baseWr: 51.0, n: 300 },
       ] },
+      { championId: 266, gain: 0.11, tier: null, reasons: [{ allyChampionId: 31, lane: "top", wr: 49.2, baseWr: 53.3, n: 640 }] },
+      { championId: 245, gain: 0.10, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 49.0, baseWr: 53.3, n: 520 }] },
+      { championId: 901, gain: 0.08, tier: null, reasons: [{ allyChampionId: 99, lane: "bottom", wr: 48.1, baseWr: 51.0, n: 410 }] },
     ],
     note: null,
     byTier: false,
@@ -77,7 +87,10 @@ export const mockSnapshot: Snapshot = {
     laneFor: { championId: 31, lane: "jungle", me: true },
     lanePicks: [
       { championId: 234, gain: 0.09, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 49.5, baseWr: 53.3, n: 1500 }] },
-      { championId: 122, gain: 0.03, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 47.0, baseWr: 53.3, n: 180 }] },
+      { championId: 59, gain: 0.05, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 52.0, baseWr: 53.3, n: 2100 }] },
+      { championId: 91, gain: 0.04, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 51.2, baseWr: 53.3, n: 900 }] },
+      { championId: 254, gain: 0.04, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 52.1, baseWr: 53.3, n: 1800 }] },
+      { championId: 104, gain: 0.03, tier: null, reasons: [{ allyChampionId: 31, lane: "jungle", wr: 52.4, baseWr: 53.3, n: 1400 }] },
     ],
     laneNote: null,
   },
@@ -98,6 +111,14 @@ export const mockSnapshot: Snapshot = {
       { championId: 31, total: 2.2, base: 1.9, wr: 53.5, games: 60000, mastery: 580000, parts: [
         { kind: "synergy", championId: 99, lane: "middle", delta: 0.5, wr: 56.1, n: 420 },
         { kind: "counter", championId: 234, lane: "jungle", delta: -0.2, wr: 50.8, n: 1200 },
+      ] },
+      { championId: 121, total: 1.1, base: 1.0, wr: 52.6, games: 41000, mastery: 45000, parts: [
+        { kind: "counter", championId: 122, lane: "top", delta: 0.3, wr: 51.9, n: 900 },
+        { kind: "counter", championId: 234, lane: "jungle", delta: -0.2, wr: 50.1, n: 2000 },
+      ] },
+      { championId: 254, total: 0.8, base: 1.1, wr: 52.7, games: 52000, mastery: 30000, parts: [
+        { kind: "synergy", championId: 99, lane: "middle", delta: 0.2, wr: 53.8, n: 700 },
+        { kind: "counter", championId: 234, lane: "jungle", delta: -0.5, wr: 49.6, n: 2300 },
       ] },
       { championId: 60, total: 0.4, base: 1.3, wr: 52.9, games: 39000, mastery: 12000, parts: [
         { kind: "counter", championId: 234, lane: "jungle", delta: -0.9, wr: 49.0, n: 1700 },
@@ -176,7 +197,7 @@ export const mockComposition: Composition = {
 export const mockSettings: Settings = {
   tier: "emerald_plus", region: "all", patch: "", autoImport: true, importRunes: true, importItems: true,
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
-  suggestBans: true, suggestPicks: true, pickPool: "mastery", checkUpdates: true,
+  suggestBans: true, suggestPicks: true, pickPool: "mastery", checkUpdates: true, layout: "phase",
 };
 
 export const mockUpdate: UpdateInfo = {

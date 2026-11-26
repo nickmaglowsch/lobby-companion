@@ -5,7 +5,8 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type UpdateInfo, type UpdateProgress } from "$lib/api";
 
-  let { inChampSelect = false }: { inChampSelect?: boolean } = $props();
+  // `floating`: nos layouts de uma tela, o aviso fica por cima, no canto de baixo.
+  let { inChampSelect = false, floating = false }: { inChampSelect?: boolean; floating?: boolean } = $props();
 
   const SNOOZE_KEY = "lc-update-later";
   const SNOOZE_MS = 24 * 3600 * 1000;
@@ -68,7 +69,7 @@
 </script>
 
 {#if info && !hidden}
-  <section class="update" role="status">
+  <section class="update" class:floating role="status">
     <p>
       <strong>Versão {info.version} disponível</strong>
       <span class="muted">(você tem a {info.current})</span>
@@ -81,11 +82,12 @@
       {#if percent !== null}<div class="bar"><span style="width: {percent}%"></span></div>{/if}
     {:else}
       <div class="row">
-        <button class="primary" onclick={install} disabled={inChampSelect}>Atualizar agora</button>
+        <button class="primary" onclick={install} disabled={inChampSelect}
+          title={inChampSelect ? "Na seleção de campeões, atualize depois: o app fecha durante a instalação." : ""}>Atualizar agora</button>
         <button class="link" onclick={() => openUrl(info!.url)}>Novidades ↗</button>
         <button class="link later" onclick={later}>Depois</button>
       </div>
-      {#if inChampSelect}
+      {#if inChampSelect && !floating}
         <p class="muted small">Na seleção de campeões, atualize depois: o app fecha durante a instalação.</p>
       {/if}
     {/if}
@@ -95,6 +97,7 @@
 
 <style>
   .update { border: 1px solid var(--gold); border-radius: 6px; background: var(--panel); padding: 8px 10px; display: grid; gap: 6px; }
+  .update.floating { position: fixed; right: 12px; bottom: 52px; z-index: 10; width: 300px; padding: 6px 10px; gap: 4px; font-size: 13px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.6); }
   p { margin: 0; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   button { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }

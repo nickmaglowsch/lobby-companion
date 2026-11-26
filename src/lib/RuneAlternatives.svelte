@@ -2,11 +2,13 @@
   import { icon, pct, num, pts, type Assets, type PerkStat, type RuneSet, type RuneStats } from "./api";
 
   // WR de cada runa escolhida e das alternativas da mesma fileira. Só exibição: não muda a importação.
-  let { set, stats, assets, minGames }: {
+  let { set, stats, assets, minGames, open = false }: {
     set: RuneSet;
     stats: RuneStats | null;
     assets: Assets | null;
     minGames: number;
+    /** Já aberto (aba Runas do layout Abas). */
+    open?: boolean;
   } = $props();
 
   /** Alternativa "claramente melhor": ≥ 2 pontos de WR acima, com amostra mínima. */
@@ -52,7 +54,7 @@
 </script>
 
 {#if rows.length}
-  <details class="alts">
+  <details class="alts" {open}>
     <summary>WR de cada runa e alternativas{#if hint.length}<span class="flag">&nbsp;· {hint.length} com WR maior</span>{/if}</summary>
     <div class="grid">
       {#each rows as r, i (i)}

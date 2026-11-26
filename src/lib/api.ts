@@ -1,6 +1,7 @@
 // Tipos espelhando o serde do backend (src-tauri/src/app.rs, lola/model.rs, assets.rs, settings.rs).
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { cdragonUrl } from "./mockIcons";
 
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
@@ -97,6 +98,8 @@ export interface Snapshot {
   connected: boolean;
   phase: string;
   inChampSelect: boolean;
+  /** Na seleção, ainda há ban por fazer. */
+  banning: boolean;
   locked: boolean;
   championId: number;
   lane: string | null;
@@ -161,6 +164,8 @@ export interface Settings {
   suggestPicks: boolean;
   pickPool: "mastery" | "tier";
   checkUpdates: boolean;
+  /** "phase" | "grid" | "tabs" | "classic" */
+  layout: string;
 }
 
 /** Versão nova no GitHub Releases (`update.rs`). */
@@ -170,12 +175,19 @@ export interface UpdateProgress { downloaded: number; total: number | null }
 /** Fora do Tauri (navegador com `npm run dev`) a página usa dados sintéticos de `mock.ts`. */
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+let mockAssetsWithIcons: Promise<Assets> | undefined;
+
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri) return invoke<T>(cmd, args);
   const m = await import("./mock");
+  // Para ver cada layout e etapa no navegador: ?layout=phase|grid|tabs|classic&fase=bans|picks|build
+  const q = new URLSearchParams(location.search);
+  if (q.get("layout")) m.mockSettings.layout = q.get("layout")!;
+  const fase = q.get("fase");
+  if (fase) Object.assign(m.mockSnapshot, { banning: fase === "bans", locked: fase === "build" });
   const fake: Record<string, unknown> = {
     get_snapshot: m.mockSnapshot,
-    get_assets: m.mockAssets,
+    get_assets: await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets))),
     get_settings: m.mockSettings,
     reimport: m.mockSnapshot.import,
     get_composition: m.mockComposition,
@@ -213,6 +225,7 @@ export const api = {
 /** Ícones servidos pelo backend a partir do cliente (protocolo `lcu`). */
 export function icon(path: string | undefined | null): string {
   if (!path) return "";
+  if (!inTauri) return cdragonUrl(path);
   const windows = navigator.userAgent.includes("Windows");
   return (windows ? "http://lcu.localhost" : "lcu://localhost") + path;
 }

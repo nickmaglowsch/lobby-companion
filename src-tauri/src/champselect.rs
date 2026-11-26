@@ -107,6 +107,8 @@ pub struct Draft {
     pub enemies: Vec<i64>,
     /// Banidos, escolhidos ou declarados por alguém: não faz sentido sugerir ban.
     pub unavailable: Vec<i64>,
+    /// Ainda há ban por fazer (ou a fase de declarar, antes dos bans): a janela mostra os bans.
+    pub banning: bool,
 }
 
 pub fn parse_draft(session: &Value) -> Option<Draft> {
@@ -173,10 +175,22 @@ pub fn parse_draft(session: &Value) -> Option<Draft> {
     unavailable.retain(|c| *c > 0);
     unavailable.sort_unstable();
     unavailable.dedup();
+    let banning = session
+        .get("actions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .flatten()
+        .any(|a| {
+            a.get("type").and_then(Value::as_str) == Some("ban")
+                && a.get("completed").and_then(Value::as_bool) != Some(true)
+        });
     Some(Draft {
         allies,
         enemies,
         unavailable,
+        banning,
     })
 }
 
@@ -280,6 +294,18 @@ mod tests {
         // ban da ação (1), ban do outro time (238), escolhidos e declarados
         assert_eq!(d.unavailable, vec![1, 31, 64, 99, 238]);
         assert!(!format!("{d:?}").contains("não deve"));
+        // o único ban já foi feito
+        assert!(!d.banning);
+    }
+
+    #[test]
+    fn banning_while_a_ban_is_pending() {
+        let mut s = session(false, "BAN_PICK");
+        s["actions"][0][0]["completed"] = json!(false);
+        assert!(parse_draft(&s).unwrap().banning);
+        // às cegas: sem ações de ban
+        s["actions"] = json!([[{"actorCellId": 2, "type": "pick", "completed": false}]]);
+        assert!(!parse_draft(&s).unwrap().banning);
     }
 
     #[test]

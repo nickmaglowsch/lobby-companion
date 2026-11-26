@@ -98,6 +98,8 @@ pub struct Snapshot {
     pub connected: bool,
     pub phase: String,
     pub in_champ_select: bool,
+    /// Na seleção, ainda há ban por fazer (layout "Por fase": mostra os bans).
+    pub banning: bool,
     pub locked: bool,
     pub champion_id: i64,
     /// Lane do lolalytics (`None` = a mais jogada do campeão).
@@ -304,6 +306,7 @@ async fn disconnect(app: &AppHandle, shared: &Shared) {
             s.connected = false;
             s.phase = "None".into();
             s.in_champ_select = false;
+            s.banning = false;
             s.locked = false;
         })
         .await;
@@ -343,6 +346,7 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
             update(app, shared, |s| {
                 s.phase = phase.into();
                 s.in_champ_select = false;
+                s.banning = false;
             })
             .await;
             if close_in_game {
@@ -360,6 +364,7 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         *shared.draft.lock().await = None;
         update(app, shared, |s| {
             s.in_champ_select = false;
+            s.banning = false;
             s.locked = false;
             s.enemy_picks.clear();
             s.ally_picks.clear();
@@ -392,9 +397,11 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
             .as_ref()
             .map(|d| d.allies.iter().map(|a| a.champion_id).collect())
             .unwrap_or_default();
+        let banning = draft.as_ref().is_some_and(|d| d.banning);
         let enemies = draft.map(|d| d.enemies).unwrap_or_default();
         update(app, shared, |s| {
             s.in_champ_select = true;
+            s.banning = banning;
             s.enemy_picks = enemies;
             s.ally_picks = allies;
         })

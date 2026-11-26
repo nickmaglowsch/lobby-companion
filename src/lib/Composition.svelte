@@ -1,42 +1,14 @@
 <script lang="ts">
-  import { api, championIcon, icon, pct, num, type Assets, type Build, type Composition, type DamageType, type TeamMix } from "./api";
+  import { championIcon, icon, pct, num, type DamageType, type TeamMix } from "./api";
+  import { app } from "./app.svelte";
 
   // Composição de dano dos dois times (tipo de dano do próprio cliente) e, quando o inimigo
   // concentra um tipo, os itens de armadura/resistência mágica do seu build. Só exibição.
-  let { allies, enemies, build, assets, minGames, highlight = $bindable([]) }: {
-    allies: number[];
-    enemies: number[];
-    build: Build | null;
-    assets: Assets | null;
-    minGames: number;
-    highlight?: number[];
-  } = $props();
-
-  let comp = $state<Composition | null>(null);
-  let seq = 0;
-
-  $effect(() => {
-    // Recalcula quando muda um campeão, o build em tela ou a amostra mínima.
-    const a = [...allies];
-    const e = [...enemies];
-    void [build?.slug, build?.lane, build?.vs?.championId, build?.n, minGames];
-    if (!a.length && !e.length) {
-      comp = null;
-      highlight = [];
-      return;
-    }
-    const mine = ++seq;
-    api.composition(a, e).then(
-      (c) => {
-        if (mine !== seq) return;
-        comp = c;
-        highlight = c.items.map((i) => i.id);
-      },
-      () => {
-        if (mine === seq) comp = null;
-      },
-    );
-  });
+  // Os dados vêm de `app.composition` (recalculado quando mudam os campeões ou o build).
+  const comp = $derived(app.composition);
+  const allies = $derived(app.snap?.allyPicks ?? []);
+  const enemies = $derived(app.snap?.enemyPicks ?? []);
+  const assets = $derived(app.assets);
 
   const LABEL: Record<DamageType, [string, string]> = {
     physical: ["físico", "físicos"],
