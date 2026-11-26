@@ -1185,12 +1185,8 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
     let mut rep = ImportReport::default();
 
     if scope.runes && settings.import_runes {
-        let own = shared
-            .own_runes
-            .lock()
-            .await
-            .get(champion_id, &build.lane)
-            .cloned();
+        // A página escolhida do campeão vale em qualquer lane e confronto.
+        let own = shared.own_runes.lock().await.active(champion_id).cloned();
         let body = match own_runes::choose(
             &settings.rune_choice,
             build.runes_pick.as_ref(),
@@ -1201,9 +1197,9 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             Chosen::Lola(set) => {
                 runes::page_body(&runes::page_name(&name, &page_label), set, &assets)
             }
-            // A sua página vale para qualquer confronto: o nome diz que é a sua.
+            // A sua página: o nome dela vai no lugar da lane ("LC: Ahri Full AP").
             Chosen::Own(page) => {
-                runes::own_page_body(&runes::page_name(&name, "Minha"), page, &assets)
+                runes::own_page_body(&runes::page_name(&name, &page.name), page, &assets)
             }
         };
         rep.runes = Some(match body {
@@ -1343,18 +1339,10 @@ pub async fn lookup(app: &AppHandle, shared: &Arc<Shared>, champion_id: i64, lan
     load_build(app, shared, champion_id, lane, apply, key).await;
 }
 
-/// Campeão e lane do build em tela (a chave da página própria que a janela mostra).
-async fn view_key(shared: &Shared) -> Option<(i64, String)> {
+/// Campeão do build em tela (as páginas próprias são por campeão).
+async fn view_champion(shared: &Shared) -> Option<i64> {
     let s = shared.snapshot.lock().await;
-    let lane = s.build.as_ref()?.lane.clone();
-    (s.champion_id > 0 && !lane.is_empty()).then_some((s.champion_id, lane))
-}
-
-fn valid_lane(lane: &str) -> Result<(), String> {
-    if champselect::lane_label(lane).is_empty() {
-        return Err(format!("lane desconhecida: {lane}"));
-    }
-    Ok(())
+    (s.build.is_some() && s.champion_id > 0).then_some(s.champion_id)
 }
 
 /// Grava o arquivo e devolve a lista para a janela.
@@ -1369,14 +1357,37 @@ pub async fn own_pages(shared: &Shared) -> Vec<OwnEntry> {
     shared.own_runes.lock().await.entries()
 }
 
-/// Salva a página atual do cliente (só GET) como a sua para o campeão e lane, já escolhida.
+/// Salva a página e a deixa escolhida; se for o campeão em tela, leva para o cliente
+/// (quando a janela pode: `apply_change` confere cliente aberto e campeão do jogador).
+async fn store_page(
+    app: &AppHandle,
+    shared: &Arc<Shared>,
+    champion_id: i64,
+    page_id: Option<u32>,
+    page: OwnPage,
+    import: bool,
+) -> Result<Vec<OwnEntry>, String> {
+    let list = {
+        let mut pages = shared.own_runes.lock().await;
+        pages.upsert(champion_id, page_id, page);
+        store_own(shared, &pages)?
+    };
+    if import && view_champion(shared).await == Some(champion_id) {
+        let (app, shared) = (app.clone(), shared.clone());
+        tauri::async_runtime::spawn(async move { apply_change(&app, &shared, Scope::RUNES).await });
+    }
+    Ok(list)
+}
+
+/// Copia a página atual do cliente (só GET) como página sua do campeão: nova (`page_id` vazio,
+/// com o nome que ela tem no cliente) ou por cima de uma sua.
 pub async fn save_own_runes(
     app: &AppHandle,
     shared: &Arc<Shared>,
     champion_id: i64,
-    lane: String,
+    page_id: Option<u32>,
+    name: Option<String>,
 ) -> Result<Vec<OwnEntry>, String> {
-    valid_lane(&lane)?;
     let lcu = shared
         .lcu
         .read()
@@ -1387,67 +1398,91 @@ pub async fn save_own_runes(
         .get("/lol-perks/v1/currentpage")
         .await
         .map_err(|e| e.to_string())?;
-    let page = OwnPage::from_client(&current, own_runes::now_secs())?;
+    let mut page = OwnPage::from_client(&current, own_runes::now_secs())?;
+    if let Some(n) = name.as_deref().and_then(own_runes::clean_name) {
+        page.name = n;
+    }
     if let Some(a) = shared.assets.read().await.as_ref() {
         page.check(a)?;
     }
-    let list = {
-        let mut pages = shared.own_runes.lock().await;
-        pages.set(champion_id, &lane, page);
-        store_own(shared, &pages)?
-    };
     // A página já está no cliente (é a atual): nada a importar, só o aviso.
-    if view_key(shared).await == Some((champion_id, lane)) {
+    let list = store_page(app, shared, champion_id, page_id, page, false).await?;
+    if view_champion(shared).await == Some(champion_id) {
         update(app, shared, |s| {
             s.import.get_or_insert_with(Default::default).runes =
-                Some(Outcome::ok("página atual do cliente salva como a sua"));
+                Some(Outcome::ok("página atual do cliente salva como sua"));
         })
         .await;
     }
     Ok(list)
 }
 
-/// Apaga a sua página; se era a escolhida no build em tela, a importação volta para o lolalytics.
+/// Página montada na janela (funciona sem o cliente: só grava `rune-pages.json`).
+#[allow(clippy::too_many_arguments)]
+pub async fn save_own_runes_page(
+    app: &AppHandle,
+    shared: &Arc<Shared>,
+    champion_id: i64,
+    page_id: Option<u32>,
+    name: String,
+    primary_style: i64,
+    sub_style: i64,
+    perks: Vec<i64>,
+) -> Result<Vec<OwnEntry>, String> {
+    let mut page = OwnPage::from_editor(primary_style, sub_style, perks, own_runes::now_secs())?;
+    page.name = own_runes::clean_name(&name).unwrap_or_default();
+    let assets = shared
+        .assets
+        .read()
+        .await
+        .clone()
+        .ok_or("sem os dados das runas: abra o cliente do League uma vez com o app aberto")?;
+    page.check(&assets)?;
+    store_page(app, shared, champion_id, page_id, page, true).await
+}
+
+/// Apaga uma página sua; se era a escolhida do campeão em tela, a importação volta ao lolalytics.
 pub async fn delete_own_runes(
     app: &AppHandle,
     shared: &Arc<Shared>,
     champion_id: i64,
-    lane: String,
+    page_id: u32,
 ) -> Result<Vec<OwnEntry>, String> {
     let (list, was_active) = {
         let mut pages = shared.own_runes.lock().await;
-        let old = pages.remove(champion_id, &lane);
-        (store_own(shared, &pages)?, old.is_some_and(|p| p.active))
+        let old = pages.remove(champion_id, page_id);
+        (store_own(shared, &pages)?, old.is_some_and(|(_, was)| was))
     };
-    if was_active && view_key(shared).await == Some((champion_id, lane)) {
+    if was_active && view_champion(shared).await == Some(champion_id) {
         let (app, shared) = (app.clone(), shared.clone());
         tauri::async_runtime::spawn(async move { apply_change(&app, &shared, Scope::RUNES).await });
     }
     Ok(list)
 }
 
-/// Mais jogada / Maior WR / Minha no build em tela. "Minha" vale só para esse campeão e lane;
-/// as outras duas também viram a escolha geral (`runeChoice`), como antes.
+/// Mais jogada / Maior WR / uma página sua (`page_id`) no campeão em tela. A página sua vale só
+/// para esse campeão; Mais jogada e Maior WR também viram a escolha geral (`runeChoice`).
 pub async fn choose_runes(
     app: &AppHandle,
     shared: &Arc<Shared>,
     choice: String,
+    page_id: Option<u32>,
 ) -> Result<Vec<OwnEntry>, String> {
-    if !matches!(choice.as_str(), "pick" | "win" | "mine") {
+    if !matches!(choice.as_str(), "pick" | "win" | "own") {
         return Err(format!("escolha de runas desconhecida: {choice}"));
     }
-    let key = view_key(shared).await;
+    let champion = view_champion(shared).await;
     let mut changed = false;
     let list = {
         let mut pages = shared.own_runes.lock().await;
-        let has_own = key
-            .as_ref()
-            .is_some_and(|(id, lane)| pages.get(*id, lane).is_some());
-        if choice == "mine" && !has_own {
-            return Err("nenhuma página sua salva para esse campeão nessa lane".into());
+        let target = if choice == "own" { page_id } else { None };
+        if let Some(id) = target
+            && !champion.is_some_and(|c| pages.get(c, id).is_some())
+        {
+            return Err("essa página não existe mais".into());
         }
-        if let Some((id, lane)) = &key {
-            changed = pages.set_active(*id, lane, choice == "mine");
+        if let Some(c) = champion {
+            changed = pages.set_active(c, target);
         }
         if changed {
             store_own(shared, &pages)?
@@ -1455,7 +1490,7 @@ pub async fn choose_runes(
             pages.entries()
         }
     };
-    if choice != "mine" {
+    if choice != "own" {
         let mut settings = shared.settings.lock().await;
         if settings.rune_choice != choice {
             settings.rune_choice = choice;
@@ -1481,36 +1516,4 @@ pub async fn ban_champion(shared: &Shared, champion_id: i64) -> Result<(), Strin
         .clone()
         .ok_or("cliente do League fechado")?;
     ban::apply(&lcu, champion_id).await
-}
-
-/// Salva a página montada na janela (funciona sem o cliente: só grava `rune-pages.json`).
-/// Se for o seu campeão em tela e o cliente estiver aberto, já leva para o cliente.
-pub async fn save_own_runes_page(
-    app: &AppHandle,
-    shared: &Arc<Shared>,
-    champion_id: i64,
-    lane: String,
-    primary_style: i64,
-    sub_style: i64,
-    perks: Vec<i64>,
-) -> Result<Vec<OwnEntry>, String> {
-    valid_lane(&lane)?;
-    let page = OwnPage::from_editor(primary_style, sub_style, perks, own_runes::now_secs())?;
-    let assets = shared
-        .assets
-        .read()
-        .await
-        .clone()
-        .ok_or("sem os dados das runas: abra o cliente do League uma vez com o app aberto")?;
-    page.check(&assets)?;
-    let list = {
-        let mut pages = shared.own_runes.lock().await;
-        pages.set(champion_id, &lane, page);
-        store_own(shared, &pages)?
-    };
-    if view_key(shared).await == Some((champion_id, lane)) {
-        let (app, shared) = (app.clone(), shared.clone());
-        tauri::async_runtime::spawn(async move { apply_change(&app, &shared, Scope::RUNES).await });
-    }
-    Ok(list)
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   // Formulário de configurações (no Clássico fica no fim da página; nos outros, numa janela por cima).
-  import { TIERS, REGIONS, PATCHES, LANES, championIcon } from "$lib/api";
+  import { TIERS, REGIONS, PATCHES, championIcon } from "$lib/api";
   import { app, LAYOUTS } from "$lib/app.svelte";
 
   async function toggleUpdates() {
@@ -42,20 +42,20 @@
   </div>
   <div class="own">
     <span class="muted small">Minhas páginas de runas</span>
-    {#each [...app.ownPages].sort((a, b) => app.champName(a.championId).localeCompare(app.champName(b.championId), "pt-BR")) as p (`${p.championId}:${p.lane}`)}
-      {@const key = `${p.championId}:${p.lane}`}
+    {#each [...app.ownPages].sort((a, b) => app.champName(a.championId).localeCompare(app.champName(b.championId), "pt-BR") || a.id - b.id) as p (`${p.championId}:${p.id}`)}
+      {@const key = `${p.championId}:${p.id}`}
       <div class="own-row">
         <img src={championIcon(p.championId)} alt="" />
-        <span>{app.champName(p.championId)} <span class="muted">· {LANES[p.lane] ?? p.lane} · {p.active ? "em uso" : "guardada"}</span></span>
+        <span>{app.champName(p.championId)} <span class="muted">· "{p.name}"{p.active ? " · em uso" : ""}</span></span>
         {#if confirmDelete === key}
-          <button class="link bad" onclick={() => { confirmDelete = null; app.deleteOwnRunes(p.championId, p.lane); }}>Apagar mesmo</button>
+          <button class="link bad" onclick={() => { confirmDelete = null; app.deleteOwnRunes(p.championId, p.id); }}>Apagar mesmo</button>
           <button class="link" onclick={() => (confirmDelete = null)}>Não</button>
         {:else}
           <button class="link" onclick={() => (confirmDelete = key)}>Apagar</button>
         {/if}
       </div>
     {:else}
-      <span class="muted small">Nenhuma. Busque o campeão e use "Montar minha página" no cartão de runas (funciona sem o cliente aberto) ou "Copiar do cliente": ela aparece como "Minha" para aquele campeão e lane.</span>
+      <span class="muted small">Nenhuma. Busque o campeão e use "+ Nova página" no cartão de runas (funciona sem o cliente aberto) ou "Copiar do cliente": cada página aparece pelo nome ao lado de Mais jogada e Maior WR.</span>
     {/each}
   </div>
   <div class="version">

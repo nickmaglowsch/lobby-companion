@@ -2,7 +2,7 @@
   // Editor da página de runas própria, por cima do layout. Funciona sem o cliente do League:
   // usa a cópia dos dados da última conexão e só grava no arquivo do app (rune-pages.json).
   // O WR de cada runa (naquele lugar da página) vem do build em tela, quando há.
-  import { icon, pct, num, perkStat, LANES, type Style } from "$lib/api";
+  import { icon, pct, num, perkStat, ownRuneSet, type Style } from "$lib/api";
   import { app } from "$lib/app.svelte";
 
   const styles = $derived(app.assets?.styles.filter((s) => s.slots.length >= 4 && s.slots[0].length) ?? []);
@@ -16,18 +16,22 @@
   let secondary = $state<number[]>([]);
   let shards = $state<(number | null)[]>([null, null, null]);
   let saving = $state(false);
+  let name = $state("");
+  /** Página sendo editada (`null` = nova). */
+  const editing = $derived(app.editor?.pageId != null ? app.championPages.find((p) => p.id === app.editor?.pageId) : undefined);
 
   const styleById = (id: number | null) => styles.find((s) => s.id === id);
   const priStyle = $derived(styleById(pri));
   const subStyle = $derived(styleById(sub));
   const rowOf = (s: Style | undefined, id: number) => s?.slots.findIndex((r) => r.includes(id)) ?? -1;
 
-  // Abre com a página em tela (a sua, a mais jogada ou a de maior WR).
+  // Abre com a página editada ou, numa nova, com a página em tela (a sua, a mais jogada ou a de maior WR).
   let wasOpen = false;
   $effect(() => {
-    const open = app.editorOpen;
+    const open = !!app.editor;
     if (open && !wasOpen) {
-      const set = app.runeSet;
+      const set = editing ? ownRuneSet(editing) : app.runeSet;
+      name = editing?.name ?? "";
       const p = set ? styles.find((s) => s.perks.includes(set.primary[0])) : undefined;
       const s2 = set ? styles.find((s) => s.id !== p?.id && set.secondary.every((x) => s.perks.includes(x))) : undefined;
       pri = p?.id ?? styles[0]?.id ?? null;
@@ -90,12 +94,12 @@
     saving = true;
     // Secundárias na ordem das fileiras, como o cliente grava.
     const sec = [...secondary].sort((a, b) => rowOf(subStyle, a) - rowOf(subStyle, b));
-    const ok = await app.saveOwnRunesPage(pri, sub, [...primary, ...sec, ...shards] as number[]);
+    const ok = await app.saveOwnRunesPage(app.editor?.pageId ?? null, name, pri, sub, [...primary, ...sec, ...shards] as number[]);
     saving = false;
-    if (ok) app.editorOpen = false;
+    if (ok) app.editor = null;
   }
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape" && app.editorOpen) app.editorOpen = false;
+    if (e.key === "Escape" && app.editor) app.editor = null;
   }
 </script>
 
@@ -108,12 +112,14 @@
   </button>
 {/snippet}
 
-{#if app.editorOpen}
-  <div class="backdrop" role="presentation" onclick={() => (app.editorOpen = false)}></div>
+{#if app.editor}
+  <div class="backdrop" role="presentation" onclick={() => (app.editor = null)}></div>
   <div class="dialog" role="dialog" aria-label="Montar a minha página de runas">
     <div class="head">
-      <h2>Minha página · {app.champ?.name ?? "campeão"}{app.build ? ` (${LANES[app.build.lane] ?? app.build.lane})` : ""}</h2>
-      <button class="close" onclick={() => (app.editorOpen = false)} title="Fechar (Esc)">✕</button>
+      <h2>{editing ? "Editar página" : "Nova página"} · {app.champ?.name ?? "campeão"}</h2>
+      <input class="name" bind:value={name} maxlength="20" placeholder={editing?.name ?? `Página ${app.championPages.length + 1}`}
+        title="Nome da página (até 20 letras); vai no nome da página no cliente: LC: {app.champ?.name ?? ''} <nome>" />
+      <button class="close" onclick={() => (app.editor = null)} title="Fechar (Esc)">✕</button>
     </div>
     {#if !styles.length}
       <p class="body muted">Sem os dados das runas: abra o cliente do League uma vez com o app aberto (eles ficam guardados para depois).</p>
@@ -160,7 +166,7 @@
           {:else}Fica salva só neste computador (funciona sem o cliente aberto).{/if}
           {#if app.build?.runeStats}WR de cada runa naquele lugar da página, no build em tela.{/if}
         </span>
-        <button onclick={() => (app.editorOpen = false)}>Cancelar</button>
+        <button onclick={() => (app.editor = null)}>Cancelar</button>
         <button class="primary" disabled={!complete || saving} onclick={save}>{saving ? "Salvando…" : "Salvar como minha"}</button>
       </div>
     {/if}
@@ -171,7 +177,8 @@
   .backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.55); z-index: 20; }
   .dialog { position: fixed; z-index: 21; top: 16px; left: 50%; transform: translateX(-50%); width: min(660px, calc(100vw - 16px));
     max-height: calc(100vh - 32px); display: grid; grid-template-rows: auto 1fr auto; background: var(--panel); border: 1px solid var(--gold-dim); border-radius: 8px; }
-  .head { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+  .head { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+  .head .name { flex: 1; min-width: 0; max-width: 220px; margin-left: auto; font-size: 13px; }
   h2 { margin: 0; font-size: 14px; color: var(--gold); }
   .close { border: none; background: none; color: var(--muted); font-size: 16px; padding: 0 4px; }
   .body { padding: 10px 14px; overflow: auto; }

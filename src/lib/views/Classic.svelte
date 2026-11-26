@@ -228,13 +228,13 @@
       <div class="card-head">
         <h2>Runas</h2>
         <div class="tabs">
-          {#if app.ownPage}<button class:active={runeTab === "mine"} onclick={() => chooseRunes("mine")} title="A sua página para este campeão e lane">Minha</button>{/if}
+          {#each app.championPages as p (p.id)}<button class="own-tab" class:active={runeTab === `own:${p.id}`} onclick={() => chooseRunes(`own:${p.id}`)} title="Sua página &quot;{p.name}&quot;">{p.name}</button>{/each}
           <button class:active={runeTab === "pick"} onclick={() => chooseRunes("pick")}>Mais jogada</button>
           <button class:active={runeTab === "win"} onclick={() => chooseRunes("win")}>Maior WR</button>
         </div>
       </div>
       {#if runeSet}<Runes set={runeSet} {assets} />{:else}<p class="muted">Sem runas.</p>{/if}
-      {#if runeTab === "mine" && app.ownPage}<p class="muted small own-meta">Sua página · salva em {new Date(app.ownPage.savedAt * 1000).toLocaleDateString("pt-BR")}</p>{/if}
+      {#if app.ownPage}<p class="muted small own-meta">Sua página "{app.ownPage.name}" · salva em {new Date(app.ownPage.savedAt * 1000).toLocaleDateString("pt-BR")}</p>{/if}
       <OwnRunes compact={false} />
       {#if runeSet}<RuneAlternatives set={runeSet} stats={build.runeStats} {assets} {minGames} />{/if}
     </section>
@@ -336,6 +336,8 @@
   .tabs { display: flex; gap: 4px; }
   .tabs button { padding: 1px 8px; font-size: 12px; }
   .own-meta { margin: 4px 0; }
+  .tabs { flex-wrap: wrap; justify-content: flex-end; }
+  .own-tab { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row2 { display: grid; grid-template-columns: auto 1fr; gap: 16px; }
   .combo { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
   .combo img { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--gold-dim); }

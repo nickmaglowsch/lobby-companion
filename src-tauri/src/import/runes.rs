@@ -190,10 +190,11 @@ mod tests {
     #[test]
     fn own_body_keeps_saved_styles() {
         let own = OwnPage {
+            id: 1,
+            name: "Full AP".into(),
             primary_style: 8100,
             sub_style: 8200,
             perks: vec![9923, 8126, 8140, 8106, 8224, 8234, 5008, 5010, 5011],
-            active: true,
             saved_at: 0,
         };
         let body = own_page_body("LC: Cho'Gath Minha", &own, &sample_assets()).unwrap();
