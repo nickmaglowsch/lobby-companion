@@ -12,11 +12,10 @@
   );
 </script>
 
-{#if items.length}
-  <div class="notices">
-    {#each items as n, i (i)}<p class={n.kind} title={n.text}>{n.text}</p>{/each}
-  </div>
-{/if}
+<!-- Sempre presente (mesmo vazio): os layouts reservam uma linha da grade para ele. -->
+<div class="notices">
+  {#each items as n, i (i)}<p class={n.kind} title={n.text}>{n.text}</p>{/each}
+</div>
 
 <style>
   .notices { display: grid; gap: 2px; }

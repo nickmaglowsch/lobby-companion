@@ -185,13 +185,16 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   if (q.get("layout")) m.mockSettings.layout = q.get("layout")!;
   const fase = q.get("fase");
   if (fase) Object.assign(m.mockSnapshot, { banning: fase === "bans", locked: fase === "build" });
+  if (cmd === "get_assets") {
+    return (await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets)))) as T;
+  }
   const fake: Record<string, unknown> = {
     get_snapshot: m.mockSnapshot,
-    get_assets: await (mockAssetsWithIcons ??= import("./mockIcons").then((x) => x.withIcons(m.mockAssets))),
     get_settings: m.mockSettings,
     reimport: m.mockSnapshot.import,
     get_composition: m.mockComposition,
-    get_update: m.mockUpdate,
+    // Aviso de versão nova só com ?update=1 (os prints da landing page saem sem ele).
+    get_update: q.get("update") === "1" ? m.mockUpdate : null,
     check_update: m.mockUpdate,
   };
   return fake[cmd] as T;

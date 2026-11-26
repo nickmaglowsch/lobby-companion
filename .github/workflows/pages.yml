@@ -1,0 +1,53 @@
+name: pages
+
+# Landing page (pasta site/) no GitHub Pages.
+# O botão de download é fixo (releases/latest/download/LobbyCompanion-setup.exe, cópia que o
+# release.yml sobe em cada versão). Aqui só se atualizam os textos de versão, data e SHA-256
+# (elementos com data-release=...) a partir da última release publicada.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versão, data e SHA-256 da última release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          json=$(gh api "repos/${{ github.repository }}/releases/latest")
+          version=$(jq -r '.tag_name' <<<"$json" | sed 's/^v//')
+          date=$(jq -r '.published_at' <<<"$json" | cut -c1-10 | awk -F- '{print $3"/"$2"/"$1}')
+          # O SHA-256 está nas notas da release ("SHA-256 do instalador: `...`").
+          sha=$(jq -r '.body' <<<"$json" | grep -oE '\b[A-Fa-f0-9]{64}\b' | head -1 | tr 'a-f' 'A-F')
+          sed -i -E "s|(data-release=\"version\">)[^<]*|\1${version}|; s|(data-release=\"date\">)[^<]*|\1${date}|" site/index.html
+          if [ -n "$sha" ]; then
+            sed -i -E "s|(data-release=\"sha256\">)[^<]*|\1${sha}|" site/index.html
+          fi
+          grep -oE 'data-release="[a-z0-9]+">[^<]*' site/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

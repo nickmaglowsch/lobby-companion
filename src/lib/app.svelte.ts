@@ -165,3 +165,6 @@ class AppState {
 }
 
 export const app = new AppState();
+
+// Só em desenvolvimento: `__app` no console do navegador para inspecionar o estado.
+if (import.meta.env.DEV) (globalThis as Record<string, unknown>).__app = app;
