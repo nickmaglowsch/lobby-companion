@@ -60,10 +60,16 @@
         <button class="link bad" onclick={remove}>Apagar</button>
         <button class="link" onclick={() => (confirming = false)}>Não</button>
       {:else}
-        <button class="link" onclick={() => app.saveOwnRunes()} disabled={app.ownBusy || !app.snap?.connected}
-          title="Lê a página de runas atual do cliente (sem mudar nada lá) e guarda como a sua para {champ} na lane {lane}">
-          {own ? "Trocar pela página do cliente" : `Salvar a página do cliente como minha`}
+        <button class="link" onclick={() => (app.editorOpen = true)} disabled={app.ownBusy}
+          title="Escolha as runas aqui na janela (funciona sem o cliente aberto) e guarde como a sua para {champ} na lane {lane}">
+          {own ? "Editar minha página" : "Montar minha página"}
         </button>
+        {#if app.snap?.connected}
+          <button class="link" onclick={() => app.saveOwnRunes()} disabled={app.ownBusy}
+            title="Lê a página de runas atual do cliente (sem mudar nada lá) e guarda como a sua para {champ} na lane {lane}">
+            Copiar do cliente
+          </button>
+        {/if}
         {#if own}<button class="link" onclick={() => (confirming = true)} title="Salva em {saved}">Apagar</button>{/if}
       {/if}
     </div>

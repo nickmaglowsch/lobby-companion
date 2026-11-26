@@ -9,6 +9,7 @@
   import Tabs from "$lib/views/Tabs.svelte";
   import Phase from "$lib/views/Phase.svelte";
   import SettingsDialog from "$lib/views/parts/SettingsDialog.svelte";
+  import RuneEditor from "$lib/views/parts/RuneEditor.svelte";
 
   onMount(() => {
     let un: (() => void) | undefined;
@@ -26,6 +27,7 @@
     <UpdateBanner inChampSelect={app.snap?.inChampSelect ?? false} floating />
     <SettingsDialog />
   {/if}
+  <RuneEditor />
 {/if}
 
 <style>

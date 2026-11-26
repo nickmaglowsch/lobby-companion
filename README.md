@@ -16,7 +16,7 @@ A janela mostra o build completo: runas, feitiços, ordem de habilidades, iníci
 - **Sugestão de bans:** pelos campeões escolhidos ou declarados do seu time, os inimigos que mais derrubam o win rate de vocês, com o motivo de cada um; antes de alguém declarar, pela força geral na sua lane (tier list). **Na sua vez de banir, clicar numa sugestão bane esse campeão no cliente** (marca e trava; só com o seu clique).
 - **Sugestão de pick:** para a sua posição, entre os campeões do seu pool (maestria) ou da tier list, somando força na lane, counter contra os inimigos visíveis e sinergia com os aliados; só sugere, nunca escolhe.
 - **Build mais completo:** núcleo de 3 itens, primeira volta e situacionais (também no conjunto de itens), habilidades até o 6/10, WR das runas alternativas, tendência de WR e perfil de dano.
-- **Runas próprias (OTP):** monte a página no cliente e clique em *Salvar a página do cliente como minha* no cartão de runas. Ela passa a aparecer como **Minha** ao lado de Mais jogada e Maior WR para aquele campeão e lane, já escolhida, com o que cada runa diferente da mais jogada muda em pontos de WR (e a amostra). Fica guardada em `rune-pages.json`, na pasta de configuração do app; dá para trocar ou apagar no cartão de runas ou nas configurações.
+- **Runas próprias (OTP):** no cartão de runas, *Montar minha página* abre um editor na própria janela, que funciona **até sem o cliente do League aberto** (o app guarda uma cópia dos dados das runas da última vez que achou o cliente); *Copiar do cliente* pega a página atual do cliente. Ela passa a aparecer como **Minha** ao lado de Mais jogada e Maior WR para aquele campeão e lane, já escolhida, com o que cada runa diferente da mais jogada muda em pontos de WR (e a amostra). Fica guardada em `rune-pages.json`, na pasta de configuração do app; dá para trocar ou apagar no cartão de runas ou nas configurações.
 - **Composição:** tipo de dano dos dois times e destaque dos itens de armadura/resistência mágica do seu build quando o inimigo concentra um tipo.
 
 **Sem overlay.** A janela abre sozinha na seleção de campeões e **fecha quando a partida começa**; fora disso, só um ícone na bandeja (sem o WebView, só o processo Rust ouvindo o WebSocket do cliente).
@@ -50,7 +50,7 @@ npm run dev              # só a interface no navegador, com dados sintéticos
 npm run tauri build      # instalador NSIS em src-tauri/target/release/bundle/
 ```
 
-**Versões:** cada merge na `main` gera e publica uma versão nova sozinho (`.github/workflows/auto-release.yml`): sobe o último número (label `minor` ou `major` no PR sobe os outros), cria a tag, roda os testes, gera o instalador e publica a release com o SHA-256; o app avisa os usuários. Mudanças só no site, na documentação ou nos workflows não geram versão.
+**Versões:** cada merge na `main` gera e publica uma versão nova sozinho (`.github/workflows/auto-release.yml`): sobe o último número (label `minor` ou `major` no PR sobe os outros), cria a tag (a versão nova fica só na tag; a `main` exige o CI verde e os PRs entram por auto-merge), roda os testes, gera o instalador e publica a release com o SHA-256; o app avisa os usuários. Mudanças só no site, na documentação ou nos workflows não geram versão.
 
 Diagnóstico pelo terminal (sem abrir janela):
 

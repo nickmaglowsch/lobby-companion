@@ -55,7 +55,7 @@
         {/if}
       </div>
     {:else}
-      <span class="muted small">Nenhuma. Monte a página no cliente e use "Salvar a página do cliente como minha" no cartão de runas: ela aparece como "Minha" para aquele campeão e lane.</span>
+      <span class="muted small">Nenhuma. Busque o campeão e use "Montar minha página" no cartão de runas (funciona sem o cliente aberto) ou "Copiar do cliente": ela aparece como "Minha" para aquele campeão e lane.</span>
     {/each}
   </div>
   <div class="version">

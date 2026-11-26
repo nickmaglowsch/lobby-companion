@@ -31,6 +31,8 @@ class AppState {
   /** Páginas de runas próprias (todas); a do build em tela é `ownPage`. */
   ownPages = $state<OwnPage[]>([]);
   ownBusy = $state(false);
+  /** Editor da página própria aberto (funciona sem o cliente). */
+  editorOpen = $state(false);
   ownError = $state<string | null>(null);
   /** Campeão sendo banido agora (clique na sugestão) e o erro do último ban. */
   banBusy = $state<number | null>(null);
@@ -190,6 +192,15 @@ class AppState {
     const id = this.snap?.championId;
     const lane = this.build?.lane;
     if (id && lane) await this.ownCall(api.saveOwnRunes(id, lane));
+  }
+
+  /** Salva a página montada no editor para o campeão e a lane em tela; devolve se deu certo. */
+  async saveOwnRunesPage(primaryStyle: number, subStyle: number, perks: number[]): Promise<boolean> {
+    const id = this.snap?.championId;
+    const lane = this.build?.lane;
+    if (!id || !lane) return false;
+    await this.ownCall(api.saveOwnRunesPage(id, lane, primaryStyle, subStyle, perks));
+    return !this.ownError;
   }
 
   async deleteOwnRunes(championId: number, lane: string) {

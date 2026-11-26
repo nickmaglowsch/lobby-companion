@@ -26,6 +26,25 @@ pub struct OwnPage {
 }
 
 impl OwnPage {
+    /// Página montada na janela (sem o cliente): só confere o formato; as runas, `check`.
+    pub fn from_editor(
+        primary_style: i64,
+        sub_style: i64,
+        perks: Vec<i64>,
+        saved_at: u64,
+    ) -> Result<Self, String> {
+        if perks.len() != 9 || perks.contains(&0) || primary_style <= 0 || sub_style <= 0 {
+            return Err("escolha as 9 runas da página".into());
+        }
+        Ok(Self {
+            primary_style,
+            sub_style,
+            perks,
+            active: true,
+            saved_at,
+        })
+    }
+
     /// Lê a página atual do cliente. Recusa página incompleta.
     pub fn from_client(page: &Value, saved_at: u64) -> Result<Self, String> {
         if page.get("isValid").and_then(Value::as_bool) == Some(false) {
@@ -60,16 +79,21 @@ impl OwnPage {
         if self.perks.len() != 9 || pri.id == sub.id {
             return Err(STALE.into());
         }
-        let in_tree = |perks: &[i64], tree: &[i64]| perks.iter().all(|p| tree.contains(p));
+        // Primária: keystone e uma runa de cada fileira, na ordem.
+        let primary_ok =
+            (0..4).all(|i| pri.slots.get(i).is_some_and(|r| r.contains(&self.perks[i])));
+        // Secundária: duas runas de fileiras diferentes, sem a dos keystones.
+        let row = |p: i64| sub.slots.iter().position(|r| r.contains(&p));
+        let secondary_ok = matches!(
+            (row(self.perks[4]), row(self.perks[5])),
+            (Some(a), Some(b)) if a > 0 && b > 0 && a != b
+        );
         let shards_ok = self.perks[6..]
             .iter()
             .zip(&assets.shard_slots)
             .all(|(p, row)| row.contains(p))
             && assets.shard_slots.len() >= 3;
-        if !in_tree(&self.perks[..4], &pri.perks)
-            || !in_tree(&self.perks[4..6], &sub.perks)
-            || !shards_ok
-        {
+        if !primary_ok || !secondary_ok || !shards_ok {
             return Err(STALE.into());
         }
         Ok(())
@@ -253,6 +277,33 @@ mod tests {
         invalid["isValid"] = json!(false);
         assert!(OwnPage::from_client(&invalid, 0).is_err());
         assert!(OwnPage::from_client(&Value::Null, 0).is_err());
+    }
+
+    #[test]
+    fn editor_page_follows_the_rows() {
+        let assets = sample_assets();
+        let ok = |perks: Vec<i64>| {
+            OwnPage::from_editor(8100, 8200, perks, 0).and_then(|p| p.check(&assets))
+        };
+        assert!(ok(vec![9923, 8126, 8140, 8106, 8224, 8234, 5008, 5010, 5011]).is_ok());
+        assert!(
+            ok(vec![9923, 8126, 8140, 8106, 8234, 8224, 5008, 5010, 5011]).is_ok(),
+            "secundárias em qualquer ordem"
+        );
+        assert!(
+            ok(vec![9923, 8126, 8140, 8106, 8224, 8226, 5008, 5010, 5011]).is_err(),
+            "duas da mesma fileira"
+        );
+        assert!(
+            ok(vec![9923, 8126, 8140, 8106, 8214, 8234, 5008, 5010, 5011]).is_err(),
+            "keystone na secundária"
+        );
+        assert!(
+            ok(vec![9923, 8140, 8126, 8106, 8224, 8234, 5008, 5010, 5011]).is_err(),
+            "fileiras trocadas"
+        );
+        assert!(ok(vec![9923, 8126, 8140]).is_err());
+        assert!(OwnPage::from_editor(0, 8200, vec![1; 9], 0).is_err());
     }
 
     #[test]

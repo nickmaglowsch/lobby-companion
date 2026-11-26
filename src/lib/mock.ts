@@ -29,13 +29,15 @@ export const mockAssets: Assets = {
     "3068": item("Égide de Fogo Solar", ["Health", "Armor"]), "3340": item("Sentinela Invisível", ["Trinket"]),
   },
   perks: Object.fromEntries([9923, 8112, 8128, 8126, 8139, 8143, 8140, 8136, 8106, 8135, 8224, 8226, 8234, 8233, 8236, 8237,
-    5008, 5005, 5007, 5010, 5001, 5011, 5013, 8446, 8242].map((id) => [String(id), item(`Runa ${id}`)])),
+    5008, 5005, 5007, 5010, 5001, 5011, 5013, 8446, 8242, 8214, 8229, 8230, 8275, 8210, 8232, 8437, 8439, 8465, 8463, 8401,
+    8429, 8444, 8473, 8451, 8453].map((id) => [String(id), item(`Runa ${id}`)])),
   styles: [
     { id: 8100, name: "Dominação", icon: "", perks: [9923, 8112, 8128, 8126, 8139, 8143, 8140, 8136, 8106, 8135],
       slots: [[9923, 8112, 8128], [8126, 8139, 8143], [8140, 8136], [8106, 8135]] },
-    { id: 8200, name: "Feitiçaria", icon: "", perks: [8224, 8226, 8234, 8233, 8236, 8237],
-      slots: [[], [8224, 8226], [8234, 8233], [8236, 8237]] },
-    { id: 8400, name: "Determinação", icon: "", perks: [8446, 8242], slots: [[], [8446, 8242]] },
+    { id: 8200, name: "Feitiçaria", icon: "", perks: [8214, 8229, 8230, 8224, 8226, 8275, 8210, 8234, 8233, 8237, 8232, 8236],
+      slots: [[8214, 8229, 8230], [8224, 8226, 8275], [8210, 8234, 8233], [8237, 8232, 8236]] },
+    { id: 8400, name: "Determinação", icon: "", perks: [8437, 8439, 8465, 8446, 8463, 8401, 8429, 8444, 8473, 8451, 8453, 8242],
+      slots: [[8437, 8439, 8465], [8446, 8463, 8401], [8429, 8444, 8473], [8451, 8453, 8242]] },
   ],
   spells: { "4": item("Flash"), "11": item("Golpear"), "6": item("Fantasma") },
   shardSlots: [[5008, 5005, 5007], [5008, 5010, 5001], [5011, 5013, 5001]],
@@ -223,6 +225,12 @@ export function mockOwnCommand(cmd: string, args: Record<string, unknown>): OwnP
     const key = { championId: args.championId as number, lane: args.lane as string };
     mockOwnPages = [...mockOwnPages.filter((p) => !same(p, key)),
       { ...key, ...mockClientPage, perks: [...mockClientPage.perks], active: true, savedAt: Math.floor(Date.now() / 1000) }];
+  } else if (cmd === "save_own_runes_page") {
+    const key = { championId: args.championId as number, lane: args.lane as string };
+    mockOwnPages = [...mockOwnPages.filter((p) => !same(p, key)), {
+      ...key, primaryStyle: args.primaryStyle as number, subStyle: args.subStyle as number,
+      perks: [...(args.perks as number[])], active: true, savedAt: Math.floor(Date.now() / 1000),
+    }];
   } else if (cmd === "delete_own_runes") {
     mockOwnPages = mockOwnPages.filter((p) => !same(p, args as { championId: number; lane: string }));
   } else if (cmd === "choose_runes") {

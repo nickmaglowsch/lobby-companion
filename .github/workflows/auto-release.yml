@@ -2,7 +2,8 @@ name: auto-release
 
 # A cada merge na main sai uma versão nova, já PUBLICADA (o atualizador avisa todo mundo):
 # 1. version: próxima versão (patch; label "minor" ou "major" num PR mesclado sobe esse nível),
-#    commit "Versão X [skip ci]" na main e tag vX (script .github/scripts/next-version.sh).
+#    commit "Versão X [skip ci]" em cima da main mas fora dela (só a tag vX aponta para ele,
+#    para a main poder exigir o CI no auto-merge) — script .github/scripts/next-version.sh.
 #    Se um PR já trocou a versão para acima da última tag, ela é usada como está.
 # 2. release: build, testes, latest.json e release publicada com as notas de
 #    .github/release-notes.md (release.yml, chamado como workflow reutilizável).
@@ -28,7 +29,7 @@ on:
         type: boolean
         default: true
 
-# Uma por vez, na ordem: duas mescladas seguidas viram uma versão (a segunda acha a main já com tag).
+# Uma por vez, na ordem: duas mescladas seguidas viram uma versão (a segunda não acha nada novo).
 concurrency:
   group: auto-release
   cancel-in-progress: false

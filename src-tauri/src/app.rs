@@ -185,6 +185,8 @@ pub struct Shared {
     pub settings_path: PathBuf,
     pub lola: Lolalytics,
     icons: Mutex<HashMap<String, (Vec<u8>, String)>>,
+    /// `assets.json` e `icons/` (cópia do cliente para usar sem ele aberto).
+    data_dir: PathBuf,
     me: Mutex<Option<Me>>,
     /// "campeão:lane" do build em tela; respostas atrasadas de outro campeão são descartadas.
     current_key: Mutex<Option<String>>,
@@ -211,9 +213,14 @@ pub struct Shared {
 impl Shared {
     pub fn new(settings_path: PathBuf, cache_dir: PathBuf) -> Self {
         let own_runes_path = settings_path.with_file_name("rune-pages.json");
+        let data_dir = cache_dir
+            .parent()
+            .map_or_else(|| cache_dir.clone(), PathBuf::from);
+        // Sem o cliente aberto, a janela usa a cópia da última conexão (nomes, runas, árvores).
+        let cached = Assets::load_cached(&data_dir.join("assets.json")).map(Arc::new);
         Self {
             lcu: RwLock::new(None),
-            assets: RwLock::new(None),
+            assets: RwLock::new(cached),
             snapshot: Mutex::new(Snapshot {
                 phase: "None".into(),
                 ..Default::default()
@@ -222,6 +229,7 @@ impl Shared {
             settings_path,
             lola: Lolalytics::new(cache_dir),
             icons: Mutex::new(HashMap::new()),
+            data_dir,
             me: Mutex::new(None),
             current_key: Mutex::new(None),
             auto_key: Mutex::new(None),
@@ -269,7 +277,14 @@ pub async fn worker(app: AppHandle) {
             }
         };
         match Assets::load(&client).await {
-            Ok(a) => *shared.assets.write().await = Some(Arc::new(a)),
+            Ok(a) => {
+                let a = Arc::new(a);
+                *shared.assets.write().await = Some(a.clone());
+                // Cópia para usar sem o cliente; os ícones das runas vêm junto, em segundo plano.
+                let _ = a.save_cached(&shared.data_dir.join("assets.json"));
+                let shared = shared.clone();
+                tokio::spawn(async move { prefetch_rune_icons(&shared, &a).await });
+            }
             Err(e) => {
                 update(&app, &shared, |s| {
                     s.error = Some(format!("dados do cliente: {e}"))
@@ -1084,7 +1099,8 @@ pub async fn run_import(shared: &Shared) -> Result<ImportReport, String> {
 
 /// A janela pode mandar sozinha o que está na tela para o cliente agora?
 async fn should_auto_apply(shared: &Shared, champion_id: i64) -> bool {
-    if !shared.settings.lock().await.auto_import {
+    // Sem o cliente (só a janela aberta, com a cópia dos dados): nada a importar.
+    if !shared.settings.lock().await.auto_import || shared.lcu.read().await.is_none() {
         return false;
     }
     let (phase, in_select) = {
@@ -1242,7 +1258,48 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
     Ok(rep)
 }
 
+/// Arquivo do ícone na cópia em disco (nome só com letras, dígitos, `.`, `-` e `_`).
+fn icon_file(shared: &Shared, path: &str) -> PathBuf {
+    let name: String = path
+        .trim_start_matches("/lol-game-data/assets/")
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    shared.data_dir.join("icons").join(name)
+}
+
+fn content_type(path: &str) -> &'static str {
+    match path
+        .rsplit('.')
+        .next()
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
+        Some("webp") => "image/webp",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Baixa do cliente os ícones de runas e árvores que ainda não estão no disco (um por vez).
+async fn prefetch_rune_icons(shared: &Shared, assets: &Assets) {
+    for icon in assets.rune_icons() {
+        if !icon_file(shared, &icon).exists() && fetch_icon(shared, &icon).await.is_err() {
+            return; // cliente fechou no meio: o resto fica para a próxima conexão
+        }
+    }
+}
+
 /// Ícones do cliente para a janela (`http://lcu.localhost/lol-game-data/assets/...`).
+/// Cada ícone baixado fica também no disco, para a janela sem o cliente aberto.
 pub async fn fetch_icon(shared: &Shared, path: &str) -> Result<(Vec<u8>, String), String> {
     if !path.starts_with("/lol-game-data/assets/") || path.contains("..") {
         return Err("caminho não permitido".into());
@@ -1250,8 +1307,22 @@ pub async fn fetch_icon(shared: &Shared, path: &str) -> Result<(Vec<u8>, String)
     if let Some(hit) = shared.icons.lock().await.get(path) {
         return Ok(hit.clone());
     }
-    let lcu = shared.lcu.read().await.clone().ok_or("cliente fechado")?;
-    let got = lcu.get_bytes(path).await.map_err(|e| e.to_string())?;
+    let file = icon_file(shared, path);
+    let lcu = shared.lcu.read().await.clone();
+    let got = match lcu {
+        Some(lcu) => {
+            let got = lcu.get_bytes(path).await.map_err(|e| e.to_string())?;
+            if let Some(dir) = file.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(&file, &got.0);
+            got
+        }
+        None => {
+            let bytes = std::fs::read(&file).map_err(|_| "cliente fechado".to_string())?;
+            (bytes, content_type(path).to_string())
+        }
+    };
     let mut cache = shared.icons.lock().await;
     if cache.len() > 600 {
         cache.clear();
@@ -1410,4 +1481,36 @@ pub async fn ban_champion(shared: &Shared, champion_id: i64) -> Result<(), Strin
         .clone()
         .ok_or("cliente do League fechado")?;
     ban::apply(&lcu, champion_id).await
+}
+
+/// Salva a página montada na janela (funciona sem o cliente: só grava `rune-pages.json`).
+/// Se for o seu campeão em tela e o cliente estiver aberto, já leva para o cliente.
+pub async fn save_own_runes_page(
+    app: &AppHandle,
+    shared: &Arc<Shared>,
+    champion_id: i64,
+    lane: String,
+    primary_style: i64,
+    sub_style: i64,
+    perks: Vec<i64>,
+) -> Result<Vec<OwnEntry>, String> {
+    valid_lane(&lane)?;
+    let page = OwnPage::from_editor(primary_style, sub_style, perks, own_runes::now_secs())?;
+    let assets = shared
+        .assets
+        .read()
+        .await
+        .clone()
+        .ok_or("sem os dados das runas: abra o cliente do League uma vez com o app aberto")?;
+    page.check(&assets)?;
+    let list = {
+        let mut pages = shared.own_runes.lock().await;
+        pages.set(champion_id, &lane, page);
+        store_own(shared, &pages)?
+    };
+    if view_key(shared).await == Some((champion_id, lane)) {
+        let (app, shared) = (app.clone(), shared.clone());
+        tauri::async_runtime::spawn(async move { apply_change(&app, &shared, Scope::RUNES).await });
+    }
+    Ok(list)
 }
