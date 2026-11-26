@@ -6,16 +6,18 @@ import { cdragonUrl } from "./mockIcons";
 export interface ItemStat { id: number; wr: number; pr: number; n: number }
 export interface Combo { ids: string[]; wr: number; pr: number; n: number }
 export interface RuneSet { primary: number[]; secondary: number[]; shards: number[]; wr: number; n: number }
-/** Página de runas própria (`own_runes.rs`), por campeão e lane; `active` = usar na importação ("Minha"). */
+/** Página de runas própria (`own_runes.rs`): várias por campeão, cada uma com nome.
+ *  `active` = a escolhida do campeão (vai para o cliente na importação). */
 export interface OwnPage {
-  championId: number; lane: string; primaryStyle: number; subStyle: number;
+  championId: number; id: number; name: string; primaryStyle: number; subStyle: number;
   /** 9 runas na ordem do cliente: keystone + 3, 2 secundárias, 3 fragmentos. */
   perks: number[];
   active: boolean;
   /** Segundos desde 1970. */
   savedAt: number;
 }
-export type RuneChoice = "pick" | "win" | "mine";
+/** Aba de runas: "pick" (mais jogada), "win" (maior WR) ou "own:<id>" (uma página sua). */
+export type RuneChoice = "pick" | "win" | `own:${number}`;
 
 export interface Build {
   slug: string;
@@ -240,14 +242,15 @@ export const api = {
   banChampion: (championId: number) => call<void>("ban_champion", { championId }),
   /** Páginas de runas próprias (todas). */
   ownPages: () => call<OwnPage[]>("get_own_pages"),
-  /** Lê a página atual do cliente (só GET) e guarda como a sua para o campeão e lane. */
-  saveOwnRunes: (championId: number, lane: string) => call<OwnPage[]>("save_own_runes", { championId, lane }),
-  /** Página montada na janela (funciona sem o cliente aberto). */
-  saveOwnRunesPage: (championId: number, lane: string, primaryStyle: number, subStyle: number, perks: number[]) =>
-    call<OwnPage[]>("save_own_runes_page", { championId, lane, primaryStyle, subStyle, perks }),
-  deleteOwnRunes: (championId: number, lane: string) => call<OwnPage[]>("delete_own_runes", { championId, lane }),
-  /** Mais jogada / Maior WR / Minha para o build em tela (o backend leva para o cliente). */
-  chooseRunes: (choice: RuneChoice) => call<OwnPage[]>("choose_runes", { choice }),
+  /** Copia a página atual do cliente (só GET) como página sua do campeão: nova (`pageId` null) ou por cima. */
+  saveOwnRunes: (championId: number, pageId: number | null, name: string | null) =>
+    call<OwnPage[]>("save_own_runes", { championId, pageId, name }),
+  /** Página montada na janela (funciona sem o cliente aberto); `pageId` null = nova. */
+  saveOwnRunesPage: (championId: number, pageId: number | null, name: string, primaryStyle: number, subStyle: number, perks: number[]) =>
+    call<OwnPage[]>("save_own_runes_page", { championId, pageId, name, primaryStyle, subStyle, perks }),
+  deleteOwnRunes: (championId: number, pageId: number) => call<OwnPage[]>("delete_own_runes", { championId, pageId }),
+  /** Mais jogada / Maior WR / uma página sua no campeão em tela (o backend leva para o cliente). */
+  chooseRunes: (choice: "pick" | "win" | "own", pageId: number | null) => call<OwnPage[]>("choose_runes", { choice, pageId }),
   onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
     inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   /** Atualização já encontrada nesta execução (a janela é recriada a cada seleção). */

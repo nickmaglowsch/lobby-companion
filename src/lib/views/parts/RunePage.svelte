@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Página de runas compacta com a escolha Minha × Mais jogada × Maior WR (a escolha vai para o
-  // cliente; "Minha" só aparece com página própria salva para o campeão e a lane).
+  // Página de runas compacta com a escolha entre as suas páginas do campeão (pelo nome),
+  // Mais jogada e Maior WR (a escolha vai para o cliente).
   // `size` = tamanho das runas comuns.
   import { icon, pct, num, perkStat } from "$lib/api";
   import { app } from "$lib/app.svelte";
@@ -19,7 +19,7 @@
     set ? app.assets?.styles.find((s) => s.id !== primary?.id && set.secondary.every((p) => s.perks.includes(p))) : undefined,
   );
   const hasWin = $derived(!!app.build?.runesWin);
-  const mine = $derived(app.runeTab === "mine");
+  const mine = $derived(!!app.ownPage);
   /** Nome + WR da runa naquele lugar da página (posição 0–8, como em `perkStat`). */
   function tip(id: number, i: number): string {
     const s = perkStat(app.build?.runeStats, id, i);
@@ -36,9 +36,10 @@
   <div class="rp" style="--r: {size}px">
     {#if toggle}
       <div class="seg">
-        {#if app.ownPage}
-          <button class:on={mine} onclick={() => app.chooseRunes("mine")} title="A sua página para este campeão e lane">Minha</button>
-        {/if}
+        {#each app.championPages as p (p.id)}
+          <button class="own-tab" class:on={app.runeTab === `own:${p.id}`} onclick={() => app.chooseRunes(`own:${p.id}`)}
+            title="Sua página &quot;{p.name}&quot;">{p.name}</button>
+        {/each}
         <button class:on={app.runeTab === "pick"} onclick={() => app.chooseRunes("pick")}>Mais jogada</button>
         <button class:on={app.runeTab === "win"} onclick={() => app.chooseRunes("win")} disabled={!hasWin}>Maior WR</button>
       </div>
@@ -68,7 +69,7 @@
       </div>
     {/if}
     {#if mine}
-      <div class="meta">Sua página · salva em {saved}</div>
+      <div class="meta">Sua página "{app.ownPage?.name}" · salva em {saved}</div>
     {:else}
       <div class="meta">WR {pct(set.wr)} · {num(set.n)} partidas</div>
     {/if}
@@ -80,10 +81,9 @@
 
 <style>
   .rp { display: grid; gap: 6px; }
-  .seg { display: flex; }
-  .seg button { font-size: 11px; padding: 2px 8px; border-radius: 0; }
-  .seg button:first-child { border-radius: 4px 0 0 4px; }
-  .seg button:last-child { border-radius: 0 4px 4px 0; }
+  .seg { display: flex; flex-wrap: wrap; gap: 3px; }
+  .seg button { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+  .seg .own-tab { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg button.on { border-color: var(--gold); color: var(--gold); }
   .tree { display: flex; align-items: center; gap: 5px; }
   img { width: var(--r); height: var(--r); border-radius: 50%; background: var(--panel-2); }

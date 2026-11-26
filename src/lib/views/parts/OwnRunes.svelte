@@ -1,8 +1,8 @@
 <script lang="ts">
-  // Página de runas própria (OTP): o que ela muda em relação à mais jogada, em pontos de WR
-  // (estatística de cada runa naquele lugar da página), e os botões de salvar/apagar.
-  // Salvar só LÊ a página atual do cliente; nada é escrito lá por este botão.
-  import { icon, num, pts, runeDiffs, ownRuneSet, LANES, type RuneDiff } from "$lib/api";
+  // Páginas de runas próprias (OTP, várias por campeão): o que a escolhida muda em relação à mais
+  // jogada, em pontos de WR (estatística de cada runa naquele lugar da página), e os botões de
+  // criar, editar, copiar do cliente e apagar. Copiar só LÊ a página atual do cliente.
+  import { icon, num, pts, runeDiffs, ownRuneSet, type RuneDiff } from "$lib/api";
   import { app } from "$lib/app.svelte";
 
   /** `compact` = diferenças como ícones (Grade, Por fase); senão uma linha por runa (Abas, Clássico). */
@@ -10,12 +10,11 @@
 
   const own = $derived(app.ownPage);
   const b = $derived(app.build);
-  const showing = $derived(app.runeTab === "mine" && !!own);
+  const showing = $derived(!!own);
   const diffs = $derived(own && b ? runeDiffs(ownRuneSet(own), b.runesPick, b.runeStats) : []);
   const perk = (id: number) => app.assets?.perks[id];
   const name = (id: number) => perk(id)?.name ?? `#${id}`;
   const champ = $derived(app.champ?.name ?? "o campeão");
-  const lane = $derived(b ? LANES[b.lane] ?? b.lane : "");
   const saved = $derived(own ? new Date(own.savedAt * 1000).toLocaleDateString("pt-BR") : "");
   let confirming = $state(false);
 
@@ -25,7 +24,7 @@
 
   async function remove() {
     confirming = false;
-    if (own) await app.deleteOwnRunes(own.championId, own.lane);
+    if (own) await app.deleteOwnRunes(own.championId, own.id);
   }
 </script>
 
@@ -56,21 +55,24 @@
     {/if}
     <div class="acts">
       {#if confirming}
-        <span>Apagar a sua página de {champ} ({lane})?</span>
+        <span>Apagar "{own?.name}" de {champ}?</span>
         <button class="link bad" onclick={remove}>Apagar</button>
         <button class="link" onclick={() => (confirming = false)}>Não</button>
       {:else}
-        <button class="link" onclick={() => (app.editorOpen = true)} disabled={app.ownBusy}
-          title="Escolha as runas aqui na janela (funciona sem o cliente aberto) e guarde como a sua para {champ} na lane {lane}">
-          {own ? "Editar minha página" : "Montar minha página"}
+        <button class="link" onclick={() => app.openEditor(null)} disabled={app.ownBusy}
+          title="Monte uma página nova para {champ} aqui na janela (funciona sem o cliente aberto); ela aparece ao lado de Mais jogada e Maior WR">
+          + Nova página
         </button>
         {#if app.snap?.connected}
-          <button class="link" onclick={() => app.saveOwnRunes()} disabled={app.ownBusy}
-            title="Lê a página de runas atual do cliente (sem mudar nada lá) e guarda como a sua para {champ} na lane {lane}">
+          <button class="link" onclick={() => app.copyFromClient()} disabled={app.ownBusy}
+            title="Lê a página de runas atual do cliente (sem mudar nada lá) e guarda como página nova de {champ}, com o nome que ela tem no cliente">
             Copiar do cliente
           </button>
         {/if}
-        {#if own}<button class="link" onclick={() => (confirming = true)} title="Salva em {saved}">Apagar</button>{/if}
+        {#if own}
+          <button class="link" onclick={() => app.openEditor(own.id)} disabled={app.ownBusy} title="Trocar runas ou nome de &quot;{own.name}&quot;">Editar</button>
+          <button class="link" onclick={() => (confirming = true)} title="Salva em {saved}">Apagar</button>
+        {/if}
       {/if}
     </div>
     {#if app.ownError}<p class="line bad">{app.ownError}</p>{/if}

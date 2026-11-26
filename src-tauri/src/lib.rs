@@ -277,24 +277,27 @@ async fn get_own_pages(shared: State<'_, Arc<Shared>>) -> Result<Vec<own_runes::
     Ok(app::own_pages(&shared).await)
 }
 
-/// Lê a página atual do cliente (GET) e guarda como a sua para o campeão e lane.
+/// Copia a página atual do cliente (GET) como página sua do campeão (nova ou por cima de `page_id`).
 #[tauri::command]
 async fn save_own_runes(
     app: AppHandle,
     shared: State<'_, Arc<Shared>>,
     champion_id: i64,
-    lane: String,
+    page_id: Option<u32>,
+    name: Option<String>,
 ) -> Result<Vec<own_runes::OwnEntry>, String> {
-    app::save_own_runes(&app, shared.inner(), champion_id, lane).await
+    app::save_own_runes(&app, shared.inner(), champion_id, page_id, name).await
 }
 
 /// Página montada na janela (editor): funciona sem o cliente aberto.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn save_own_runes_page(
     app: AppHandle,
     shared: State<'_, Arc<Shared>>,
     champion_id: i64,
-    lane: String,
+    page_id: Option<u32>,
+    name: String,
     primary_style: i64,
     sub_style: i64,
     perks: Vec<i64>,
@@ -303,7 +306,8 @@ async fn save_own_runes_page(
         &app,
         shared.inner(),
         champion_id,
-        lane,
+        page_id,
+        name,
         primary_style,
         sub_style,
         perks,
@@ -316,19 +320,20 @@ async fn delete_own_runes(
     app: AppHandle,
     shared: State<'_, Arc<Shared>>,
     champion_id: i64,
-    lane: String,
+    page_id: u32,
 ) -> Result<Vec<own_runes::OwnEntry>, String> {
-    app::delete_own_runes(&app, shared.inner(), champion_id, lane).await
+    app::delete_own_runes(&app, shared.inner(), champion_id, page_id).await
 }
 
-/// "pick" | "win" | "mine" para o build em tela.
+/// "pick" | "win" | "own" (com `page_id`) para o campeão em tela.
 #[tauri::command]
 async fn choose_runes(
     app: AppHandle,
     shared: State<'_, Arc<Shared>>,
     choice: String,
+    page_id: Option<u32>,
 ) -> Result<Vec<own_runes::OwnEntry>, String> {
-    app::choose_runes(&app, shared.inner(), choice).await
+    app::choose_runes(&app, shared.inner(), choice, page_id).await
 }
 
 #[tauri::command]

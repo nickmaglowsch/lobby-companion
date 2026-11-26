@@ -31,8 +31,8 @@ class AppState {
   /** Páginas de runas próprias (todas); a do build em tela é `ownPage`. */
   ownPages = $state<OwnPage[]>([]);
   ownBusy = $state(false);
-  /** Editor da página própria aberto (funciona sem o cliente). */
-  editorOpen = $state(false);
+  /** Editor da página própria aberto (funciona sem o cliente): `pageId` null = página nova. */
+  editor = $state<{ pageId: number | null } | null>(null);
   ownError = $state<string | null>(null);
   /** Campeão sendo banido agora (clique na sugestão) e o erro do último ban. */
   banBusy = $state<number | null>(null);
@@ -46,14 +46,14 @@ class AppState {
     this.assets ? Object.values(this.assets.champions).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) : [],
   );
   layout = $derived<Layout>((this.settings?.layout as Layout) ?? "phase");
-  /** Sua página para o campeão e a lane em tela (aparece como "Minha" ao lado das outras duas). */
-  ownPage = $derived(
-    this.ownPages.find((p) => p.championId === this.snap?.championId && p.lane === this.build?.lane) ?? null,
-  );
-  runeTab = $derived<RuneChoice>(this.ownPage?.active ? "mine" : this.settings?.runeChoice ?? "pick");
+  /** Suas páginas do campeão em tela (cada uma vira uma opção ao lado de Mais jogada e Maior WR). */
+  championPages = $derived(this.ownPages.filter((p) => p.championId === this.snap?.championId));
+  /** A escolhida do campeão em tela (vai para o cliente), se houver. */
+  ownPage = $derived(this.championPages.find((p) => p.active) ?? null);
+  runeTab = $derived<RuneChoice>(this.ownPage ? `own:${this.ownPage.id}` : this.settings?.runeChoice ?? "pick");
   runeSet = $derived(
     !this.build ? null
-    : this.runeTab === "mine" && this.ownPage ? ownRuneSet(this.ownPage)
+    : this.ownPage ? ownRuneSet(this.ownPage)
     : this.runeTab === "win" ? this.build.runesWin ?? this.build.runesPick
     : this.build.runesPick,
   );
@@ -162,13 +162,13 @@ class AppState {
     if (this.settings) await api.saveSettings($state.snapshot(this.settings));
   }
 
-  /** Mais jogada / Maior WR / Minha. A troca já aparece; o backend grava e leva para o cliente. */
+  /** Mais jogada / Maior WR / uma página sua. A troca já aparece; o backend grava e leva para o cliente. */
   async chooseRunes(choice: RuneChoice) {
     if (!this.settings || choice === this.runeTab) return;
-    const own = this.ownPage;
-    if (own) own.active = choice === "mine";
-    if (choice !== "mine") this.settings.runeChoice = choice;
-    await this.ownCall(api.chooseRunes(choice));
+    const ownId = choice.startsWith("own:") ? Number(choice.slice(4)) : null;
+    for (const p of this.championPages) p.active = p.id === ownId;
+    if (choice === "pick" || choice === "win") this.settings.runeChoice = choice;
+    await this.ownCall(api.chooseRunes(ownId === null ? (choice as "pick" | "win") : "own", ownId));
   }
 
   /** Clique numa sugestão de ban na sua vez: bane no cliente (marca e trava). */
@@ -187,24 +187,27 @@ class AppState {
     }
   }
 
-  /** Guarda a página atual do cliente como a sua para o campeão e a lane em tela. */
-  async saveOwnRunes() {
+  /** Copia a página atual do cliente como página nova do campeão em tela (com o nome dela no cliente). */
+  async copyFromClient() {
     const id = this.snap?.championId;
-    const lane = this.build?.lane;
-    if (id && lane) await this.ownCall(api.saveOwnRunes(id, lane));
+    if (id) await this.ownCall(api.saveOwnRunes(id, null, null));
   }
 
-  /** Salva a página montada no editor para o campeão e a lane em tela; devolve se deu certo. */
-  async saveOwnRunesPage(primaryStyle: number, subStyle: number, perks: number[]): Promise<boolean> {
+  openEditor(pageId: number | null) {
+    this.ownError = null;
+    this.editor = { pageId };
+  }
+
+  /** Salva a página montada no editor para o campeão em tela; devolve se deu certo. */
+  async saveOwnRunesPage(pageId: number | null, name: string, primaryStyle: number, subStyle: number, perks: number[]): Promise<boolean> {
     const id = this.snap?.championId;
-    const lane = this.build?.lane;
-    if (!id || !lane) return false;
-    await this.ownCall(api.saveOwnRunesPage(id, lane, primaryStyle, subStyle, perks));
+    if (!id) return false;
+    await this.ownCall(api.saveOwnRunesPage(id, pageId, name, primaryStyle, subStyle, perks));
     return !this.ownError;
   }
 
-  async deleteOwnRunes(championId: number, lane: string) {
-    await this.ownCall(api.deleteOwnRunes(championId, lane));
+  async deleteOwnRunes(championId: number, pageId: number) {
+    await this.ownCall(api.deleteOwnRunes(championId, pageId));
   }
 
   private async ownCall(p: Promise<OwnPage[]>) {
