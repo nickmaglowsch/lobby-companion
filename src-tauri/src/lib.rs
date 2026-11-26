@@ -22,9 +22,29 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 const MAIN: &str = "main";
 
+/// Tamanho da janela pelo layout escolhido (padrão se as configurações estiverem ocupadas).
+fn window_size(app: &AppHandle) -> (f64, f64, f64, f64) {
+    app.try_state::<Arc<Shared>>()
+        .and_then(|s| s.settings.try_lock().ok().map(|s| s.window_size()))
+        .unwrap_or_else(|| Settings::default().window_size())
+}
+
+/// Troca o tamanho da janela aberta quando o layout muda.
+fn apply_window_size(app: &AppHandle, size: (f64, f64, f64, f64)) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = handle.get_webview_window(MAIN) {
+            let (width, height, min_w, min_h) = size;
+            let _ = w.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
+            let _ = w.set_size(tauri::LogicalSize::new(width, height));
+        }
+    });
+}
+
 /// Abre (ou traz para frente) a janela. Cria o WebView só quando precisa.
 pub fn show_main(app: &AppHandle) {
     let handle = app.clone();
+    let (width, height, min_w, min_h) = window_size(app);
     let _ = app.run_on_main_thread(move || {
         if let Some(w) = handle.get_webview_window(MAIN) {
             let _ = w.unminimize();
@@ -34,8 +54,8 @@ pub fn show_main(app: &AppHandle) {
         }
         let _ = WebviewWindowBuilder::new(&handle, MAIN, WebviewUrl::App("index.html".into()))
             .title("Lobby Companion")
-            .inner_size(480.0, 780.0)
-            .min_inner_size(380.0, 480.0)
+            .inner_size(width, height)
+            .min_inner_size(min_w, min_h)
             .build();
     });
 }
@@ -142,6 +162,9 @@ async fn save_settings(
             cur.suggest_bans != settings.suggest_bans,
             cur.suggest_picks != settings.suggest_picks || cur.pick_pool != settings.pick_pool,
         );
+        if cur.window_size() != settings.window_size() {
+            apply_window_size(&app, settings.window_size());
+        }
         *cur = settings;
         changed
     };

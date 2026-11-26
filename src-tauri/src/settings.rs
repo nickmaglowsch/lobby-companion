@@ -35,6 +35,8 @@ pub struct Settings {
     pub pick_pool: String,
     /// Procura versão nova no GitHub Releases ao abrir e a cada 6 h (só avisa; instalar é no clique).
     pub check_updates: bool,
+    /// Layout da janela: "phase" (por fase), "grid" (grade), "tabs" (abas) ou "classic" (lista com rolagem).
+    pub layout: String,
 }
 
 impl Default for Settings {
@@ -56,6 +58,7 @@ impl Default for Settings {
             suggest_picks: true,
             pick_pool: "mastery".into(),
             check_updates: true,
+            layout: "phase".into(),
         }
     }
 }
@@ -73,6 +76,15 @@ impl Settings {
             std::fs::create_dir_all(dir)?;
         }
         std::fs::write(path, serde_json::to_vec_pretty(self).unwrap_or_default())
+    }
+
+    /// Tamanho da janela para o layout: (largura, altura, largura mínima, altura mínima).
+    /// Os layouts novos cabem numa tela só; o clássico é uma coluna com rolagem.
+    pub fn window_size(&self) -> (f64, f64, f64, f64) {
+        match self.layout.as_str() {
+            "classic" => (480.0, 780.0, 380.0, 480.0),
+            _ => (720.0, 600.0, 700.0, 580.0),
+        }
     }
 
     pub fn patch_opt(&self) -> Option<String> {
@@ -95,5 +107,6 @@ mod tests {
         assert!(s.suggest_picks);
         assert_eq!(s.pick_pool, "mastery");
         assert!(s.check_updates);
+        assert_eq!(s.layout, "phase");
     }
 }

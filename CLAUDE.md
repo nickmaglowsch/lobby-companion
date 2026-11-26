@@ -7,6 +7,7 @@ App de desktop **leve** (Tauri 2 + Rust + SvelteKit/TS) para a **seleção de ca
 ao travar o campeão, importa runas, feitiços e um conjunto de itens com dados do lolalytics, e mostra o win rate por item.
 Também mostra o build **contra um campeão escolhido** (confronto), **sugere bans** pelos campeões do seu time (`bans.rs`; sem ninguém declarado, pela tier list da sua lane) e **sugere pick** para a sua posição com counter + sinergia + seu pool, além da sinergia do seu campeão com os aliados (`picks.rs`). Só sugestão: nada de hover/pick/ban automático.
 Extras só de exibição (mesma resposta do lolalytics, sem requisição a mais): núcleo de 3 itens, primeira volta, situacionais (também viram blocos do conjunto de itens), habilidades até o 6/10, WR das runas alternativas, tendência de 30 dias e perfil de dano; e a **composição** de dano dos dois times (tipo de dano do cliente, `composition.rs`) com destaque dos itens de defesa do build.
+**Layouts** (configuração `layout`, `src/lib/views/`): `phase` (padrão: a tela é da etapa da seleção, bans → escolha → build, pelo `banning`/`locked` do snapshot), `grid` (três colunas), `tabs` (abas) e `classic` (a coluna com rolagem). Os três primeiros cabem em 720×600 sem rolagem; o Rust troca o tamanho da janela com o layout (`Settings::window_size`). Estado e ações ficam em `src/lib/app.svelte.ts`; peças comuns em `src/lib/views/parts/`.
 **Sem overlay e sem nada durante a partida**: a janela abre na seleção e é destruída quando a fase vira `GameStart`/`InProgress`; o processo fica na bandeja ouvindo o WebSocket.
 
 ## Regras (obrigatórias)
@@ -51,7 +52,8 @@ Extras só de exibição (mesma resposta do lolalytics, sem requisição a mais)
 ## Comandos
 ```bash
 npm run tauri dev                      # app
-npm run dev                            # só a UI no navegador (dados sintéticos de src/lib/mock.ts)
+npm run dev                            # só a UI no navegador (dados sintéticos de src/lib/mock.ts, ícones do CommunityDragon)
+                                       # ?layout=phase|grid|tabs|classic&fase=bans|picks|build para ver cada layout/etapa
 npm run check && npm run build         # tipos + build da UI
 cd src-tauri && cargo test && cargo clippy --all-targets
 cargo run -- --diag                    # estado do cliente (só GET)
