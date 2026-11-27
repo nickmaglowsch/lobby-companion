@@ -211,18 +211,24 @@ export const mockSettings: Settings = {
   },
 };
 
-/** Quadro de exemplo do overlay em 1920×1080 (os mesmos números de `overlay::preview_frame`). */
+/**
+ * Quadro de exemplo do overlay em 1920×1080, combinando com um print real da partida aos 14:18
+ * (85 de CS, 671 de ouro, 30 × 7): é o que sai nos prints do site. Posições de `hud.rs`.
+ */
 export const mockOverlay: OverlayFrame = {
-  preview: true, edit: true, visible: true, tab: true, width: 1920, height: 1080, scale: 0.9, gameTime: 900,
+  preview: true, edit: true, visible: true, tab: true, width: 1920, height: 1080, scale: 0.9, gameTime: 858,
   minimap: { x: 1654.5, y: 812.7, w: 254.7, h: 254.7 },
   scoreboard: { x: 380.4, y: 235.8, w: 1157.4, h: 465.3 },
   inhibitors: [{ x: 1853.4, y: 867.3, seconds: 154, ally: false }],
-  nextItem: { id: 3068, cost: 2700 },
-  cs: { total: 112, perMin: 7.5 },
-  lanes: [200, 1350, 75, 900, 410].map((gold, i) => ({ x: 959.55, y: 349.2 + 75.6 * i, gold, allyAhead: i % 2 === 0 })),
+  nextItem: { id: 3068, cost: 650 },
+  cs: { total: 85, perMin: 5.9 },
+  lanes: [1150, 400, 1800, 2350, 700].map((gold, i) => ({ x: 959.55, y: 349.2 + 75.6 * i, gold, allyAhead: i !== 2 })),
   graph: {
     rect: { x: 680.1, y: 710.1, w: 558, h: 135 },
-    points: Array.from({ length: 91 }, (_, i) => [i * 10, Math.sin((i * 10) / 60) * 900 + i * 60] as [number, number]),
+    points: Array.from({ length: 86 }, (_, i) => {
+      const t = Math.min(i * 10, 858);
+      return [t, Math.round(2800 * (t / 858) ** 1.6 + 300 * Math.sin(t / 90))] as [number, number];
+    }),
   },
   settings: {
     enabled: true, inhibitors: true, nextItem: true, goldDiff: true, csPerMin: true, goldGraph: true,

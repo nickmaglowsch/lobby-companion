@@ -292,8 +292,14 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     // Aviso de versão nova só com ?update=1 (os prints da landing page saem sem ele).
     get_update: q.get("update") === "1" ? m.mockUpdate : null,
     check_update: m.mockUpdate,
-    // ?overlay=1: a janela do overlay com o quadro de exemplo (1920×1080); &edit=0 sem o modo de ajuste.
-    overlay_frame: { ...m.mockOverlay, edit: q.get("edit") !== "0", settings: m.mockSettings.overlay },
+    // ?overlay=1: a janela do overlay com o quadro de exemplo (1920×1080); &edit=0 sem o modo de
+    // ajuste, &tab=0 sem o que depende da tecla do placar.
+    overlay_frame: {
+      ...m.mockOverlay,
+      edit: q.get("edit") !== "0",
+      preview: q.get("edit") !== "0",
+      settings: m.mockSettings.overlay,
+    },
   };
   return fake[cmd] as T;
 }
