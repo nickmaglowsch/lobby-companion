@@ -74,6 +74,7 @@
 
   {#if snap?.error}<p class="msg bad">{snap.error}</p>{/if}
   {#if snap?.warning}<p class="msg warn">{snap.warning}</p>{/if}
+  {#if snap?.borderlessSwitched}<p class="msg warn">{t("notices.borderless")}</p>{/if}
 
   {#if !build && !snap?.loading}
     <section class="empty">

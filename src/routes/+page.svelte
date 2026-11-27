@@ -12,7 +12,7 @@
   import RuneEditor from "$lib/views/parts/RuneEditor.svelte";
   import Overlay from "$lib/overlay/Overlay.svelte";
 
-  // A janela do overlay abre em `index.html#overlay` (no navegador: `?overlay=1`).
+  // A janela do overlay abre em `/#overlay` (no navegador: `?overlay=1`).
   const overlay =
     typeof location !== "undefined" && (location.hash === "#overlay" || new URLSearchParams(location.search).has("overlay"));
 

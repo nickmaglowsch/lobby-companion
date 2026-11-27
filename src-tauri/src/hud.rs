@@ -187,9 +187,60 @@ fn truthy(v: &str) -> bool {
     matches!(v.to_ascii_lowercase().as_str(), "1" | "true")
 }
 
+/// Modo de vídeo "Sem bordas" (`WindowMode` do `[General]`).
+pub const BORDERLESS: u32 = 2;
+
+/// Troca `WindowMode=0` (tela cheia, onde janela nenhuma aparece por cima) por "Sem bordas" no
+/// `[General]`. `None` = nada a mudar (já em janela ou sem bordas, ou sem a chave). Mantém o
+/// resto do arquivo como está, inclusive as quebras de linha.
+pub fn set_borderless(text: &str) -> Option<String> {
+    let mut section = String::new();
+    let mut changed = false;
+    let mut out = String::with_capacity(text.len() + 1);
+    for raw in text.split_inclusive('\n') {
+        let body = raw.trim_end_matches(['\r', '\n']);
+        let ending = &raw[body.len()..];
+        let line = body.trim();
+        if let Some(s) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            section = s.trim().to_ascii_lowercase();
+        } else if section == "general"
+            && let Some((k, v)) = line.split_once('=')
+            && k.trim().eq_ignore_ascii_case("windowmode")
+            && v.trim() == "0"
+        {
+            out.push_str(&format!("{}={BORDERLESS}{ending}", k.trim()));
+            changed = true;
+            continue;
+        }
+        out.push_str(raw);
+    }
+    changed.then_some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fullscreen_becomes_borderless_and_nothing_else_changes() {
+        let cfg = "[General]\r\nWidth=2560\r\nWindowMode=0\r\n\r\n[HUD]\r\nWindowMode=0\r\n";
+        let out = set_borderless(cfg).unwrap();
+        assert_eq!(
+            out,
+            "[General]\r\nWidth=2560\r\nWindowMode=2\r\n\r\n[HUD]\r\nWindowMode=0\r\n"
+        );
+        assert_eq!(parse_game_cfg(&out).window_mode, Some(BORDERLESS));
+        // Já em janela ou sem bordas, sem a chave ou chave noutra seção: não mexe.
+        assert!(set_borderless("[General]\nWindowMode=1\n").is_none());
+        assert!(set_borderless("[General]\nWindowMode=2").is_none());
+        assert!(set_borderless("[General]\nWidth=1920\n").is_none());
+        assert!(set_borderless("[Replay]\nWindowMode=0\n").is_none());
+        // Última linha sem quebra.
+        assert_eq!(
+            set_borderless("[general]\nwindowmode = 0").as_deref(),
+            Some("[general]\nwindowmode=2")
+        );
+    }
 
     fn near(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() <= tol

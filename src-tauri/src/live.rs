@@ -89,11 +89,22 @@ pub fn sanitize(all: &Value) -> Value {
         .get("activePlayer")
         .map(|a| keep(a, ACTIVE_FIELDS))
         .unwrap_or(Value::Null);
-    if let (Some(stats), Some(obj)) = (
-        all.pointer("/activePlayer/championStats"),
-        active.as_object_mut(),
-    ) {
-        obj.insert("championStats".into(), stats.clone());
+    if let Some(obj) = active.as_object_mut() {
+        if let Some(stats) = all.pointer("/activePlayer/championStats") {
+            obj.insert("championStats".into(), stats.clone());
+        }
+        // Só o `id` de cada habilidade ("ChogathQ"): é do campeão, não do jogador. Serve para
+        // achar você na lista quando o app não viu a seleção (aberto no meio da partida).
+        if let Some(abilities) = all
+            .pointer("/activePlayer/abilities")
+            .and_then(Value::as_object)
+        {
+            let ids: Map<String, Value> = abilities
+                .iter()
+                .map(|(slot, a)| (slot.clone(), keep(a, &["id"])))
+                .collect();
+            obj.insert("abilities".into(), Value::Object(ids));
+        }
     }
     serde_json::json!({
         "gameData": all.get("gameData").cloned().unwrap_or(Value::Null),
@@ -140,6 +151,8 @@ pub struct Game {
     /// Ouro na sua mochila.
     pub gold: f64,
     pub level: u32,
+    /// Ids das suas habilidades ("ChogathQ", "ChogathPassive").
+    pub ability_ids: Vec<String>,
     pub players: Vec<Player>,
     pub events: Vec<Event>,
 }
@@ -228,6 +241,17 @@ pub fn parse(all: &Value) -> Option<Game> {
             .and_then(Value::as_f64)
             .unwrap_or(0.0),
         level: u32_of(s.pointer("/activePlayer/level")),
+        ability_ids: s
+            .pointer("/activePlayer/abilities")
+            .and_then(Value::as_object)
+            .map(|a| {
+                a.values()
+                    .filter_map(|v| v.get("id").and_then(Value::as_str))
+                    .filter(|id| !id.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default(),
         players,
         events,
     })
@@ -322,7 +346,12 @@ mod tests {
             "activePlayer": {
                 "riotId": "Fulano#BR1", "riotIdGameName": "Fulano", "riotIdTagLine": "BR1",
                 "summonerName": "Fulano#BR1", "currentGold": 671.5, "level": 11,
-                "championStats": {"attackDamage": 100.0}
+                "championStats": {"attackDamage": 100.0},
+                "abilities": {
+                    "Q": {"abilityLevel": 5, "displayName": "Ruptura", "id": "ChogathQ",
+                          "rawDescription": "x", "rawDisplayName": "y"},
+                    "Passive": {"displayName": "Carnivoro", "id": "ChogathPassive"}
+                }
             },
             "allPlayers": [{
                 "championName": "Cho'Gath", "team": "ORDER", "position": "JUNGLE", "level": 11,
@@ -363,6 +392,13 @@ mod tests {
         assert_eq!(g.time, 341.2);
         assert_eq!(g.map, 11);
         assert_eq!(g.gold, 671.5);
+        assert_eq!(
+            s["activePlayer"]["abilities"]["Q"],
+            json!({"id": "ChogathQ"})
+        );
+        let mut ids = g.ability_ids.clone();
+        ids.sort();
+        assert_eq!(ids, vec!["ChogathPassive", "ChogathQ"]);
         assert_eq!(g.players.len(), 1);
         let p = &g.players[0];
         assert_eq!(p.alias, "Chogath");
