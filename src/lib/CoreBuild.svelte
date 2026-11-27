@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { coreSets, icon, pct, num, type Assets, type Build } from "./api";
+  import { icon, pct, num, type Build } from "./api";
   import { t } from "./i18n/index.svelte";
   import { app } from "./app.svelte";
   import { comboWpa, pp } from "./metric";
 
   // Núcleo: os 3 primeiros itens (botas incluídas) na ordem de compra, com WR do conjunto.
-  let { build, assets, minGames }: { build: Build; assets: Assets | null; minGames: number } = $props();
+  let { build }: { build: Build } = $props();
+  const assets = $derived(app.assets);
 
-  const sets = $derived(coreSets(build, assets, minGames).slice(0, 3));
+  const sets = $derived(app.cores.slice(0, 3));
   // WPA contra o núcleo típico (todos os núcleos guardados, pelo pick rate)
   const wpa = $derived(app.metric === "wpa" ? comboWpa(build.core ?? [], build.wr) : null);
   const scoreOf = (ids: string[]) => {
@@ -49,7 +50,4 @@
   .arrow { color: var(--muted); }
   .arrow:dir(rtl) { display: inline-block; transform: scaleX(-1); }
   .wr { margin-inline-start: 4px; font-size: 13px; }
-  .muted { color: var(--muted); }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
 </style>

@@ -1,19 +1,19 @@
 <script lang="ts">
   // Lista de bans em três tamanhos: "strip" (só ícones e pontos), "rows" (linha com nome) e
   // "cards" (cartão com o motivo). O porquê completo fica no tooltip.
-  import { championIcon, pct, LANES, type BanPick } from "$lib/api";
+  import { championIcon, pct, laneName, type BanPick } from "$lib/api";
   import { t } from "$lib/i18n/index.svelte";
   import { app } from "$lib/app.svelte";
   import { signed } from "./fmt";
   import { gainText } from "$lib/metric";
 
-  let { list, variant = "rows", max = 5 }: { list: BanPick[]; variant?: "strip" | "rows" | "cards"; max?: number } = $props();
+  let { list, variant = "rows" }: { list: BanPick[]; variant?: "strip" | "rows" | "cards" } = $props();
 
   function why(p: BanPick): string {
     if (p.tier) return t("banList.tierWhy", { wr: pct(p.tier.wr), pr: pct(p.tier.pr), br: pct(p.tier.br), count: p.tier.games });
     return p.reasons
       .map((r) =>
-        t("banList.reason", { name: app.champName(r.allyChampionId), wr: pct(r.wr), lane: LANES[r.lane] ?? r.lane, base: pct(r.baseWr), count: r.n }),
+        t("banList.reason", { name: app.champName(r.allyChampionId), wr: pct(r.wr), lane: laneName(r.lane), base: pct(r.baseWr), count: r.n }),
       )
       .join("\n");
   }
@@ -22,7 +22,7 @@
     const r = p.reasons[0];
     return r ? t("banList.reasonShort", { name: app.champName(r.allyChampionId), wr: pct(r.wr), n: r.n }) : "";
   }
-  const shown = $derived(list.slice(0, max));
+  const shown = $derived(list.slice(0, 5));
   /** Na sua vez de banir, cada sugestão vira um botão que bane no cliente. */
   const can = $derived(!!app.snap?.canBan);
   const tag = $derived(can ? "button" : "div");
@@ -82,6 +82,5 @@
   .card img { width: 42px; height: 42px; border-radius: 4px; }
   .bn { font-weight: 600; font-size: 15px; }
   .up { color: var(--good); font-variant-numeric: tabular-nums; }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
 </style>

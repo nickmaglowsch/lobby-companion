@@ -27,8 +27,9 @@
     }
     api.snapshot().then((s) => setLocale(s.locale)).catch(() => {});
     api.assets().then((a) => (assets = a)).catch(() => {});
-    api.overlayFrame().then((f) => f && (frame = f)).catch(() => {});
     const uns = [api.onOverlay((f) => (frame = f)), api.onOverlayTab((d) => (tab = d))];
+    // Último quadro já calculado; um que chegou pelo evento nesse meio-tempo é mais novo e fica.
+    api.overlayFrame().then((f) => void (f && !frame && (frame = f)), () => {});
     const resize = () => (vw = window.innerWidth);
     window.addEventListener("resize", resize);
     return () => {

@@ -2,7 +2,7 @@
   // Editor da página de runas própria, por cima do layout. Funciona sem o cliente do League:
   // usa a cópia dos dados da última conexão e só grava no arquivo do app (rune-pages.json).
   // O WR de cada runa (naquele lugar da página) vem do build em tela, quando há.
-  import { icon, pct, perkStat, ownRuneSet, type Style } from "$lib/api";
+  import { icon, pct, perkStat, ownRuneSet, runeTrees, type Style } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
 
@@ -33,8 +33,7 @@
     if (open && !wasOpen) {
       const set = editing ? ownRuneSet(editing) : app.runeSet;
       name = editing?.name ?? "";
-      const p = set ? styles.find((s) => s.perks.includes(set.primary[0])) : undefined;
-      const s2 = set ? styles.find((s) => s.id !== p?.id && set.secondary.every((x) => s.perks.includes(x))) : undefined;
+      const [p, s2] = set ? runeTrees(styles, set) : [];
       pri = p?.id ?? styles[0]?.id ?? null;
       primary = p && set ? [...set.primary] : [null, null, null, null];
       sub = s2?.id ?? null;
@@ -92,7 +91,7 @@
   }
 
   async function save() {
-    if (!complete || !pri || !sub) return;
+    if (!complete || !pri || !sub || saving) return;
     saving = true;
     // Secundárias na ordem das fileiras, como o cliente grava.
     const sec = [...secondary].sort((a, b) => rowOf(subStyle, a) - rowOf(subStyle, b));
@@ -203,7 +202,6 @@
   .shards { margin-top: 4px; }
   .foot { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); }
   .foot > span { flex: 1; }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
   .bad { color: var(--bad); }
 </style>

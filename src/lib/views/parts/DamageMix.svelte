@@ -61,6 +61,5 @@
   .def { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .d { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--good); }
   .d img { width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--good); }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
 </style>

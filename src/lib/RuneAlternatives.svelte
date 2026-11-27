@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { icon, pct, pts, type Assets, type PerkStat, type RuneSet, type RuneStats } from "./api";
+  import { icon, pct, pts, runeTrees, type Assets, type PerkStat, type RuneSet, type RuneStats } from "./api";
   import { t } from "./i18n/index.svelte";
 
   // WR de cada runa escolhida e das alternativas da mesma fileira. Só exibição: não muda a importação.
@@ -37,8 +37,7 @@
 
   const rows = $derived.by(() => {
     if (!assets || !stats) return [];
-    const primary = assets.styles.find((s) => s.perks.includes(set.primary[0]));
-    const secondary = assets.styles.find((s) => s.id !== primary?.id && set.secondary.every((p) => s.perks.includes(p)));
+    const [primary, secondary] = runeTrees(assets.styles, set);
     const slotOf = (slots: number[][] | undefined, id: number) => slots?.find((r) => r.includes(id));
     const out: (Row | null)[] = [
       ...set.primary.map((id) => row(id, slotOf(primary?.slots, id), stats.primary)),
@@ -110,5 +109,4 @@
   .pr { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .better-line { color: var(--good); margin: 4px 0 0; }
   .small { font-size: 12px; }
-  .muted { color: var(--muted); }
 </style>

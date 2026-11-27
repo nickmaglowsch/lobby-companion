@@ -1,7 +1,7 @@
 <script lang="ts">
   // Sinergia do seu campeão (escolhido ou declarado) com cada aliado declarado, pelo
   // `ep=build-team` do lolalytics: WR da dupla, o WR geral do seu campeão e a amostra.
-  import { championIcon, pct, pts, LANES, type Assets, type SynergyAdvice } from "./api";
+  import { championIcon, pct, pts, laneName, type Assets, type SynergyAdvice } from "./api";
   import { t } from "./i18n/index.svelte";
 
   let { synergy, assets }: { synergy: SynergyAdvice; assets: Assets | null } = $props();
@@ -11,7 +11,7 @@
   function pairLine(allyId: number, lane: string, n: number): [string, string] {
     const s = t("synergy.pair", {
       name: name(allyId),
-      lane: LANES[lane] ?? lane,
+      lane: laneName(lane),
       base: synergy.baseWr !== null ? pct(synergy.baseWr) : "?",
       count: n,
     });
@@ -23,7 +23,7 @@
 <div class="synergy">
   <div class="title muted small">
     <img class="mini me" src={championIcon(synergy.championId)} alt={name(synergy.championId)} />
-    {t("synergy.title", { name: name(synergy.championId), lane: LANES[synergy.lane] ?? synergy.lane })}
+    {t("synergy.title", { name: name(synergy.championId), lane: laneName(synergy.lane) })}
   </div>
   {#each synergy.lines as l (l.allyChampionId + l.lane)}
     {@const [before, after] = pairLine(l.allyChampionId, l.lane, l.n)}
@@ -43,9 +43,6 @@
   .title, .line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
   .mini.me { border-color: var(--gold); }
-  .muted { color: var(--muted); }
   .small { font-size: 12px; }
   p { margin: 0; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
 </style>

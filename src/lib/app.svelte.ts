@@ -1,10 +1,10 @@
 // Estado da janela e ações, compartilhados pelos layouts (Clássico, Grade, Abas, Por fase).
 // Os dados vêm do backend (`api`): snapshot do cliente + build do lolalytics, assets e configurações.
 import {
-  api, minGamesFor, ownRuneSet,
+  api, coreSets, firstBack, minGamesFor, ownRuneSet, situationalItems,
   type Assets, type Champion, type Combo, type Composition, type OwnPage, type RuneChoice, type Settings, type Snapshot,
 } from "./api";
-import { compare, i18n, lower, setLocale, t } from "./i18n/index.svelte";
+import { compare, lower, setLocale, t } from "./i18n/index.svelte";
 import { comboWpa, scoreText, type Metric } from "./metric";
 
 export type Layout = "phase" | "grid" | "tabs" | "classic";
@@ -39,6 +39,12 @@ class AppState {
   private compSeq = 0;
   private savedLanguage = "";
   private compKey = "";
+  /** `get_assets` em andamento (um por vez, até vir). */
+  private assetsLoad: Promise<void> | null = null;
+  /** Gravações (configurações e páginas próprias) uma depois da outra, na ordem dos cliques. */
+  private queue: Promise<unknown> = Promise.resolve();
+  private ownSeq = 0;
+  private updateSeq = 0;
 
   build = $derived(this.snap?.build ?? null);
   champ = $derived(this.snap && this.assets ? this.assets.champions[this.snap.championId] : undefined);
@@ -62,6 +68,12 @@ class AppState {
   minGames = $derived(
     this.build ? minGamesFor(this.build, this.settings?.minGames ?? 200) : this.settings?.minGames ?? 200,
   );
+  /** Lanes do build com ao menos 1% das partidas (o menu de troca de lane). */
+  lanes = $derived(this.build?.lanes.filter(([, p]) => p >= 1) ?? []);
+  /** Núcleos, primeira volta e situacionais do build em tela (mesmas regras do conjunto de itens). */
+  cores = $derived(this.build ? coreSets(this.build, this.assets, this.minGames) : []);
+  firstBackItems = $derived(this.build ? firstBack(this.build, this.assets, this.minGames) : []);
+  situational = $derived(this.build ? situationalItems(this.build, this.assets, this.minGames, this.metric) : []);
   vsLane = $derived(this.vsLaneChoice ?? this.snap?.vsLane ?? this.build?.vs?.lane ?? this.build?.lane ?? null);
   /** Itens de defesa do build contra o dano do time inimigo (destacados nas listas de itens). */
   defHighlight = $derived(this.composition?.items.map((i) => i.id) ?? []);
@@ -100,29 +112,49 @@ class AppState {
 
   /** Carrega tudo e passa a ouvir o backend. Devolve a função que para de ouvir. */
   async init(): Promise<() => void> {
-    const snap = await api.snapshot();
-    // Idioma antes de qualquer texto: a tela só aparece com as configurações carregadas.
-    await setLocale(snap.locale);
-    this.snap = snap;
-    this.settings = await api.settings();
-    this.savedLanguage = this.settings.language;
-    this.version = await api.version();
-    this.ownPages = await api.ownPages();
-    await this.refreshAssets();
-    this.refreshComposition();
-    return api.onSnapshot((s) => {
-      // Seleção nova: esquece a lane de confronto escolhida na anterior.
-      if (s.phase === "ChampSelect" && this.snap?.phase !== "ChampSelect") this.vsLaneChoice = null;
-      // Idioma trocado (configuração ou cliente aberto em outro idioma): carrega e só então mostra.
-      if (s.locale !== i18n.locale) setLocale(s.locale);
-      this.snap = s;
-      if (s.connected) this.refreshAssets();
-      this.refreshComposition();
+    // Ouve antes de ler: um snapshot que chega durante a carga não se perde e vale mais que a
+    // resposta do `get_snapshot` (que pode ter sido montada antes dele).
+    let live = false;
+    const unlisten = await api.onSnapshot((s) => {
+      live = true;
+      this.applySnapshot(s);
     });
+    try {
+      const [snap, settings, version, ownPages] = await Promise.all([
+        api.snapshot(), api.settings(), api.version(), api.ownPages(),
+      ]);
+      if (!live) this.snap = snap;
+      // Idioma antes de qualquer texto: a tela só aparece com as configurações carregadas.
+      await setLocale(this.snap!.locale);
+      this.version = version;
+      this.ownPages = ownPages;
+      this.savedLanguage = settings.language;
+      this.settings = settings;
+    } catch (e) {
+      unlisten();
+      throw e;
+    }
+    this.refreshAssets();
+    this.refreshComposition();
+    return unlisten;
   }
 
-  async refreshAssets() {
-    if (!this.assets) this.assets = await api.assets();
+  private applySnapshot(s: Snapshot) {
+    // Seleção nova: esquece a lane de confronto escolhida na anterior.
+    if (s.phase === "ChampSelect" && this.snap?.phase !== "ChampSelect") this.vsLaneChoice = null;
+    // Idioma trocado (configuração ou cliente aberto em outro idioma): carrega e só então mostra.
+    setLocale(s.locale);
+    this.snap = s;
+    if (s.connected) this.refreshAssets();
+    this.refreshComposition();
+  }
+
+  /** Dados do cliente (ou a cópia da última conexão): um pedido por vez; sem eles, tenta de novo na próxima conexão. */
+  refreshAssets() {
+    if (this.assets || this.assetsLoad) return;
+    this.assetsLoad = api.assets()
+      .then((a) => void (this.assets = a), () => {})
+      .finally(() => (this.assetsLoad = null));
   }
 
   /** Composição de dano (tipo de dano pelo cliente) quando mudam os campeões ou o build em tela. */
@@ -171,6 +203,8 @@ class AppState {
   }
 
   async importNow() {
+    // O botão já fica desabilitado; isto segura um segundo clique antes de a tela atualizar.
+    if (this.importing) return;
     this.importing = true;
     this.importError = null;
     try {
@@ -182,15 +216,25 @@ class AppState {
     }
   }
 
-  async save() {
-    if (!this.settings) return;
-    await api.saveSettings($state.snapshot(this.settings));
-    // Idioma trocado: o backend também manda o locale novo no snapshot; lendo aqui, a troca
-    // aparece logo (e no navegador, onde não há evento).
-    if (this.settings.language === this.savedLanguage) return;
-    this.savedLanguage = this.settings.language;
-    const { locale } = await api.snapshot();
-    if (locale !== i18n.locale) await setLocale(locale);
+  /** Roda `f` depois das gravações anteriores (configurações e páginas próprias): o backend recebe
+   *  na ordem dos cliques e a última mudança é a que fica. */
+  private enqueue<T>(f: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(f);
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  /** Grava as configurações (na fila, com o estado da hora em que sai). */
+  save(): Promise<void> {
+    return this.enqueue(async () => {
+      if (!this.settings) return;
+      await api.saveSettings($state.snapshot(this.settings));
+      // Idioma trocado: o backend também manda o locale novo no snapshot; lendo aqui, a troca
+      // aparece logo (e no navegador, onde não há evento).
+      if (this.settings.language === this.savedLanguage) return;
+      this.savedLanguage = this.settings.language;
+      await setLocale((await api.snapshot()).locale);
+    });
   }
 
   /** Mais jogada / Maior WR / uma página sua. A troca já aparece; o backend grava e leva para o cliente. */
@@ -199,7 +243,7 @@ class AppState {
     const ownId = choice.startsWith("own:") ? Number(choice.slice(4)) : null;
     for (const p of this.championPages) p.active = p.id === ownId;
     if (choice === "pick" || choice === "win") this.settings.runeChoice = choice;
-    await this.ownCall(api.chooseRunes(ownId === null ? (choice as "pick" | "win") : "own", ownId));
+    await this.ownCall(() => api.chooseRunes(ownId === null ? (choice as "pick" | "win") : "own", ownId));
   }
 
   /** Clique numa sugestão de ban na sua vez: bane no cliente (marca e trava). */
@@ -221,7 +265,7 @@ class AppState {
   /** Copia a página atual do cliente como página nova do campeão em tela (com o nome dela no cliente). */
   async copyFromClient() {
     const id = this.snap?.championId;
-    if (id) await this.ownCall(api.saveOwnRunes(id, null, null));
+    if (id) await this.ownCall(() => api.saveOwnRunes(id, null, null));
   }
 
   openEditor(pageId: number | null) {
@@ -233,26 +277,33 @@ class AppState {
   async saveOwnRunesPage(pageId: number | null, name: string, primaryStyle: number, subStyle: number, perks: number[]): Promise<boolean> {
     const id = this.snap?.championId;
     if (!id) return false;
-    await this.ownCall(api.saveOwnRunesPage(id, pageId, name, primaryStyle, subStyle, perks));
+    await this.ownCall(() => api.saveOwnRunesPage(id, pageId, name, primaryStyle, subStyle, perks));
     return !this.ownError;
   }
 
   async deleteOwnRunes(championId: number, pageId: number) {
-    await this.ownCall(api.deleteOwnRunes(championId, pageId));
+    await this.ownCall(() => api.deleteOwnRunes(championId, pageId));
   }
 
-  private async ownCall(p: Promise<OwnPage[]>) {
+  /** Comando das páginas próprias, na fila; a lista (e o erro) que vale é a da última chamada. */
+  private async ownCall(f: () => Promise<OwnPage[]>) {
+    const mine = ++this.ownSeq;
+    const last = () => mine === this.ownSeq;
     this.ownBusy = true;
     this.ownError = null;
     try {
-      this.ownPages = await p;
+      const pages = await this.enqueue(f);
+      if (last()) this.ownPages = pages;
     } catch (e) {
+      if (!last()) return;
       this.ownError = String(e);
       // Volta ao que o backend tem (a troca otimista pode ter falhado).
-      this.ownPages = await api.ownPages().catch(() => this.ownPages);
-      this.settings = await api.settings().catch(() => this.settings);
+      const [pages, settings] = await Promise.all([api.ownPages().catch(() => null), api.settings().catch(() => null)]);
+      if (!last()) return;
+      if (pages) this.ownPages = pages;
+      if (settings) this.settings = settings;
     } finally {
-      this.ownBusy = false;
+      if (last()) this.ownBusy = false;
     }
   }
 
@@ -264,14 +315,17 @@ class AppState {
   }
 
   async checkUpdateNow() {
-    this.updateCheck = t("app.updateChecking");
+    // Dois cliques seguidos: vale a resposta da última consulta.
+    const mine = ++this.updateSeq;
+    const show = (text: string) => void (mine === this.updateSeq && (this.updateCheck = text));
+    show(t("app.updateChecking"));
     try {
       // Procurar à mão mostra o aviso de novo, mesmo se você clicou em "Depois".
       try { localStorage.removeItem("lc-update-later"); } catch { /* sem armazenamento */ }
       const u = await api.checkUpdate();
-      this.updateCheck = u ? t("app.updateFound", { version: u.version }) : t("app.updateNone");
+      show(u ? t("app.updateFound", { version: u.version }) : t("app.updateNone"));
     } catch (e) {
-      this.updateCheck = String(e);
+      show(String(e));
     }
   }
 }
