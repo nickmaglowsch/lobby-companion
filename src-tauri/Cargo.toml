@@ -30,6 +30,10 @@ native-tls = "0.2"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
 
+# Overlay: área da janela do jogo e estado da tecla do placar (só leitura; nada no processo do jogo).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+
 [profile.release]
 codegen-units = 1
 lto = true

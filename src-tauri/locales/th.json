@@ -7,6 +7,7 @@
   "lane.bottom": "เลนล่าง",
   "lane.support": "ซัพพอร์ต",
   "tray.open": "เปิด",
+  "tray.overlayEdit": "ปรับโอเวอร์เลย์",
   "tray.quit": "ออก",
   "tray.update": "อัปเดตเป็น v{version}…",
   "tray.tipUpdate": "Lobby Companion: มี v{version} ให้อัปเดต",

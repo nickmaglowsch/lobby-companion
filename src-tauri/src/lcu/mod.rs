@@ -101,12 +101,9 @@ impl Credentials {
     }
 }
 
-/// Lugares onde o lockfile costuma estar, do mais confiável ao chute.
-fn lockfile_candidates() -> Vec<PathBuf> {
+/// Pastas onde o League costuma estar instalado, da mais confiável ao chute.
+fn install_dir_candidates() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let Ok(p) = std::env::var("LCU_LOCKFILE") {
-        out.push(PathBuf::from(p));
-    }
     // O Riot Client grava o caminho da instalação aqui.
     let settings = PathBuf::from(
         r"C:\ProgramData\Riot Games\Metadata\league_of_legends.live\league_of_legends.live.product_settings.yaml",
@@ -114,7 +111,7 @@ fn lockfile_candidates() -> Vec<PathBuf> {
     if let Ok(text) = std::fs::read_to_string(&settings)
         && let Some(dir) = install_path_from_product_settings(&text)
     {
-        out.push(PathBuf::from(dir).join("lockfile"));
+        out.push(PathBuf::from(dir));
     }
     for drive in ['C', 'D', 'E', 'F', 'G', 'H'] {
         for sub in [
@@ -123,10 +120,35 @@ fn lockfile_candidates() -> Vec<PathBuf> {
             r"Jogos\Riot Games\League of Legends",
             r"Program Files\Riot Games\League of Legends",
         ] {
-            out.push(PathBuf::from(format!(r"{drive}:\{sub}\lockfile")));
+            out.push(PathBuf::from(format!(r"{drive}:\{sub}")));
         }
     }
     out
+}
+
+/// Lugares onde o lockfile costuma estar, do mais confiável ao chute.
+fn lockfile_candidates() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(p) = std::env::var("LCU_LOCKFILE") {
+        out.push(PathBuf::from(p));
+    }
+    out.extend(
+        install_dir_candidates()
+            .into_iter()
+            .map(|d| d.join("lockfile")),
+    );
+    out
+}
+
+/// `Config/game.cfg` da instalação (configurações do jogo, inclusive o HUD). Só leitura.
+pub fn game_cfg_path() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("LOL_GAME_CFG") {
+        return Some(PathBuf::from(p));
+    }
+    install_dir_candidates()
+        .into_iter()
+        .map(|d| d.join("Config").join("game.cfg"))
+        .find(|p| p.is_file())
 }
 
 pub fn install_path_from_product_settings(text: &str) -> Option<String> {

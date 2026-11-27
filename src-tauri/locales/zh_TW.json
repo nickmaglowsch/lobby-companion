@@ -7,6 +7,7 @@
   "lane.bottom": "下路",
   "lane.support": "輔助",
   "tray.open": "開啟",
+  "tray.overlayEdit": "調整覆蓋層",
   "tray.quit": "結束",
   "tray.update": "更新到 v{version}…",
   "tray.tipUpdate": "Lobby Companion: 有新版本 v{version}",

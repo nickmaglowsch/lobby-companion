@@ -106,6 +106,35 @@ pub fn core_set<'a>(
         })
 }
 
+/// Ordem de compra do build importado, para o lembrete do overlay: o núcleo (3 itens com botas)
+/// e depois o mais jogado de cada posição da build (`item1..item5`) que ainda não entrou, até 6.
+/// Sem núcleo, as botas mais jogadas entram depois do primeiro item.
+pub fn build_path(build: &Build, assets: &Assets, min_games: u64) -> Vec<i64> {
+    let mut path: Vec<i64> = core_set(build, assets, min_games)
+        .map(|(_, ids)| ids)
+        .unwrap_or_default();
+    let has_boots = |p: &[i64]| p.iter().any(|id| assets.item_has(*id, "Boots"));
+    for slot in &build.slots {
+        if path.len() >= 6 {
+            break;
+        }
+        if let Some(i) = pick_items(slot, assets, min_games)
+            .into_iter()
+            .find(|i| !path.contains(&i.id) && is_build_item(assets, i.id))
+        {
+            path.push(i.id);
+        }
+        if path.len() == 1
+            && !has_boots(&path)
+            && let Some(b) = pick_items(&build.boots, assets, min_games).first()
+        {
+            path.push(b.id);
+        }
+    }
+    path.truncate(6);
+    path
+}
+
 /// Primeira volta: os itens de `earlyItem` mais comprados com amostra mínima, sem consumíveis,
 /// berloques e o que já está nos inícios. Mesma regra na janela (`firstBack` em `api.ts`).
 pub fn first_back(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemStat> {
@@ -380,6 +409,22 @@ mod tests {
     use crate::lola::model::{parse_build_full, tests::fixture};
 
     const PT: Lang = Lang { locale: "pt_BR" };
+
+    #[test]
+    fn build_path_follows_the_core_then_the_slots() {
+        let b = parse_build_full(&fixture()).unwrap();
+        let a = sample_assets();
+        let path = build_path(&b, &a, 200);
+        assert!(!path.is_empty() && path.len() <= 6, "{path:?}");
+        let mut uniq = path.clone();
+        uniq.sort_unstable();
+        uniq.dedup();
+        assert_eq!(uniq.len(), path.len(), "sem repetir: {path:?}");
+        if let Some((_, core)) = core_set(&b, &a, 200) {
+            assert_eq!(&path[..core.len()], core.as_slice());
+        }
+        assert!(path.iter().all(|id| a.items.contains_key(id)));
+    }
 
     #[test]
     fn block_titles_follow_the_language() {

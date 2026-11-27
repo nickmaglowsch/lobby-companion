@@ -10,15 +10,23 @@
   import Phase from "$lib/views/Phase.svelte";
   import SettingsDialog from "$lib/views/parts/SettingsDialog.svelte";
   import RuneEditor from "$lib/views/parts/RuneEditor.svelte";
+  import Overlay from "$lib/overlay/Overlay.svelte";
+
+  // A janela do overlay abre em `index.html#overlay` (no navegador: `?overlay=1`).
+  const overlay =
+    typeof location !== "undefined" && (location.hash === "#overlay" || new URLSearchParams(location.search).has("overlay"));
 
   onMount(() => {
+    if (overlay) return;
     let un: (() => void) | undefined;
     app.init().then((u) => (un = u));
     return () => un?.();
   });
 </script>
 
-{#if app.settings}
+{#if overlay}
+  <Overlay />
+{:else if app.settings}
   {#if app.layout === "classic"}
     <div class="classic-banner"><UpdateBanner inChampSelect={app.snap?.inChampSelect ?? false} /></div>
     <Classic />

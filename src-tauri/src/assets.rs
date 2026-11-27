@@ -21,6 +21,16 @@ pub struct Named {
     /// "Consumable", "Trinket"). Vazio nas runas e feitiços.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<String>,
+    /// Só itens: preço total (`priceTotal`), para o overlay (ouro em itens, próximo item).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub price: u32,
+    /// Só itens: componentes (`from`), para descontar o que você já tem.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub from: Vec<i64>,
+}
+
+fn is_zero(x: &u32) -> bool {
+    *x == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +80,21 @@ fn named_map(list: &Value) -> HashMap<i64, Named> {
                         .into_iter()
                         .flatten()
                         .filter_map(|c| c.as_str().map(String::from))
+                        .collect(),
+                    price: e
+                        .get("priceTotal")
+                        .and_then(Value::as_u64)
+                        .and_then(|p| u32::try_from(p).ok())
+                        .unwrap_or(0),
+                    from: e
+                        .get("from")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|v| {
+                            v.as_i64()
+                                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                        })
                         .collect(),
                 },
             ))

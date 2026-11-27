@@ -7,6 +7,7 @@
   "lane.bottom": "Đường dưới",
   "lane.support": "Hỗ trợ",
   "tray.open": "Mở",
+  "tray.overlayEdit": "Điều chỉnh lớp phủ",
   "tray.quit": "Thoát",
   "tray.update": "Cập nhật lên v{version}…",
   "tray.tipUpdate": "Lobby Companion: đã có v{version}",

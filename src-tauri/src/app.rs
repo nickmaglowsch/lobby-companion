@@ -220,6 +220,8 @@ pub struct Shared {
     own_runes_path: PathBuf,
     /// Idioma do sistema operacional (último recurso do idioma automático).
     system_locale: Option<String>,
+    /// Estado do overlay na partida (o mesmo `Arc` fica no `manage` do Tauri).
+    pub overlay: Arc<crate::overlay::OverlayState>,
 }
 
 impl Shared {
@@ -260,6 +262,7 @@ impl Shared {
             own_runes: Mutex::new(OwnPages::load(&own_runes_path)),
             own_runes_path,
             system_locale,
+            overlay: Arc::default(),
         }
     }
 }
@@ -441,6 +444,9 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
             if close_in_game {
                 crate::close_main(app);
             }
+            // Overlay: o laço espera a API da partida responder e termina com a partida.
+            let (app, shared) = (app.clone(), shared.clone());
+            tauri::async_runtime::spawn(async move { crate::overlay::run(app, shared).await });
         }
         _ => update(app, shared, |s| s.phase = phase.into()).await,
     }
@@ -470,6 +476,11 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         .is_some();
     if shared.snapshot.lock().await.can_ban != can_ban {
         update(app, shared, |s| s.can_ban = can_ban).await;
+    }
+    // Overlay: você na partida é achado pelo campeão (o app não lê nomes).
+    if me.current_champion() > 0 {
+        let alias = champion_alias(shared, me.current_champion()).await;
+        shared.overlay.set_champion(alias);
     }
     let my_lane = me
         .position
@@ -1213,6 +1224,25 @@ pub async fn apply_change(app: &AppHandle, shared: &Arc<Shared>, scope: Scope) {
     .await;
 }
 
+/// Alias do campeão no cliente (o mesmo do `rawChampionName` da API da partida).
+async fn champion_alias(shared: &Shared, champion_id: i64) -> Option<String> {
+    shared
+        .assets
+        .read()
+        .await
+        .as_ref()
+        .and_then(|a| a.champion(champion_id).map(|c| c.alias.clone()))
+}
+
+/// Guarda para o overlay a ordem de compra do build importado (lembrete do próximo item).
+fn overlay_path(shared: &Shared, build: &Build, champion_id: i64, assets: &Assets, min: u64) {
+    let alias = assets.champion(champion_id).map(|c| c.alias.clone());
+    shared.overlay.set_path(
+        alias,
+        itemset::build_path(build, assets, build.min_games(min)),
+    );
+}
+
 async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport, String> {
     let _one_at_a_time = shared.import_lock.lock().await;
     let lang = Lang::current();
@@ -1307,6 +1337,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             Metric::from_setting(&settings.metric),
         );
         rep.items = Some(Outcome::from(itemset::apply(&lcu, set).await));
+        overlay_path(shared, &build, champion_id, &assets, settings.min_games);
     }
     if scope.spells && settings.import_spells {
         let rec: Vec<i64> = build

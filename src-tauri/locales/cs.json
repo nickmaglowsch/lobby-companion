@@ -7,6 +7,7 @@
   "lane.bottom": "Spodní",
   "lane.support": "Podpora",
   "tray.open": "Otevřít",
+  "tray.overlayEdit": "Upravit overlay",
   "tray.quit": "Ukončit",
   "tray.update": "Aktualizovat na v{version}…",
   "tray.tipUpdate": "Lobby Companion: k dispozici v{version}",

@@ -7,6 +7,7 @@
   "lane.bottom": "Inferior",
   "lane.support": "Apoyo",
   "tray.open": "Abrir",
+  "tray.overlayEdit": "Ajustar overlay",
   "tray.quit": "Salir",
   "tray.update": "Actualizar a la v{version}…",
   "tray.tipUpdate": "Lobby Companion: v{version} disponible",

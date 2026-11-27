@@ -194,6 +194,45 @@ export interface Settings {
   language: string;
   /** Último locale lido do cliente (`/riotclient/region-locale`), para quando ele está fechado. */
   clientLocale: string;
+  /** Overlay na partida (`overlay.rs`). */
+  overlay: OverlaySettings;
+}
+
+/** Overlay na partida: cada recurso liga e desliga; posições em fração da tela do jogo. */
+export interface OverlaySettings {
+  enabled: boolean;
+  inhibitors: boolean;
+  nextItem: boolean;
+  goldDiff: boolean;
+  csPerMin: boolean;
+  goldGraph: boolean;
+  /** Código virtual da tecla do placar (9 = Tab). */
+  scoreboardKey: number;
+  csPos: [number, number] | null;
+  itemPos: [number, number] | null;
+}
+
+export interface Rect { x: number; y: number; w: number; h: number }
+
+/** O que a janela do overlay desenha, em pixels físicos da área do jogo (`overlay::Frame`). */
+export interface OverlayFrame {
+  preview: boolean;
+  edit: boolean;
+  visible: boolean;
+  tab: boolean;
+  width: number;
+  height: number;
+  /** Escala do HUD do jogo (1 = tela de referência 1600×1200). */
+  scale: number;
+  gameTime: number;
+  minimap: Rect | null;
+  scoreboard: Rect | null;
+  inhibitors: { x: number; y: number; seconds: number; ally: boolean }[];
+  nextItem: { id: number; cost: number } | null;
+  cs: { total: number; perMin: number } | null;
+  lanes: { x: number; y: number; gold: number; allyAhead: boolean }[];
+  graph: { rect: Rect; points: [number, number][] } | null;
+  settings: OverlaySettings;
 }
 
 /** Versão nova no GitHub Releases (`update.rs`). */
@@ -253,6 +292,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     // Aviso de versão nova só com ?update=1 (os prints da landing page saem sem ele).
     get_update: q.get("update") === "1" ? m.mockUpdate : null,
     check_update: m.mockUpdate,
+    // ?overlay=1: a janela do overlay com o quadro de exemplo (1920×1080); &edit=0 sem o modo de ajuste.
+    overlay_frame: { ...m.mockOverlay, edit: q.get("edit") !== "0", settings: m.mockSettings.overlay },
   };
   return fake[cmd] as T;
 }
@@ -291,6 +332,16 @@ export const api = {
     inTauri ? listen<UpdateInfo>("update-available", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   onUpdateProgress: (cb: (p: UpdateProgress) => void): Promise<UnlistenFn> =>
     inTauri ? listen<UpdateProgress>("update-progress", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  /** Último quadro do overlay (depois chegam pelo `onOverlay`). */
+  overlayFrame: () => call<OverlayFrame | null>("overlay_frame"),
+  /** Liga/desliga o modo de ajuste do overlay. */
+  overlayEdit: (on: boolean) => call<void>("overlay_edit", { on }),
+  /** Posição de uma janelinha do overlay, em fração da tela do jogo. */
+  saveOverlayPos: (widget: "cs" | "item", x: number, y: number) => call<void>("save_overlay_pos", { widget, x, y }),
+  onOverlay: (cb: (f: OverlayFrame) => void): Promise<UnlistenFn> =>
+    inTauri ? listen<OverlayFrame>("overlay", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  onOverlayTab: (cb: (down: boolean) => void): Promise<UnlistenFn> =>
+    inTauri ? listen<boolean>("overlay-tab", (e) => cb(e.payload)) : Promise.resolve(() => {}),
   /** Versão instalada ("dev" no navegador). */
   version: async (): Promise<string> => (inTauri ? (await import("@tauri-apps/api/app")).getVersion() : "dev"),
 };

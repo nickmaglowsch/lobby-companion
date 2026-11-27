@@ -7,6 +7,7 @@
   "lane.bottom": "Atirador",
   "lane.support": "Suporte",
   "tray.open": "Abrir",
+  "tray.overlayEdit": "Ajustar overlay",
   "tray.quit": "Sair",
   "tray.update": "Atualizar para a v{version}…",
   "tray.tipUpdate": "Lobby Companion: v{version} disponível",
