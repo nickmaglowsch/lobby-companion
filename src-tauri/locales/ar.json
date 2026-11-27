@@ -14,7 +14,6 @@
   "err.clientData": "بيانات العميل: {error}",
   "err.unknownChampion": "بطل غير معروف (هل العميل مغلق؟)",
   "err.clientClosed": "عميل League مغلق",
-  "err.unknownLane": "مسار غير معروف: {lane}",
   "warn.noVsGames": "لا توجد في lolalytics مباريات لـ{champion} ضد {vs}؛ يُعرض البناء العام",
   "warn.noVsGamesLane": "لا توجد في lolalytics مباريات لـ{champion} ضد {vs} ({lane})؛ يُعرض البناء العام",
   "bans.declareMine": "مرّر المؤشر على بطلك أو اختره لترى الحظر المناسب ضده.",

@@ -14,7 +14,6 @@
   "err.clientData": "ข้อมูลไคลเอนต์: {error}",
   "err.unknownChampion": "ไม่รู้จักแชมเปี้ยน (ไคลเอนต์ปิดอยู่?)",
   "err.clientClosed": "ไคลเอนต์ League ปิดอยู่",
-  "err.unknownLane": "ไม่รู้จักเลน: {lane}",
   "warn.noVsGames": "lolalytics ไม่มีเกมของ {champion} เจอ {vs}; แสดงบิลด์ทั่วไปแทน",
   "warn.noVsGamesLane": "lolalytics ไม่มีเกมของ {champion} เจอ {vs} ({lane}); แสดงบิลด์ทั่วไปแทน",
   "bans.declareMine": "โฮเวอร์หรือเลือกแชมเปี้ยนของคุณเพื่อดูตัวที่ควรแบนสวน",

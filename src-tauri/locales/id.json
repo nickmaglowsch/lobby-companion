@@ -14,7 +14,6 @@
   "err.clientData": "data klien: {error}",
   "err.unknownChampion": "champion tidak dikenal (klien tertutup?)",
   "err.clientClosed": "Klien League tertutup",
-  "err.unknownLane": "lane tidak dikenal: {lane}",
   "warn.noVsGames": "lolalytics tidak punya game {champion} melawan {vs}; menampilkan build umum",
   "warn.noVsGamesLane": "lolalytics tidak punya game {champion} melawan {vs} ({lane}); menampilkan build umum",
   "bans.declareMine": "Hover atau pilih champion-mu untuk melihat ban yang melawannya.",

@@ -14,7 +14,6 @@
   "err.clientData": "用戶端資料: {error}",
   "err.unknownChampion": "未知英雄 (用戶端已關閉？)",
   "err.clientClosed": "英雄聯盟用戶端未開啟",
-  "err.unknownLane": "未知路線: {lane}",
   "warn.noVsGames": "lolalytics 沒有 {champion} 對上 {vs} 的對戰；顯示通用出裝",
   "warn.noVsGamesLane": "lolalytics 沒有 {champion} 對上 {vs} ({lane}) 的對戰；顯示通用出裝",
   "bans.declareMine": "預選或選擇你的英雄，即可查看針對它的禁用建議。",

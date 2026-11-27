@@ -14,7 +14,6 @@
   "err.clientData": "dados do cliente: {error}",
   "err.unknownChampion": "campeão desconhecido (cliente fechado?)",
   "err.clientClosed": "cliente do League fechado",
-  "err.unknownLane": "lane desconhecida: {lane}",
   "warn.noVsGames": "o lolalytics não tem partidas de {champion} contra {vs}; mostrando o build geral",
   "warn.noVsGamesLane": "o lolalytics não tem partidas de {champion} contra {vs} ({lane}); mostrando o build geral",
   "bans.declareMine": "Declare ou escolha seu campeão para ver os bans contra ele.",

@@ -14,7 +14,6 @@
   "err.clientData": "dane klienta: {error}",
   "err.unknownChampion": "nieznany bohater (klient zamknięty?)",
   "err.clientClosed": "klient League zamknięty",
-  "err.unknownLane": "nieznana linia: {lane}",
   "warn.noVsGames": "lolalytics nie ma gier {champion} przeciw {vs}; pokazuję ogólny build",
   "warn.noVsGamesLane": "lolalytics nie ma gier {champion} przeciw {vs} ({lane}); pokazuję ogólny build",
   "bans.declareMine": "Zadeklaruj lub wybierz swojego bohatera, aby zobaczyć bany przeciw niemu.",

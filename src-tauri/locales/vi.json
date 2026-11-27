@@ -14,7 +14,6 @@
   "err.clientData": "dữ liệu client: {error}",
   "err.unknownChampion": "không rõ tướng (client đã đóng?)",
   "err.clientClosed": "Client Liên Minh Huyền Thoại đã đóng",
-  "err.unknownLane": "không rõ vị trí: {lane}",
   "warn.noVsGames": "lolalytics không có trận nào của {champion} gặp {vs}; đang hiện build chung",
   "warn.noVsGamesLane": "lolalytics không có trận nào của {champion} gặp {vs} ({lane}); đang hiện build chung",
   "bans.declareMine": "Chọn tạm hoặc khóa tướng của bạn để xem nên cấm tướng nào khắc chế nó.",
