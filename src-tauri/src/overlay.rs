@@ -15,9 +15,10 @@ use crate::hud::{self, HudConfig, Rect};
 use crate::live::{self, Game, Player, Team};
 use crate::settings::OverlaySettings;
 use serde::Serialize;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const LABEL: &str = "overlay";
@@ -32,7 +33,12 @@ const POSITIONS: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 /// Estado do overlay entre as voltas do laço (fora do `Shared` para não misturar com a seleção).
 #[derive(Default)]
 pub struct OverlayState {
+    /// Um laço da partida rodando (no máximo um: `run` é chamado em `GameStart` e de novo em
+    /// `InProgress`/`Reconnect`).
     running: AtomicBool,
+    /// Muda a cada partida que o laço acompanha: a thread da tecla do placar sai quando o número
+    /// dela deixa de ser o atual (fim da partida ou laço recomeçado).
+    session: AtomicU32,
     /// Modo de ajuste: a janela aceita clique e as janelinhas se arrastam.
     edit: AtomicBool,
     tab: AtomicBool,
@@ -45,29 +51,37 @@ pub struct OverlayState {
     history: Mutex<GoldHistory>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct Me {
     pub alias: Option<String>,
     pub path: Vec<i64>,
 }
 
+/// Trava sem se importar com envenenamento (os dados continuam válidos: só números e textos).
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 impl OverlayState {
-    /// Campeão travado na seleção (chamado pelo `app.rs`).
+    /// Campeão travado na seleção (chamado pelo `app.rs`). Outro campeão: a ordem de compra
+    /// guardada era do anterior (de outra partida ou de uma troca) e deixa de valer.
     pub fn set_champion(&self, alias: Option<String>) {
-        if let Ok(mut me) = self.me.lock()
-            && alias.is_some()
-        {
-            me.alias = alias;
+        let Some(alias) = alias else {
+            return;
+        };
+        let mut me = lock(&self.me);
+        if me.alias.as_deref() != Some(alias.as_str()) {
+            me.alias = Some(alias);
+            me.path.clear();
         }
     }
     /// Ordem de compra do build importado (chamado na importação dos itens).
     pub fn set_path(&self, alias: Option<String>, path: Vec<i64>) {
-        if let Ok(mut me) = self.me.lock() {
-            if alias.is_some() {
-                me.alias = alias;
-            }
-            me.path = path;
+        let mut me = lock(&self.me);
+        if alias.is_some() {
+            me.alias = alias;
         }
+        me.path = path;
     }
     pub fn editing(&self) -> bool {
         self.edit.load(Ordering::Relaxed)
@@ -223,80 +237,67 @@ pub fn items_value(items: &[(i64, u32)], assets: &Assets) -> u32 {
         .sum()
 }
 
-/// Ouro que falta para `target` descontando os componentes que você tem (cada um usado uma vez).
-pub fn remaining_cost(target: i64, owned: &[i64], assets: &Assets) -> u32 {
-    fn go(id: i64, owned: &mut Vec<i64>, assets: &Assets, depth: u8) -> u32 {
-        if let Some(pos) = owned.iter().position(|x| *x == id) {
-            owned.remove(pos);
-            return 0;
-        }
-        let Some(item) = assets.items.get(&id) else {
-            return 0;
-        };
-        if depth > 6 || item.from.is_empty() {
-            return item.price;
-        }
-        let parts: u32 = item
-            .from
-            .iter()
-            .map(|c| assets.items.get(c).map_or(0, |i| i.price))
-            .sum();
-        let combine = item.price.saturating_sub(parts);
-        combine
-            + item
-                .from
-                .iter()
-                .map(|c| go(*c, owned, assets, depth + 1))
-                .sum::<u32>()
-    }
-    let Some(item) = assets.items.get(&target) else {
+/// Ouro que falta para `id` descontando os componentes em `owned` (cada um usado uma vez). O
+/// próprio item não conta como componente dele: só as partes são procuradas em `owned`.
+fn cost_without(id: i64, owned: &mut Vec<i64>, assets: &Assets, depth: u8) -> u32 {
+    let Some(item) = assets.items.get(&id) else {
         return 0;
     };
-    let mut owned = owned.to_vec();
-    // O próprio item não conta como componente dele.
-    if item.from.is_empty() {
+    if depth > 6 || item.from.is_empty() {
         return item.price;
     }
-    let parts: u32 = item
-        .from
-        .iter()
-        .map(|c| assets.items.get(c).map_or(0, |i| i.price))
-        .sum();
-    item.price.saturating_sub(parts)
+    let price = |c: &i64| assets.items.get(c).map_or(0, |i| i.price);
+    let combine = item.price.saturating_sub(item.from.iter().map(price).sum());
+    combine
         + item
             .from
             .iter()
-            .map(|c| go(*c, &mut owned, assets, 1))
+            .map(|&c| match owned.iter().position(|x| *x == c) {
+                Some(pos) => {
+                    owned.swap_remove(pos);
+                    0
+                }
+                None => cost_without(c, owned, assets, depth + 1),
+            })
             .sum::<u32>()
+}
+
+/// Ouro que falta para `target` descontando os componentes que você tem (cada um usado uma vez).
+pub fn remaining_cost(target: i64, owned: &[i64], assets: &Assets) -> u32 {
+    cost_without(target, &mut owned.to_vec(), assets, 0)
 }
 
 /// Próximo item do build que você ainda não tem, só quando o ouro da mochila dá.
 pub fn next_item(path: &[i64], me: &Player, gold: f64, assets: &Assets) -> Option<NextItem> {
-    let owned: Vec<i64> = me.items.iter().map(|(id, _)| *id).collect();
+    let mut owned: Vec<i64> = me.items.iter().map(|(id, _)| *id).collect();
     let target = *path.iter().find(|id| !owned.contains(id))?;
-    let cost = remaining_cost(target, &owned, assets);
+    let cost = cost_without(target, &mut owned, assets, 0);
     (cost > 0 && gold >= f64::from(cost)).then_some(NextItem { id: target, cost })
 }
 
-/// Ordem das linhas do placar: por posição quando todos têm uma (ranqueada), senão a da API.
-fn rows<'a>(players: &[&'a Player]) -> Vec<&'a Player> {
-    let idx = |p: &Player| POSITIONS.iter().position(|x| *x == p.position);
-    let mut v: Vec<&Player> = players.to_vec();
-    let all_known = v.iter().all(|p| idx(p).is_some());
-    let mut seen: Vec<usize> = v.iter().filter_map(|p| idx(p)).collect();
-    seen.sort_unstable();
-    seen.dedup();
-    if all_known && seen.len() == v.len() {
-        v.sort_by_key(|p| idx(p));
+/// Ordem das linhas do placar: por posição quando todos têm uma diferente (ranqueada), senão a
+/// da API.
+fn rows(mut v: Vec<&Player>) -> Vec<&Player> {
+    let idx = |p: &&Player| POSITIONS.iter().position(|x| *x == p.position);
+    let mut seen = 0u8;
+    let distinct = v.iter().all(|p| {
+        idx(p).is_some_and(|i| {
+            let bit = 1u8 << i;
+            let new = seen & bit == 0;
+            seen |= bit;
+            new
+        })
+    });
+    if distinct {
+        v.sort_by_key(idx);
     }
     v
 }
 
 /// Seu time e o inimigo, por linha do placar (aliados à esquerda).
 fn teams(game: &Game, my_team: Team) -> (Vec<&Player>, Vec<&Player>) {
-    let allies: Vec<&Player> = game.players.iter().filter(|p| p.team == my_team).collect();
-    let enemies: Vec<&Player> = game.players.iter().filter(|p| p.team != my_team).collect();
-    (rows(&allies), rows(&enemies))
+    let (allies, enemies): (Vec<&Player>, _) = game.players.iter().partition(|p| p.team == my_team);
+    (rows(allies), rows(enemies))
 }
 
 /// Diferença de ouro em itens de cada par de rotas, no meio do placar.
@@ -390,16 +391,16 @@ fn find_me<'a>(game: &'a Game, alias: Option<&str>) -> Option<&'a Player> {
     {
         return Some(p);
     }
-    let ids: Vec<String> = game
-        .ability_ids
-        .iter()
-        .map(|i| i.to_ascii_lowercase())
-        .collect();
+    // "chogathq" começa com "Chogath", sem diferença de maiúsculas (e sem alocar).
+    let starts = |id: &str, alias: &str| {
+        id.as_bytes()
+            .get(..alias.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(alias.as_bytes()))
+    };
     let mut best: Option<&Player> = None;
     let mut tie = false;
     for p in &game.players {
-        let a = p.alias.to_ascii_lowercase();
-        if a.is_empty() || !ids.iter().any(|i| i.starts_with(&a)) {
+        if p.alias.is_empty() || !game.ability_ids.iter().any(|i| starts(i, &p.alias)) {
             continue;
         }
         match best {
@@ -545,23 +546,36 @@ pub struct GameRect {
 #[cfg(windows)]
 mod win {
     use super::GameRect;
-    use windows_sys::Win32::Foundation::{POINT, RECT};
+    use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
     use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         FindWindowW, GetClientRect, GetForegroundWindow, IsIconic,
     };
 
-    fn wide(s: &str) -> Vec<u16> {
-        s.encode_utf16().chain(std::iter::once(0)).collect()
+    /// Texto ASCII terminado em zero para UTF-16, na compilação (o laço não aloca nada).
+    const fn wide<const N: usize>(s: &[u8; N]) -> [u16; N] {
+        let mut out = [0u16; N];
+        let mut i = 0;
+        while i < N {
+            out[i] = s[i] as u16;
+            i += 1;
+        }
+        out
+    }
+    /// Título da janela do jogo (classe `RiotWindowClass`).
+    static TITLE: [u16; 30] = wide(b"League of Legends (TM) Client\0");
+
+    fn find() -> HWND {
+        // SAFETY: só procura a janela pelo título (texto terminado em zero, estático).
+        unsafe { FindWindowW(std::ptr::null(), TITLE.as_ptr()) }
     }
 
-    /// Janela do jogo (classe `RiotWindowClass`, título "League of Legends (TM) Client").
+    /// Área de desenho da janela do jogo.
     pub fn game_rect() -> Option<GameRect> {
-        let title = wide("League of Legends (TM) Client");
+        let hwnd = find();
         // SAFETY: chamadas Win32 só de leitura, com buffers válidos durante a chamada.
         unsafe {
-            let hwnd = FindWindowW(std::ptr::null(), title.as_ptr());
             if hwnd.is_null() || IsIconic(hwnd) != 0 {
                 return None;
             }
@@ -595,9 +609,7 @@ mod win {
 
     /// Jogo aberto (mesmo minimizado).
     pub fn game_running() -> bool {
-        let title = wide("League of Legends (TM) Client");
-        // SAFETY: só procura a janela pelo título.
-        unsafe { !FindWindowW(std::ptr::null(), title.as_ptr()).is_null() }
+        !find().is_null()
     }
 
     /// Tecla segurada agora (só leitura do estado do teclado).
@@ -626,57 +638,63 @@ mod win {
     }
 }
 
-/// Cria a janela (se preciso) e põe sobre a área do jogo. Na thread principal.
-fn place_window(app: &AppHandle, x: i32, y: i32, w: u32, h: u32, interactive: bool) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        let win = match handle.get_webview_window(LABEL) {
-            Some(win) => win,
-            None => {
-                let built = WebviewWindowBuilder::new(
-                    &handle,
-                    LABEL,
-                    // Só o hash: `index.html#overlay` virava a rota `/index.html`, que o
-                    // SvelteKit não conhece (página de erro 404 no lugar do overlay).
-                    WebviewUrl::App("#overlay".into()),
-                )
-                .title("Lobby Companion Overlay")
-                // `transparent` liga o foco: o `focused(false)` tem que vir depois.
-                .transparent(true)
-                .decorations(false)
-                .always_on_top(true)
-                .skip_taskbar(true)
-                .shadow(false)
-                .resizable(false)
-                .focused(false)
-                .focusable(false)
-                .build();
-                match built {
-                    Ok(win) => win,
-                    Err(e) => {
-                        eprintln!("[overlay] erro ao criar a janela: {e}");
-                        return;
-                    }
+/// Cria a janela (se preciso) e põe sobre `r`. Só na thread principal: é ela que serializa a
+/// janela entre o laço da partida e o modo de ajuste.
+fn show_window(app: &AppHandle, r: GameRect, interactive: bool) {
+    let win = match app.get_webview_window(LABEL) {
+        Some(win) => win,
+        None => {
+            let built = WebviewWindowBuilder::new(
+                app,
+                LABEL,
+                // Só o hash: `index.html#overlay` virava a rota `/index.html`, que o
+                // SvelteKit não conhece (página de erro 404 no lugar do overlay).
+                WebviewUrl::App("#overlay".into()),
+            )
+            .title("Lobby Companion Overlay")
+            // `transparent` liga o foco: o `focused(false)` tem que vir depois.
+            .transparent(true)
+            .decorations(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .shadow(false)
+            .resizable(false)
+            .focused(false)
+            .focusable(false)
+            .build();
+            match built {
+                Ok(win) => win,
+                Err(e) => {
+                    eprintln!("[overlay] erro ao criar a janela: {e}");
+                    return;
                 }
             }
-        };
-        let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
-        let _ = win.set_size(tauri::PhysicalSize::new(w, h));
-        let _ = win.set_focusable(interactive);
-        let _ = win.set_ignore_cursor_events(!interactive);
-        if interactive {
-            let _ = win.set_focus();
         }
-    });
+    };
+    let _ = win.set_position(tauri::PhysicalPosition::new(r.x, r.y));
+    let _ = win.set_size(tauri::PhysicalSize::new(r.w, r.h));
+    let _ = win.set_focusable(interactive);
+    let _ = win.set_ignore_cursor_events(!interactive);
+    if interactive {
+        let _ = win.set_focus();
+    }
 }
 
-pub fn close_window(app: &AppHandle) {
+/// `show_window` na thread principal.
+fn place_window(app: &AppHandle, r: GameRect, interactive: bool) {
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(w) = handle.get_webview_window(LABEL) {
-            let _ = w.destroy();
-        }
-    });
+    let _ = app.run_on_main_thread(move || show_window(&handle, r, interactive));
+}
+
+fn destroy_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(LABEL) {
+        let _ = w.destroy();
+    }
+}
+
+fn close_window(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || destroy_window(&handle));
 }
 
 /// Área do monitor principal (modo de ajuste sem partida).
@@ -697,15 +715,16 @@ fn primary_rect(app: &AppHandle) -> GameRect {
     }
 }
 
-fn read_game_cfg() -> hud::GameCfg {
-    crate::lcu::game_cfg_path()
-        .and_then(|p| std::fs::read_to_string(p).ok())
+/// Lê o `game.cfg` (só leitura). O caminho vem de fora: achar a instalação lê outro arquivo e
+/// testa vários lugares, então o laço da partida procura uma vez só.
+fn read_game_cfg(path: Option<&Path>) -> hud::GameCfg {
+    path.and_then(|p| std::fs::read_to_string(p).ok())
         .map(|t| hud::parse_game_cfg(&t))
         .unwrap_or_default()
 }
 
-fn read_hud() -> HudConfig {
-    read_game_cfg().hud
+fn modified(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
 /// Com o overlay ligado, troca a tela cheia do jogo por "Sem bordas" no `game.cfg` (pedido do
@@ -720,15 +739,21 @@ pub fn ensure_borderless() -> bool {
     let Some(path) = crate::lcu::game_cfg_path() else {
         return false;
     };
+    let before = modified(&path);
     let Some(new) = std::fs::read_to_string(&path)
         .ok()
         .and_then(|t| hud::set_borderless(&t))
     else {
         return false;
     };
-    // Grava ao lado e troca: o arquivo nunca fica pela metade.
+    // Grava ao lado e troca: o arquivo nunca fica pela metade. Antes da troca, confere de novo:
+    // se o jogo abriu ou alguém (cliente, jogo) gravou o arquivo depois da leitura, não mexe (a
+    // troca apagaria o que foi gravado; fica para a próxima seleção).
     let tmp = path.with_extension("cfg.lc-tmp");
-    let ok = std::fs::write(&tmp, new).is_ok() && std::fs::rename(&tmp, &path).is_ok();
+    let ok = std::fs::write(&tmp, new).is_ok()
+        && !win::game_running()
+        && modified(&path) == before
+        && std::fs::rename(&tmp, &path).is_ok();
     if ok {
         eprintln!("[overlay] game.cfg: tela cheia trocada por Sem bordas");
     } else {
@@ -739,10 +764,10 @@ pub fn ensure_borderless() -> bool {
 }
 
 /// Diagnóstico no terminal (`npm run tauri dev`): só quando a mensagem muda, sem nomes.
-fn note(last: &mut String, msg: String) {
-    if *last != msg {
+fn note(last: &mut String, msg: &str) {
+    if last != msg {
         eprintln!("[overlay] {msg}");
-        *last = msg;
+        msg.clone_into(last);
     }
 }
 
@@ -767,28 +792,43 @@ pub fn set_edit(app: &AppHandle, on: bool) {
         return;
     };
     st.edit.store(on, Ordering::Relaxed);
+    // Na partida, o laço ajusta a janela na próxima volta.
+    if st.running.load(Ordering::SeqCst) {
+        return;
+    }
     let st = st.inner().clone();
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let shared = app.state::<Arc<Shared>>().inner().clone();
-        let phase = shared.snapshot.lock().await.phase.clone();
-        if in_game(&phase) && st.running.load(Ordering::Relaxed) {
-            // O laço da partida ajusta a janela na próxima volta; manda já o quadro novo.
-            return;
-        }
-        if on {
+        let preview = if on {
+            let shared = app.state::<Arc<Shared>>().inner().clone();
             let settings = shared.settings.lock().await.overlay.clone();
             let r = primary_rect(&app);
-            place_window(&app, r.x, r.y, r.w, r.h, true);
-            let frame = preview_frame(&settings, &read_hud(), f64::from(r.w), f64::from(r.h));
-            // A janela recém-criada pede o quadro com `overlay_frame` quando carrega.
-            if let Ok(mut last) = LAST.lock() {
-                *last = Some(frame.clone());
-            }
-            let _ = app.emit_to(LABEL, "overlay", frame);
+            let hud = read_game_cfg(crate::lcu::game_cfg_path().as_deref()).hud;
+            Some((
+                r,
+                preview_frame(&settings, &hud, f64::from(r.w), f64::from(r.h)),
+            ))
         } else {
-            close_window(&app);
-        }
+            None
+        };
+        let handle = app.clone();
+        // A decisão fica na thread principal, a mesma que mexe na janela para o laço da partida:
+        // se a partida começou nesse meio-tempo, a janela é do laço (nada de prévia por cima do
+        // jogo, nem fechar a janela da partida).
+        let _ = app.run_on_main_thread(move || {
+            if st.running.load(Ordering::SeqCst) {
+                return;
+            }
+            match preview {
+                Some((r, frame)) => {
+                    show_window(&handle, r, true);
+                    // A janela recém-criada pede o quadro com `overlay_frame` quando carrega.
+                    let _ = handle.emit_to(LABEL, "overlay", &frame);
+                    *lock(&LAST) = Some(frame);
+                }
+                None => destroy_window(&handle),
+            }
+        });
     });
 }
 
@@ -796,10 +836,10 @@ pub fn set_edit(app: &AppHandle, on: bool) {
 static LAST: Mutex<Option<Frame>> = Mutex::new(None);
 
 pub fn last_frame() -> Option<Frame> {
-    LAST.lock().ok().and_then(|l| l.clone())
+    lock(&LAST).clone()
 }
 
-/// Laço da partida: começa em `InProgress` e termina quando a partida acaba.
+/// Laço da partida: começa em `GameStart`/`InProgress` e termina quando a partida acaba.
 pub async fn run(app: AppHandle, shared: Arc<Shared>) {
     let Some(st) = app
         .try_state::<Arc<OverlayState>>()
@@ -807,21 +847,50 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
     else {
         return;
     };
+    // Chamado de novo a cada fase da partida (e a cada reconexão ao cliente): só um laço.
     if st.running.swap(true, Ordering::SeqCst) {
         return;
-    }
-    if let Ok(mut h) = st.history.lock() {
-        h.clear();
     }
     let Some(http) = live::client() else {
         st.running.store(false, Ordering::SeqCst);
         return;
     };
+    loop {
+        follow_game(&app, &shared, &st, &http).await;
+        eprintln!("[overlay] partida acabou");
+        // A thread da tecla do placar sai.
+        st.session.fetch_add(1, Ordering::SeqCst);
+        st.edit.store(false, Ordering::Relaxed);
+        *lock(&LAST) = None;
+        close_window(&app);
+        st.running.store(false, Ordering::SeqCst);
+        // Um `run` chamado entre a última olhada na fase e a linha de cima voltou sem fazer nada
+        // (este laço ainda contava como rodando). Se a fase voltou para a partida (cliente
+        // reconectado), este laço segue no lugar dele; se outro `run` já pegou a vez, termina.
+        let again = in_game(&shared.snapshot.lock().await.phase);
+        if !again || st.running.swap(true, Ordering::SeqCst) {
+            break;
+        }
+    }
+}
+
+/// Uma partida: até a fase sair de `GameStart`/`InProgress`/`Reconnect`.
+async fn follow_game(
+    app: &AppHandle,
+    shared: &Shared,
+    st: &Arc<OverlayState>,
+    http: &reqwest::Client,
+) {
+    // Nada da partida anterior: gráfico, tecla segurada, primeiro plano.
+    lock(&st.history).clear();
+    st.tab.store(false, Ordering::Relaxed);
+    st.foreground.store(false, Ordering::Relaxed);
+    let session = st.session.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
     // Tecla do placar: lida a cada 30 ms em outra thread (o laço principal é de 1 s).
     {
         let (st, app) = (st.clone(), app.clone());
-        std::thread::spawn(move || {
-            while st.running.load(Ordering::Relaxed) {
+        let spawned = std::thread::Builder::new().spawn(move || {
+            while st.session.load(Ordering::SeqCst) == session {
                 let down = st.foreground.load(Ordering::Relaxed)
                     && win::key_down(st.key.load(Ordering::Relaxed));
                 if st.tab.swap(down, Ordering::Relaxed) != down {
@@ -830,26 +899,29 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
                 std::thread::sleep(Duration::from_millis(30));
             }
         });
+        if let Err(e) = spawned {
+            eprintln!("[overlay] tecla do placar: thread não abriu ({e})");
+        }
     }
     let mut placed: Option<(GameRect, bool)> = None;
-    let cfg = read_game_cfg();
+    let cfg_path = crate::lcu::game_cfg_path();
+    let cfg = read_game_cfg(cfg_path.as_deref());
     let mut hud_cfg = cfg.hud;
     let (mut last_state, mut last_mode) = (String::new(), String::new());
     eprintln!("[overlay] partida: laço começou");
-    note(&mut last_mode, window_mode_note(&cfg));
+    note(&mut last_mode, &window_mode_note(&cfg));
     let mut ticks: u32 = 0;
     loop {
-        let phase = shared.snapshot.lock().await.phase.clone();
-        if !in_game(&phase) {
+        if !in_game(&shared.snapshot.lock().await.phase) {
             break;
         }
         let settings = shared.settings.lock().await.overlay.clone();
         let edit = st.editing();
         st.key.store(settings.scoreboard_key, Ordering::Relaxed);
         if !settings.enabled && !edit {
-            note(&mut last_state, "desligado nas configurações".into());
+            note(&mut last_state, "desligado nas configurações");
             if placed.take().is_some() {
-                close_window(&app);
+                close_window(app);
             }
             tokio::time::sleep(Duration::from_secs(2)).await;
             continue;
@@ -857,58 +929,37 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
         // O game.cfg muda quando você mexe nas opções do jogo: relê a cada 5 s.
         ticks = ticks.wrapping_add(1);
         if ticks.is_multiple_of(5) {
-            let cfg = read_game_cfg();
+            let cfg = read_game_cfg(cfg_path.as_deref());
             hud_cfg = cfg.hud;
-            note(&mut last_mode, window_mode_note(&cfg));
+            note(&mut last_mode, &window_mode_note(&cfg));
         }
-        let game = live::fetch(&http).await.as_ref().and_then(live::parse);
-        let rect = win::game_rect();
-        match (&game, &rect) {
-            (None, _) => note(
-                &mut last_state,
-                "API da partida (127.0.0.1:2999) sem resposta: tela de carregamento?".into(),
-            ),
-            (_, None) => note(
-                &mut last_state,
-                "janela \"League of Legends (TM) Client\" não achada (ou minimizada)".into(),
-            ),
-            (Some(g), Some(r)) => {
-                let alias = st.me.lock().ok().and_then(|m| m.alias.clone());
-                let me = find_me(g, alias.as_deref()).map_or_else(
-                    || {
-                        format!(
-                            "NÃO achado (campeão da seleção: {}; {} jogadores; habilidades: {:?})",
-                            alias.as_deref().unwrap_or("nenhum"),
-                            g.players.len(),
-                            g.ability_ids
-                        )
-                    },
-                    |p| p.alias.clone(),
-                );
+        let game = live::fetch(http).await.and_then(live::parse);
+        let (game, rect) = match (game, win::game_rect()) {
+            (Some(game), Some(rect)) => (game, rect),
+            (game, _) => {
                 note(
                     &mut last_state,
-                    format!(
-                        "jogo {}x{} em ({}, {}), em primeiro plano: {}; você: {me}",
-                        r.w, r.h, r.x, r.y, r.foreground
-                    ),
-                );
-            }
-        }
-        let (Some(game), Some(rect)) = (game, rect) else {
-            st.foreground.store(false, Ordering::Relaxed);
-            if placed.is_some() {
-                let _ = app.emit_to(
-                    LABEL,
-                    "overlay",
-                    Frame {
-                        settings,
-                        edit,
-                        ..Default::default()
+                    if game.is_none() {
+                        "API da partida (127.0.0.1:2999) sem resposta: tela de carregamento?"
+                    } else {
+                        "janela \"League of Legends (TM) Client\" não achada (ou minimizada)"
                     },
                 );
+                st.foreground.store(false, Ordering::Relaxed);
+                if placed.is_some() {
+                    let _ = app.emit_to(
+                        LABEL,
+                        "overlay",
+                        Frame {
+                            settings,
+                            edit,
+                            ..Default::default()
+                        },
+                    );
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            continue;
         };
         st.foreground.store(rect.foreground, Ordering::Relaxed);
         let geometry = GameRect {
@@ -917,13 +968,32 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
         };
         // Sem a janela (a criação falhou ou alguém a fechou): cria de novo.
         if placed != Some((geometry, edit)) || app.get_webview_window(LABEL).is_none() {
-            place_window(&app, rect.x, rect.y, rect.w, rect.h, edit);
+            place_window(app, rect, edit);
             placed = Some((geometry, edit));
         }
-        let me = st.me.lock().map(|m| m.clone()).unwrap_or_default();
         let assets = shared.assets.read().await.clone();
         let mut frame = {
-            let mut history = st.history.lock().unwrap_or_else(|e| e.into_inner());
+            let me = lock(&st.me);
+            note(
+                &mut last_state,
+                &format!(
+                    "jogo {}x{} em ({}, {}), em primeiro plano: {}; você: {}",
+                    rect.w,
+                    rect.h,
+                    rect.x,
+                    rect.y,
+                    rect.foreground,
+                    match find_me(&game, me.alias.as_deref()) {
+                        Some(p) => p.alias.clone(),
+                        None => format!(
+                            "NÃO achado (campeão da seleção: {}; {} jogadores; habilidades: {:?})",
+                            me.alias.as_deref().unwrap_or("nenhum"),
+                            game.players.len(),
+                            game.ability_ids
+                        ),
+                    }
+                ),
+            );
             build_frame(
                 &Inputs {
                     game: &game,
@@ -934,25 +1004,16 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
                     w: f64::from(rect.w),
                     h: f64::from(rect.h),
                 },
-                &mut history,
+                &mut lock(&st.history),
             )
         };
         frame.edit = edit;
         frame.visible = rect.foreground || edit;
         frame.tab = st.tab.load(Ordering::Relaxed) || edit;
-        if let Ok(mut last) = LAST.lock() {
-            *last = Some(frame.clone());
-        }
-        let _ = app.emit_to(LABEL, "overlay", frame);
+        let _ = app.emit_to(LABEL, "overlay", &frame);
+        *lock(&LAST) = Some(frame);
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
-    eprintln!("[overlay] partida acabou");
-    st.running.store(false, Ordering::SeqCst);
-    st.edit.store(false, Ordering::Relaxed);
-    if let Ok(mut last) = LAST.lock() {
-        *last = None;
-    }
-    close_window(&app);
 }
 
 #[cfg(test)]
@@ -995,7 +1056,6 @@ mod tests {
             position: pos.into(),
             items: items.iter().map(|i| (*i, 1)).collect(),
             cs,
-            level: 10,
         }
     }
 
@@ -1004,7 +1064,6 @@ mod tests {
             time,
             map: 11,
             gold: 1500.0,
-            level: 10,
             ability_ids: Vec::new(),
             players,
             events,
@@ -1036,6 +1095,21 @@ mod tests {
         // Id que não começa com nenhum alias: ninguém.
         g.ability_ids = vec!["PowerBall".into()];
         assert!(find_me(&g, None).is_none());
+    }
+
+    #[test]
+    fn build_path_only_belongs_to_its_champion() {
+        let st = OverlayState::default();
+        st.set_path(Some("Chogath".into()), vec![3068]);
+        // Mesmo campeão (a seleção manda de novo a cada segundo): a ordem de compra fica.
+        st.set_champion(Some("Chogath".into()));
+        st.set_champion(None);
+        assert_eq!(lock(&st.me).path, vec![3068]);
+        // Outro campeão (partida seguinte sem importação, ou troca): a do anterior sai.
+        st.set_champion(Some("Viego".into()));
+        let me = lock(&st.me);
+        assert_eq!(me.alias.as_deref(), Some("Viego"));
+        assert!(me.path.is_empty());
     }
 
     #[test]
