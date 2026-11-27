@@ -261,10 +261,6 @@ impl Lolalytics {
         })
     }
 
-    pub async fn build_full(&self, q: &Query) -> Result<Fetched, String> {
-        self.get(q).await
-    }
-
     /// Qualquer endpoint: cache de 6 h, depois o site; se o site falhar, o cache vencido.
     pub async fn get(&self, q: &Query) -> Result<Fetched, String> {
         let path = self.cache_dir.join(q.cache_key());
@@ -320,11 +316,7 @@ impl Lolalytics {
         let data: Value = serde_json::from_slice(&body).map_err(|e| invalid(&e))?;
         // Erros "de dados" ({"status": 404x}) não vão para o cache.
         if q.ep.valid(&data) {
-            let _ = std::fs::create_dir_all(&self.cache_dir);
-            let tmp = path.with_extension("tmp");
-            if std::fs::write(&tmp, &body).is_ok() {
-                let _ = std::fs::rename(&tmp, path);
-            }
+            let _ = crate::assets::write_atomic(path, &body);
         }
         Ok(data)
     }

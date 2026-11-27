@@ -74,7 +74,6 @@
   "lola.network": "網路: {error}",
   "lola.invalid": "無效的回應: {error}",
   "lola.missing": "lolalytics 回應中缺少 '{field}'",
-  "lcu.notFound": "找不到英雄聯盟用戶端 (請開啟用戶端)",
   "lcu.forbidden": "不允許寫入 {method} {path}",
   "lcu.http": "{method} {path} 回傳 HTTP {status}: {message}",
   "lcu.network": "與用戶端連線錯誤: {error}",

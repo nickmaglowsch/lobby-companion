@@ -219,13 +219,14 @@ impl Assets {
 
     /// Os cinco arquivos ao mesmo tempo (só GET local).
     pub async fn load(lcu: &Lcu) -> Result<Self, LcuError> {
-        let (champs, items, perks, styles, spells) = tokio::try_join!(
+        let (champs, items, perks, styles, spells) = futures_util::future::try_join5(
             lcu.get("/lol-game-data/assets/v1/champion-summary.json"),
             lcu.get("/lol-game-data/assets/v1/items.json"),
             lcu.get("/lol-game-data/assets/v1/perks.json"),
             lcu.get("/lol-game-data/assets/v1/perkstyles.json"),
             lcu.get("/lol-game-data/assets/v1/summoner-spells.json"),
-        )?;
+        )
+        .await?;
         Ok(Self::from_values(&champs, &items, &perks, &styles, &spells))
     }
 

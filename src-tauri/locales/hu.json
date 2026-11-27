@@ -75,7 +75,6 @@
   "lola.network": "hálózat: {error}",
   "lola.invalid": "érvénytelen válasz: {error}",
   "lola.missing": "lolalytics-válasz '{field}' nélkül",
-  "lcu.notFound": "a League kliens nem található (nyisd meg a klienst)",
   "lcu.forbidden": "az írás nem engedélyezett: {method} {path}",
   "lcu.http": "HTTP {status}, {method} {path}: {message}",
   "lcu.network": "hálózati hiba a klienssel: {error}",

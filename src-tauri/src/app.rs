@@ -383,12 +383,15 @@ pub async fn worker(app: AppHandle) {
             Ok(a) => {
                 let a = Arc::new(a);
                 *shared.assets.write().await = Some(a.clone());
-                // Cópia para usar sem o cliente; os ícones das runas vêm junto, em segundo plano.
-                let _ = a.save_cached(&shared.data_dir.join("assets.json"));
-                // Reconectou no meio da anterior: a velha para (as duas baixariam os mesmos ícones).
+                // Cópia para usar sem o cliente e os ícones das runas, em segundo plano (o laço
+                // segue para a fase e a sessão). Reconectou no meio da anterior: a velha para
+                // (as duas baixariam os mesmos ícones).
                 let task = {
                     let shared = shared.clone();
-                    tokio::spawn(async move { prefetch_rune_icons(&shared, &a).await })
+                    tokio::spawn(async move {
+                        let _ = a.save_cached(&shared.data_dir.join("assets.json"));
+                        prefetch_rune_icons(&shared, &a).await
+                    })
                 };
                 let old = shared
                     .prefetch
@@ -764,7 +767,7 @@ pub async fn load_build(
 async fn fetch_build(shared: &Shared, q: &Query) -> Result<(Build, Option<String>), String> {
     shared
         .lola
-        .build_full(q)
+        .get(q)
         .await
         .and_then(|f| model::parse_build_full(&f.data).map(|b| (b, f.stale_warning)))
 }
@@ -1498,10 +1501,7 @@ pub async fn fetch_icon(shared: &Shared, path: &str) -> Result<(Vec<u8>, String)
     let got = match lcu {
         Some(lcu) => {
             let got = lcu.get_bytes(path).await.map_err(|e| e.to_string())?;
-            if let Some(dir) = file.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let _ = std::fs::write(&file, &got.0);
+            let _ = crate::assets::write_atomic(&file, &got.0);
             got
         }
         None => {
@@ -1531,11 +1531,16 @@ async fn view_champion(shared: &Shared) -> Option<i64> {
     (s.build.is_some() && s.champion_id > 0).then_some(s.champion_id)
 }
 
-/// Grava o arquivo e devolve a lista para a janela.
-fn store_own(shared: &Shared, pages: &OwnPages) -> Result<Vec<OwnEntry>, String> {
-    pages
-        .save(&shared.own_runes_path)
+/// Grava `next` e só então troca as páginas da memória (se a gravação falhar, memória e arquivo
+/// continuam iguais); devolve a lista para a janela.
+fn store_own(
+    shared: &Shared,
+    pages: &mut OwnPages,
+    next: OwnPages,
+) -> Result<Vec<OwnEntry>, String> {
+    next.save(&shared.own_runes_path)
         .map_err(|e| crate::t!("own.saveFailed", error = e))?;
+    *pages = next;
     Ok(pages.entries())
 }
 
@@ -1555,8 +1560,9 @@ async fn store_page(
 ) -> Result<Vec<OwnEntry>, String> {
     let list = {
         let mut pages = shared.own_runes.lock().await;
-        pages.upsert(champion_id, page_id, page);
-        store_own(shared, &pages)?
+        let mut next = pages.clone();
+        next.upsert(champion_id, page_id, page);
+        store_own(shared, &mut pages, next)?
     };
     if import && view_champion(shared).await == Some(champion_id) {
         let (app, shared) = (app.clone(), shared.clone());
@@ -1636,8 +1642,12 @@ pub async fn delete_own_runes(
 ) -> Result<Vec<OwnEntry>, String> {
     let (list, was_active) = {
         let mut pages = shared.own_runes.lock().await;
-        let old = pages.remove(champion_id, page_id);
-        (store_own(shared, &pages)?, old.is_some_and(|(_, was)| was))
+        let mut next = pages.clone();
+        let old = next.remove(champion_id, page_id);
+        (
+            store_own(shared, &mut pages, next)?,
+            old.is_some_and(|(_, was)| was),
+        )
     };
     if was_active && view_champion(shared).await == Some(champion_id) {
         let (app, shared) = (app.clone(), shared.clone());
@@ -1658,7 +1668,7 @@ pub async fn choose_runes(
         return Err(crate::t!("own.unknownChoice", choice = choice));
     }
     let champion = view_champion(shared).await;
-    let mut changed = false;
+    let mut changed;
     let list = {
         let mut pages = shared.own_runes.lock().await;
         let target = if choice == "own" { page_id } else { None };
@@ -1667,11 +1677,10 @@ pub async fn choose_runes(
         {
             return Err(crate::t!("own.pageGone"));
         }
-        if let Some(c) = champion {
-            changed = pages.set_active(c, target);
-        }
+        let mut next = pages.clone();
+        changed = champion.is_some_and(|c| next.set_active(c, target));
         if changed {
-            store_own(shared, &pages)?
+            store_own(shared, &mut pages, next)?
         } else {
             pages.entries()
         }

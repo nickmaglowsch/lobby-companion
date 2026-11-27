@@ -74,7 +74,6 @@
   "lola.network": "네트워크: {error}",
   "lola.invalid": "잘못된 응답: {error}",
   "lola.missing": "lolalytics 응답에 '{field}' 없음",
-  "lcu.notFound": "리그 오브 레전드 클라이언트를 찾을 수 없음 (클라이언트를 여세요)",
   "lcu.forbidden": "{method} {path} 쓰기는 허용되지 않음",
   "lcu.http": "{method} {path}에서 HTTP {status}: {message}",
   "lcu.network": "클라이언트와 통신 오류: {error}",

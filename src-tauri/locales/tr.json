@@ -75,7 +75,6 @@
   "lola.network": "ağ: {error}",
   "lola.invalid": "geçersiz yanıt: {error}",
   "lola.missing": "lolalytics yanıtında '{field}' yok",
-  "lcu.notFound": "League istemcisi bulunamadı (istemciyi aç)",
   "lcu.forbidden": "yazmaya izin yok: {method} {path}",
   "lcu.http": "HTTP {status}, {method} {path}: {message}",
   "lcu.network": "istemciyle ağ hatası: {error}",

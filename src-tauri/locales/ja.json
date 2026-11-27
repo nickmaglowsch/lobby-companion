@@ -74,7 +74,6 @@
   "lola.network": "ネットワーク: {error}",
   "lola.invalid": "無効な応答: {error}",
   "lola.missing": "lolalyticsの応答に'{field}'がありません",
-  "lcu.notFound": "LoLクライアントが見つかりません (クライアントを開いてください)",
   "lcu.forbidden": "{method} {path}への書き込みは許可されていません",
   "lcu.http": "{method} {path}でHTTP {status}: {message}",
   "lcu.network": "クライアントとの通信エラー: {error}",

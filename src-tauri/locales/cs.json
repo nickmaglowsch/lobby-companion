@@ -76,7 +76,6 @@
   "lola.network": "síť: {error}",
   "lola.invalid": "neplatná odpověď: {error}",
   "lola.missing": "odpověď lolalytics bez '{field}'",
-  "lcu.notFound": "klient League nenalezen (otevři klienta)",
   "lcu.forbidden": "zápis není povolen: {method} {path}",
   "lcu.http": "HTTP {status} u {method} {path}: {message}",
   "lcu.network": "chyba sítě s klientem: {error}",

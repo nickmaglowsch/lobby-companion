@@ -74,7 +74,6 @@
   "lola.network": "jaringan: {error}",
   "lola.invalid": "respons tidak valid: {error}",
   "lola.missing": "respons lolalytics tanpa '{field}'",
-  "lcu.notFound": "Klien League tidak ditemukan (buka kliennya)",
   "lcu.forbidden": "penulisan tidak diizinkan pada {method} {path}",
   "lcu.http": "HTTP {status} pada {method} {path}: {message}",
   "lcu.network": "kesalahan jaringan dengan klien: {error}",

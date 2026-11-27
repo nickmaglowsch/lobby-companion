@@ -74,7 +74,6 @@
   "lola.network": "网络: {error}",
   "lola.invalid": "无效的响应: {error}",
   "lola.missing": "lolalytics 响应中缺少 '{field}'",
-  "lcu.notFound": "找不到英雄联盟客户端 (请打开客户端)",
   "lcu.forbidden": "不允许写入 {method} {path}",
   "lcu.http": "{method} {path} 返回 HTTP {status}: {message}",
   "lcu.network": "与客户端通信出错: {error}",

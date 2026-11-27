@@ -77,7 +77,6 @@
   "lola.network": "sieć: {error}",
   "lola.invalid": "nieprawidłowa odpowiedź: {error}",
   "lola.missing": "odpowiedź lolalytics bez '{field}'",
-  "lcu.notFound": "nie znaleziono klienta League (otwórz klienta)",
   "lcu.forbidden": "zapis niedozwolony: {method} {path}",
   "lcu.http": "HTTP {status} przy {method} {path}: {message}",
   "lcu.network": "błąd sieci z klientem: {error}",

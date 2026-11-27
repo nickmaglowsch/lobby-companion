@@ -125,10 +125,7 @@ impl Settings {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        std::fs::write(path, serde_json::to_vec_pretty(self).unwrap_or_default())
+        crate::assets::write_atomic(path, &serde_json::to_vec_pretty(self).unwrap_or_default())
     }
 
     /// Tamanho da janela para o layout: (largura, altura, largura mínima, altura mínima).

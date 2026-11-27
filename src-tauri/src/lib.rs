@@ -630,7 +630,7 @@ async fn lola_cli(slug: String, lane: Option<String>, vs: Option<String>) {
     };
     let client = lola::Lolalytics::new(std::env::temp_dir().join("lobby-companion-cli"));
     match client
-        .build_full(&q)
+        .get(&q)
         .await
         .and_then(|f| lola::model::parse_build_full(&f.data))
     {

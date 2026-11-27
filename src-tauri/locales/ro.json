@@ -76,7 +76,6 @@
   "lola.network": "rețea: {error}",
   "lola.invalid": "răspuns invalid: {error}",
   "lola.missing": "răspuns lolalytics fără '{field}'",
-  "lcu.notFound": "Clientul League nu a fost găsit (deschide clientul)",
   "lcu.forbidden": "scriere nepermisă pe {method} {path}",
   "lcu.http": "HTTP {status} pe {method} {path}: {message}",
   "lcu.network": "eroare de rețea cu clientul: {error}",

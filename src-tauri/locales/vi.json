@@ -74,7 +74,6 @@
   "lola.network": "mạng: {error}",
   "lola.invalid": "phản hồi không hợp lệ: {error}",
   "lola.missing": "phản hồi của lolalytics thiếu '{field}'",
-  "lcu.notFound": "không tìm thấy client Liên Minh Huyền Thoại (hãy mở client)",
   "lcu.forbidden": "không được phép ghi vào {method} {path}",
   "lcu.http": "HTTP {status} tại {method} {path}: {message}",
   "lcu.network": "lỗi mạng với client: {error}",

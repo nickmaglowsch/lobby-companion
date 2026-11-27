@@ -79,7 +79,6 @@
   "lola.network": "الشبكة: {error}",
   "lola.invalid": "استجابة غير صالحة: {error}",
   "lola.missing": "استجابة lolalytics بدون '{field}'",
-  "lcu.notFound": "لم يُعثر على عميل League (افتح العميل)",
   "lcu.forbidden": "الكتابة غير مسموح بها على {method} {path}",
   "lcu.http": "HTTP {status} على {method} {path}: {message}",
   "lcu.network": "خطأ في الشبكة مع العميل: {error}",

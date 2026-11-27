@@ -75,7 +75,6 @@
   "lola.network": "δίκτυο: {error}",
   "lola.invalid": "μη έγκυρη απάντηση: {error}",
   "lola.missing": "απάντηση του lolalytics χωρίς '{field}'",
-  "lcu.notFound": "Το πρόγραμμα του League δεν βρέθηκε (άνοιξε το πρόγραμμα)",
   "lcu.forbidden": "δεν επιτρέπεται εγγραφή σε {method} {path}",
   "lcu.http": "HTTP {status} σε {method} {path}: {message}",
   "lcu.network": "σφάλμα δικτύου με το πρόγραμμα: {error}",

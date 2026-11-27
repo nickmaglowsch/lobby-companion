@@ -75,7 +75,6 @@
   "lola.network": "network: {error}",
   "lola.invalid": "invalid response: {error}",
   "lola.missing": "lolalytics response without '{field}'",
-  "lcu.notFound": "League client not found (open the client)",
   "lcu.forbidden": "write not allowed on {method} {path}",
   "lcu.http": "HTTP {status} on {method} {path}: {message}",
   "lcu.network": "network error with the client: {error}",

@@ -77,7 +77,6 @@
   "lola.network": "сеть: {error}",
   "lola.invalid": "неверный ответ: {error}",
   "lola.missing": "ответ lolalytics без '{field}'",
-  "lcu.notFound": "Клиент League не найден (открой клиент)",
   "lcu.forbidden": "запись запрещена: {method} {path}",
   "lcu.http": "HTTP {status} на {method} {path}: {message}",
   "lcu.network": "ошибка сети с клиентом: {error}",
