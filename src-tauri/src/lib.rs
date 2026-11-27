@@ -6,9 +6,11 @@ pub mod assets;
 pub mod bans;
 pub mod champselect;
 pub mod composition;
+pub mod hud;
 pub mod i18n;
 pub mod import;
 pub mod lcu;
+pub mod live;
 pub mod lola;
 pub mod metric;
 pub mod own_runes;
@@ -473,7 +475,51 @@ pub fn cli(args: &[String]) -> bool {
             tauri::async_runtime::block_on(mastery_cli());
             true
         }
+        Some("--hud") => {
+            hud_cli();
+            true
+        }
+        Some("--live") => {
+            tauri::async_runtime::block_on(live::diag());
+            true
+        }
         _ => false,
+    }
+}
+
+/// Configuração do HUD do jogo e onde o overlay desenharia (só leitura de arquivo).
+fn hud_cli() {
+    let Some(path) = lcu::game_cfg_path() else {
+        println!("game.cfg: não encontrado (instalação do League não achada)");
+        return;
+    };
+    println!("game.cfg: {}", path.display());
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        println!("game.cfg: não deu para ler");
+        return;
+    };
+    // Só as seções que importam para o overlay (o arquivo não tem nada de outros jogadores).
+    let mut section = String::new();
+    for line in text.lines() {
+        let l = line.trim();
+        if let Some(s) = l.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
+            section = s.to_ascii_lowercase();
+        }
+        if section == "hud" || section == "general" {
+            println!("  {l}");
+        }
+    }
+    let cfg = hud::parse_game_cfg(&text);
+    println!("lido: {cfg:?}");
+    let (w, h) = (
+        f64::from(cfg.width.unwrap_or(1920)),
+        f64::from(cfg.height.unwrap_or(1080)),
+    );
+    println!("escala ({w}×{h}): {:.4}", hud::ui_scale(w, h));
+    println!("minimapa: {:?}", hud::minimap(w, h, &cfg.hud));
+    println!("placar: {:?}", hud::scoreboard(w, h));
+    for row in 0..5 {
+        println!("linha {row}: {:?}", hud::scoreboard_row_center(row, w, h));
     }
 }
 
