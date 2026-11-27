@@ -14,7 +14,6 @@
   "err.clientData": "クライアントのデータ: {error}",
   "err.unknownChampion": "不明なチャンピオン (クライアントが閉じている?)",
   "err.clientClosed": "LoLクライアントが閉じています",
-  "err.unknownLane": "不明なレーン: {lane}",
   "warn.noVsGames": "lolalyticsに{champion} vs {vs}の試合がありません。通常ビルドを表示します",
   "warn.noVsGamesLane": "lolalyticsに{champion} vs {vs} ({lane}) の試合がありません。通常ビルドを表示します",
   "bans.declareMine": "自分のチャンピオンを宣言またはピックすると、その対策BANが表示されます。",

@@ -14,7 +14,6 @@
   "err.clientData": "δεδομένα προγράμματος: {error}",
   "err.unknownChampion": "άγνωστος πρωταθλητής (κλειστό πρόγραμμα;)",
   "err.clientClosed": "Το πρόγραμμα του League είναι κλειστό",
-  "err.unknownLane": "άγνωστη λωρίδα: {lane}",
   "warn.noVsGames": "το lolalytics δεν έχει παιχνίδια {champion} κατά {vs}· εμφανίζεται το γενικό build",
   "warn.noVsGamesLane": "το lolalytics δεν έχει παιχνίδια {champion} κατά {vs} ({lane})· εμφανίζεται το γενικό build",
   "bans.declareMine": "Δήλωσε ή διάλεξε τον πρωταθλητή σου για να δεις ban εναντίον του.",

@@ -14,7 +14,6 @@
   "err.clientData": "data klienta: {error}",
   "err.unknownChampion": "neznámý šampion (zavřený klient?)",
   "err.clientClosed": "klient League je zavřený",
-  "err.unknownLane": "neznámá linie: {lane}",
   "warn.noVsGames": "lolalytics nemá hry {champion} proti {vs}; zobrazuji obecný build",
   "warn.noVsGamesLane": "lolalytics nemá hry {champion} proti {vs} ({lane}); zobrazuji obecný build",
   "bans.declareMine": "Označ nebo vyber svého šampiona a uvidíš bany proti němu.",

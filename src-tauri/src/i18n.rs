@@ -7,8 +7,9 @@
 //! `src/lib/i18n/locales/`); variantes iguais dividem o arquivo (`file_for`).
 
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::sync::{OnceLock, RwLock};
+use std::fmt::{Display, Write as _};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Locales do cliente do League (ddragon `languages.json`, conferido em 2026-11-26).
 pub const LOCALES: &[&str] = &[
@@ -62,14 +63,12 @@ pub fn file_for(locale: &str) -> &'static str {
 
 type Dict = HashMap<String, String>;
 
-fn dicts() -> &'static HashMap<&'static str, Dict> {
-    static D: OnceLock<HashMap<&'static str, Dict>> = OnceLock::new();
-    D.get_or_init(|| {
-        FILES
-            .iter()
-            .map(|(name, src)| (*name, serde_json::from_str(src).unwrap_or_default()))
-            .collect()
-    })
+/// Textos de um arquivo, lidos na primeira vez que ele é usado (em geral só o do idioma em uso e
+/// o inglês, em vez dos 22).
+fn dict(file: &str) -> Option<&'static Dict> {
+    static D: [OnceLock<Dict>; FILES.len()] = [const { OnceLock::new() }; FILES.len()];
+    let i = FILES.iter().position(|(name, _)| *name == file)?;
+    Some(D[i].get_or_init(|| serde_json::from_str(FILES[i].1).unwrap_or_default()))
 }
 
 /// Um locale do cliente exatamente como ele manda ("pt_BR"; aceita "pt-BR").
@@ -128,14 +127,14 @@ pub fn system_locale() -> Option<String> {
     sys_locale::get_locale()
 }
 
-static CURRENT: RwLock<&'static str> = RwLock::new(FALLBACK);
+/// Posição em `LOCALES` do idioma em uso (`LOCALES[0]` = `FALLBACK`). Uma troca atômica: quem
+/// lê pega o idioma antigo ou o novo, nunca um meio-termo, e sem lock em cada texto.
+static CURRENT: AtomicUsize = AtomicUsize::new(0);
 
-/// Troca o idioma das mensagens; devolve `true` se mudou.
-pub fn set_current(locale: &'static str) -> bool {
-    let mut cur = CURRENT.write().unwrap_or_else(|e| e.into_inner());
-    let changed = *cur != locale;
-    *cur = locale;
-    changed
+/// Troca o idioma das mensagens (fora de `LOCALES` vira `FALLBACK`); devolve `true` se mudou.
+pub fn set_current(locale: &str) -> bool {
+    let i = LOCALES.iter().position(|l| *l == locale).unwrap_or(0);
+    CURRENT.swap(i, Ordering::Relaxed) != i
 }
 
 /// Idioma em uso pelo app.
@@ -147,7 +146,7 @@ pub struct Lang {
 impl Lang {
     pub fn current() -> Self {
         Self {
-            locale: *CURRENT.read().unwrap_or_else(|e| e.into_inner()),
+            locale: LOCALES[CURRENT.load(Ordering::Relaxed)],
         }
     }
 
@@ -158,16 +157,20 @@ impl Lang {
     }
 
     fn lookup(&self, key: &str) -> Option<&'static str> {
-        let d = dicts();
-        d.get(file_for(self.locale))
+        dict(file_for(self.locale))
             .and_then(|m| m.get(key))
-            .or_else(|| d.get("en").and_then(|m| m.get(key)))
+            .or_else(|| dict("en").and_then(|m| m.get(key)))
             .map(String::as_str)
     }
 
-    /// Texto da chave (sem parâmetros). Chave que falta em todos os arquivos: a própria chave.
+    /// Chave que falta em todos os arquivos: a própria chave.
+    fn text<'k>(&self, key: &'k str) -> &'k str {
+        self.lookup(key).unwrap_or(key)
+    }
+
+    /// Texto da chave (sem parâmetros).
     pub fn t(&self, key: &str) -> String {
-        self.lookup(key).unwrap_or(key).to_string()
+        self.text(key).to_string()
     }
 
     /// Texto com `{nome}` trocado por cada parâmetro. Com `count`, usa a forma de plural do idioma
@@ -182,19 +185,36 @@ impl Lang {
                 self.lookup(&format!("{key}_{}", plural(self.locale, n)))
                     .or_else(|| self.lookup(&format!("{key}_other")))
             })
-            .or_else(|| self.lookup(key))
-            .unwrap_or(key);
-        let mut out = template.to_string();
-        for (name, value) in args {
-            out = out.replace(&format!("{{{name}}}"), &value.to_string());
+            .unwrap_or_else(|| self.text(key));
+        // Uma passada só: o valor de um parâmetro nunca é lido como `{outro}`.
+        let mut out = String::with_capacity(template.len() + 16);
+        let mut rest = template;
+        while let Some(i) = rest.find('{') {
+            out.push_str(&rest[..i]);
+            let tail = &rest[i + 1..];
+            let arg = tail.find('}').and_then(|j| {
+                let name = &tail[..j];
+                args.iter().find(|(k, _)| *k == name).map(|(_, v)| (j, v))
+            });
+            match arg {
+                Some((j, v)) => {
+                    let _ = write!(out, "{v}");
+                    rest = &tail[j + 1..];
+                }
+                None => {
+                    out.push('{');
+                    rest = tail;
+                }
+            }
         }
+        out.push_str(rest);
         out
     }
 
     /// `53.456` → "53,5%" (pt), "53.5%" (en), "%53,5" (tr): uma casa, separador e formato do idioma.
     pub fn pct(&self, x: f64) -> String {
-        let n = format!("{x:.1}").replace('.', &self.t("fmt.decimal"));
-        self.t("fmt.percent").replace("{n}", &n)
+        let n = format!("{x:.1}").replace('.', self.text("fmt.decimal"));
+        self.text("fmt.percent").replace("{n}", &n)
     }
 }
 
@@ -323,6 +343,18 @@ mod tests {
             pt.tf("items.saved", &[("count", &9)]),
             "conjunto gravado (9 blocos)"
         );
+        // O valor de um parâmetro não vira outro parâmetro; `{x}` sem valor fica como está.
+        let en = Lang::of("en_US");
+        assert_eq!(
+            en.tf("lola.stale", &[("error", &"{hours}"), ("hours", &3)]),
+            "lolalytics unavailable ({hours}); using data from 3 h ago"
+        );
+        assert_eq!(en.tf("x {a} {b", &[("a", &1)]), "x 1 {b");
+    }
+
+    #[test]
+    fn current_starts_with_the_fallback() {
+        assert_eq!(LOCALES[0], FALLBACK);
     }
 
     fn placeholders(s: &str) -> BTreeSet<String> {

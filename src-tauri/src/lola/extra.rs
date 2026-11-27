@@ -14,6 +14,7 @@
 //!   100); `d1 = wr − (wr(X) + wr(id))/2`; `d2 = wr − (wr(X) + wr(id) − avgWr)` = sinergia além da
 //!   força geral dos dois.
 
+use super::model::{status_error, u};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -27,20 +28,8 @@ fn f(v: Option<&Value>) -> f64 {
     .unwrap_or(0.0)
 }
 
-fn u(v: Option<&Value>) -> u64 {
-    v.and_then(|x| x.as_u64().or_else(|| x.as_f64().map(|f| f.max(0.0) as u64)))
-        .unwrap_or(0)
-}
-
 fn s(v: Option<&Value>) -> String {
     v.and_then(Value::as_str).unwrap_or("").to_string()
-}
-
-fn status_error(v: &Value) -> Result<(), String> {
-    match v.get("status").and_then(Value::as_i64) {
-        Some(code) => Err(crate::t!("lola.noData", code = code)),
-        None => Ok(()),
-    }
 }
 
 /// Um campeão na tier list de uma lane.
@@ -114,7 +103,7 @@ pub fn parse_list(v: &Value) -> Result<TierList, String> {
 }
 
 /// Um par de campeões (confronto ou dupla) com o WR do campeão consultado.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PairStat {
     pub id: i64,
     /// WR do campeão consultado nesse par.
@@ -204,12 +193,17 @@ pub fn parse_build_team(v: &Value) -> Result<Team, String> {
         .and_then(Value::as_object)
         .ok_or_else(|| crate::t!("lola.missing", field = "team"))?;
     // Posição das colunas pelo cabeçalho (padrão: id, wr, d1, d2, pr, n).
-    let header: Vec<String> = v
+    let header = v
         .get("team_h")
         .and_then(Value::as_array)
-        .map(|h| h.iter().map(|x| s(Some(x))).collect())
+        .map(Vec::as_slice)
         .unwrap_or_default();
-    let col = |name: &str, default: usize| header.iter().position(|h| h == name).unwrap_or(default);
+    let col = |name: &str, default: usize| {
+        header
+            .iter()
+            .position(|h| h.as_str() == Some(name))
+            .unwrap_or(default)
+    };
     let (ci, cw, c1, c2, cn) = (
         col("id", 0),
         col("wr", 1),

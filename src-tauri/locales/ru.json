@@ -14,7 +14,6 @@
   "err.clientData": "данные клиента: {error}",
   "err.unknownChampion": "неизвестный чемпион (клиент закрыт?)",
   "err.clientClosed": "Клиент League закрыт",
-  "err.unknownLane": "неизвестная линия: {lane}",
   "warn.noVsGames": "у lolalytics нет игр {champion} против {vs}; показана общая сборка",
   "warn.noVsGamesLane": "у lolalytics нет игр {champion} против {vs} ({lane}); показана общая сборка",
   "bans.declareMine": "Отметь или выбери своего чемпиона, чтобы увидеть баны против него.",

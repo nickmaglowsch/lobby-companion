@@ -14,7 +14,6 @@
   "err.clientData": "kliensadatok: {error}",
   "err.unknownChampion": "ismeretlen hős (a kliens be van zárva?)",
   "err.clientClosed": "a League kliens be van zárva",
-  "err.unknownLane": "ismeretlen sáv: {lane}",
   "warn.noVsGames": "a lolalyticsnek nincs meccse erre: {champion} vs {vs}; az általános build látható",
   "warn.noVsGamesLane": "a lolalyticsnek nincs meccse erre: {champion} vs {vs} ({lane}); az általános build látható",
   "bans.declareMine": "Jelöld vagy válaszd ki a hősödet, hogy lásd az ellene javasolt kitiltásokat.",

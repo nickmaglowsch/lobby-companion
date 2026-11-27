@@ -14,7 +14,6 @@
   "err.clientData": "istemci verisi: {error}",
   "err.unknownChampion": "bilinmeyen şampiyon (istemci kapalı mı?)",
   "err.clientClosed": "League istemcisi kapalı",
-  "err.unknownLane": "bilinmeyen koridor: {lane}",
   "warn.noVsGames": "lolalytics'te {champion} ile {vs} karşılaşmasından maç yok; genel dizilim gösteriliyor",
   "warn.noVsGamesLane": "lolalytics'te {champion} ile {vs} ({lane}) karşılaşmasından maç yok; genel dizilim gösteriliyor",
   "bans.declareMine": "Ona karşı yasakları görmek için şampiyonunu işaretle ya da seç.",

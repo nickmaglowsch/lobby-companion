@@ -14,7 +14,6 @@
   "err.clientData": "datele clientului: {error}",
   "err.unknownChampion": "campion necunoscut (clientul e închis?)",
   "err.clientClosed": "Clientul League e închis",
-  "err.unknownLane": "culoar necunoscut: {lane}",
   "warn.noVsGames": "lolalytics nu are meciuri cu {champion} contra {vs}; se arată build-ul general",
   "warn.noVsGamesLane": "lolalytics nu are meciuri cu {champion} contra {vs} ({lane}); se arată build-ul general",
   "bans.declareMine": "Declară sau alege campionul tău ca să vezi banurile contra lui.",

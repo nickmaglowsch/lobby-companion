@@ -20,6 +20,7 @@
 
 use serde::Serialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -66,7 +67,7 @@ pub struct Combo {
 }
 
 /// Seu win rate contra um campeão do outro time (lista `enemy` do build geral).
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Matchup {
     /// Id do campeão inimigo.
     pub id: i64,
@@ -243,34 +244,22 @@ fn weighted(wr: &[f64], n: &[u64]) -> Option<f64> {
 /// Usa a linha `all` (todos os elos): o gráfico não tem o elo filtrado (`emerald_plus`).
 fn trend(v: Option<&Value>) -> Option<Trend> {
     let g = v?;
-    let floats = |k: &str| -> Vec<f64> {
-        g.pointer(&format!("/{k}/all"))
+    let all = |k: &str| {
+        g.get(k)
+            .and_then(|x| x.get("all"))
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(|x| x.as_f64().unwrap_or(0.0))
-            .collect()
     };
-    let dates: Vec<String> = g
-        .get("dates")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|d| d.as_str().unwrap_or("").to_string())
-        .collect();
-    let wr = floats("wr");
-    let n: Vec<u64> = g
-        .pointer("/n/all")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|x| u(Some(x)))
-        .collect();
+    let floats = |k: &str| -> Vec<f64> { all(k).map(|x| x.as_f64().unwrap_or(0.0)).collect() };
+    let mut wr = floats("wr");
+    let mut n: Vec<u64> = all("n").map(|x| u(Some(x))).collect();
     let len = wr.len().min(n.len());
     if len < 2 {
         return None;
     }
-    let (wr, n) = (wr[..len].to_vec(), n[..len].to_vec());
+    wr.truncate(len);
+    n.truncate(len);
     let mut wrs = floats("wrs");
     if wrs.len() != len {
         wrs = wr.clone();
@@ -279,7 +268,14 @@ fn trend(v: Option<&Value>) -> Option<Trend> {
     Some(Trend {
         wr_last7: weighted(&wr[recent..], &n[recent..])?,
         wr_period: weighted(&wr, &n)?,
-        dates: dates.into_iter().take(len).collect(),
+        dates: g
+            .get("dates")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .take(len)
+            .map(|d| d.as_str().unwrap_or("").to_string())
+            .collect(),
         wr,
         wrs,
         n,
@@ -348,9 +344,18 @@ fn f(v: Option<&Value>) -> f64 {
     v.and_then(Value::as_f64).unwrap_or(0.0)
 }
 
-fn u(v: Option<&Value>) -> u64 {
+/// Contagem (às vezes vem como número com casas).
+pub(super) fn u(v: Option<&Value>) -> u64 {
     v.and_then(|x| x.as_u64().or_else(|| x.as_f64().map(|f| f.max(0.0) as u64)))
         .unwrap_or(0)
+}
+
+/// Erros do lolalytics vêm como `{"status": 4042}` (campeão inválido) / `4044` (lane inválida).
+pub(super) fn status_error(v: &Value) -> Result<(), String> {
+    match v.get("status").and_then(Value::as_i64) {
+        Some(code) => Err(crate::t!("lola.noData", code = code)),
+        None => Ok(()),
+    }
 }
 
 fn ids(v: Option<&Value>) -> Vec<i64> {
@@ -387,16 +392,16 @@ fn combo_list(v: Option<&Value>) -> Vec<Combo> {
         .flatten()
         .filter_map(|row| {
             let r = row.as_array()?;
-            let key = match r.first()? {
-                Value::String(s) => s.clone(),
-                other => other.to_string(),
+            let key: Cow<str> = match r.first()? {
+                Value::String(s) => Cow::Borrowed(s),
+                other => Cow::Owned(other.to_string()),
             };
             let ids = if key.contains('_') {
                 key.split('_').map(String::from).collect()
             } else if key.chars().all(|c| c.is_ascii_alphabetic()) {
                 key.chars().map(String::from).collect()
             } else {
-                vec![key]
+                vec![key.into_owned()]
             };
             Some(Combo {
                 ids,
@@ -423,10 +428,10 @@ fn rune_set(v: Option<&Value>) -> Option<RuneSet> {
 }
 
 /// `312334313141122` → `"EQWEEREQEQRQQWW"`.
-pub fn skill_order_letters(id: &Value) -> Option<String> {
-    let digits = match id {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
+fn skill_order_letters(id: &Value) -> Option<String> {
+    let digits: Cow<str> = match id {
+        Value::String(s) => Cow::Borrowed(s),
+        Value::Number(n) => Cow::Owned(n.to_string()),
         _ => return None,
     };
     let letters: Option<String> = digits
@@ -442,11 +447,9 @@ pub fn skill_order_letters(id: &Value) -> Option<String> {
     letters.filter(|s| !s.is_empty())
 }
 
-/// Erros do lolalytics vêm como `{"status": 4042}` (campeão inválido) / `4044` (lane inválida).
+/// `ep=build-full` (geral ou de confronto) → [`Build`].
 pub fn parse_build_full(v: &Value) -> Result<Build, String> {
-    if let Some(code) = v.get("status").and_then(Value::as_i64) {
-        return Err(crate::t!("lola.noData", code = code));
-    }
+    status_error(v)?;
     let header = v
         .get("header")
         .ok_or_else(|| crate::t!("lola.missing", field = "header"))?;
@@ -491,8 +494,9 @@ pub fn parse_build_full(v: &Value) -> Result<Build, String> {
             .and_then(skill_order_letters),
         start_sets: combo_list(v.get("startSet")),
         boots: item_list(v.get("boots")),
-        slots: (1..=5)
-            .map(|i| item_list(v.get(format!("item{i}").as_str())))
+        slots: ["item1", "item2", "item3", "item4", "item5"]
+            .into_iter()
+            .map(|k| item_list(v.get(k)))
             .collect(),
         lanes,
         vs: header

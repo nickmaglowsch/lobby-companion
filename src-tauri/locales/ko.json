@@ -14,7 +14,6 @@
   "err.clientData": "클라이언트 데이터: {error}",
   "err.unknownChampion": "알 수 없는 챔피언 (클라이언트가 꺼져 있나요?)",
   "err.clientClosed": "리그 오브 레전드 클라이언트가 꺼져 있음",
-  "err.unknownLane": "알 수 없는 라인: {lane}",
   "warn.noVsGames": "lolalytics에 {champion} 대 {vs} 게임이 없어 일반 빌드를 표시합니다",
   "warn.noVsGamesLane": "lolalytics에 {champion} 대 {vs} ({lane}) 게임이 없어 일반 빌드를 표시합니다",
   "bans.declareMine": "내 챔피언을 선언하거나 픽하면 그 챔피언 상대 밴이 표시됩니다.",
