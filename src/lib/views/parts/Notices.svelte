@@ -10,6 +10,7 @@
       app.banError ? { kind: "bad", text: app.banError } : null,
       app.snap?.canBan ? { kind: "turn", text: t("notices.banTurn") } : null,
       app.snap?.warning ? { kind: "warn", text: app.snap.warning } : null,
+      app.snap?.borderlessSwitched ? { kind: "warn", text: t("notices.borderless") } : null,
       app.snap?.loading ? { kind: "info", text: t("notices.loading") } : null,
     ].filter((x): x is { kind: string; text: string } => !!x),
   );

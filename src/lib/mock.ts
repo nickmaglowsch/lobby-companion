@@ -67,6 +67,7 @@ export const mockSnapshot: Snapshot = {
     spells: { ok: false, msg: "fora da seleção de campeões" },
   },
   locale: "pt_BR",
+  borderlessSwitched: false,
   vsChampionId: 0,
   vsLane: null,
   enemyPicks: [234, 122, 876, 62],

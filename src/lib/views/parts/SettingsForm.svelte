@@ -66,6 +66,7 @@
     <span class="muted small">{t("settings.overlay")}</span>
     <label><input type="checkbox" bind:checked={settings.overlay.enabled} onchange={() => app.save()} /> {t("settings.overlayEnabled")}</label>
     {#if settings.overlay.enabled}
+      <span class="sub muted small">{t("settings.overlayBorderless")}</span>
       <label class="sub"><input type="checkbox" bind:checked={settings.overlay.inhibitors} onchange={() => app.save()} /> {t("settings.overlayInhibitors")}</label>
       <label class="sub"><input type="checkbox" bind:checked={settings.overlay.nextItem} onchange={() => app.save()} /> {t("settings.overlayNextItem")}</label>
       <label class="sub"><input type="checkbox" bind:checked={settings.overlay.csPerMin} onchange={() => app.save()} /> {t("settings.overlayCs")}</label>

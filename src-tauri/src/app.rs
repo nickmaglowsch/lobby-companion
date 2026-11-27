@@ -129,6 +129,8 @@ pub struct Snapshot {
     pub synergy: Option<SynergyAdvice>,
     /// Idioma da janela (locale do cliente, ex. "pt_BR"): configuração → cliente → sistema → inglês.
     pub locale: String,
+    /// Nesta seleção o app trocou a tela cheia do jogo por "Sem bordas" (overlay ligado).
+    pub borderless_switched: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -405,6 +407,8 @@ async fn disconnect(app: &AppHandle, shared: &Shared) {
 }
 
 async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
+    // Diagnóstico no terminal (`npm run tauri dev`).
+    eprintln!("[fase] {phase}");
     let close_in_game = shared.settings.lock().await.close_in_game;
     match phase {
         "ChampSelect" => {
@@ -415,9 +419,13 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
             *shared.draft.lock().await = None;
             *shared.my_lane.lock().await = None;
             *shared.mastery.lock().await = None;
+            // Overlay: em tela cheia exclusiva ele não aparece. O jogo ainda está fechado aqui.
+            let overlay_on = shared.settings.lock().await.overlay.enabled;
+            let switched = overlay_on && crate::overlay::ensure_borderless();
             update(app, shared, |s| {
                 s.phase = phase.into();
                 s.in_champ_select = true;
+                s.borderless_switched = switched;
                 s.locked = false;
                 s.import = None;
                 s.error = None;

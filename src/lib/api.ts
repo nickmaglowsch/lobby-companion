@@ -139,6 +139,8 @@ export interface Snapshot {
   synergy: SynergyAdvice | null;
   /** Idioma da janela (locale do cliente, ex. "pt_BR"): configuração, senão o do cliente, senão o do sistema. */
   locale: string;
+  /** Nesta seleção o app trocou a tela cheia do jogo por "Sem bordas" (overlay ligado). */
+  borderlessSwitched: boolean;
 }
 
 export type DamageType = "physical" | "magic" | "mixed";

@@ -378,12 +378,40 @@ pub fn graph_rect(w: f64, h: f64) -> Rect {
     }
 }
 
-/// Você na lista de jogadores: pelo campeão (o app não lê nomes).
+/// Você na lista de jogadores: pelo campeão travado na seleção (o app não lê nomes). Sem ele (app
+/// aberto no meio da partida), pelos ids das suas habilidades: "ChogathQ" começa com o alias do
+/// campeão. Vale o alias mais comprido ("ViegoQ" também começa com "Vi"); empate = ninguém.
 fn find_me<'a>(game: &'a Game, alias: Option<&str>) -> Option<&'a Player> {
-    let alias = alias?;
-    game.players
+    if let Some(alias) = alias
+        && let Some(p) = game
+            .players
+            .iter()
+            .find(|p| p.alias.eq_ignore_ascii_case(alias))
+    {
+        return Some(p);
+    }
+    let ids: Vec<String> = game
+        .ability_ids
         .iter()
-        .find(|p| p.alias.eq_ignore_ascii_case(alias))
+        .map(|i| i.to_ascii_lowercase())
+        .collect();
+    let mut best: Option<&Player> = None;
+    let mut tie = false;
+    for p in &game.players {
+        let a = p.alias.to_ascii_lowercase();
+        if a.is_empty() || !ids.iter().any(|i| i.starts_with(&a)) {
+            continue;
+        }
+        match best {
+            Some(b) if b.alias.len() > p.alias.len() => {}
+            Some(b) if b.alias.len() == p.alias.len() => tie = true,
+            _ => {
+                best = Some(p);
+                tie = false;
+            }
+        }
+    }
+    if tie { None } else { best }
 }
 
 pub struct Inputs<'a> {
@@ -551,7 +579,8 @@ mod win {
                 return None;
             }
             let (w, h) = ((r.right - r.left).max(0), (r.bottom - r.top).max(0));
-            if w == 0 || h == 0 {
+            // Em tela cheia, fora do jogo (Alt+Tab) a janela fica com 1×1: conta como escondida.
+            if w < 100 || h < 100 {
                 return None;
             }
             Some(GameRect {
@@ -562,6 +591,13 @@ mod win {
                 foreground: GetForegroundWindow() == hwnd,
             })
         }
+    }
+
+    /// Jogo aberto (mesmo minimizado).
+    pub fn game_running() -> bool {
+        let title = wide("League of Legends (TM) Client");
+        // SAFETY: só procura a janela pelo título.
+        unsafe { !FindWindowW(std::ptr::null(), title.as_ptr()).is_null() }
     }
 
     /// Tecla segurada agora (só leitura do estado do teclado).
@@ -582,6 +618,9 @@ mod win {
     pub fn game_rect() -> Option<GameRect> {
         None
     }
+    pub fn game_running() -> bool {
+        false
+    }
     pub fn key_down(_vk: u32) -> bool {
         false
     }
@@ -597,7 +636,9 @@ fn place_window(app: &AppHandle, x: i32, y: i32, w: u32, h: u32, interactive: bo
                 let built = WebviewWindowBuilder::new(
                     &handle,
                     LABEL,
-                    WebviewUrl::App("index.html#overlay".into()),
+                    // Só o hash: `index.html#overlay` virava a rota `/index.html`, que o
+                    // SvelteKit não conhece (página de erro 404 no lugar do overlay).
+                    WebviewUrl::App("#overlay".into()),
                 )
                 .title("Lobby Companion Overlay")
                 // `transparent` liga o foco: o `focused(false)` tem que vir depois.
@@ -612,7 +653,10 @@ fn place_window(app: &AppHandle, x: i32, y: i32, w: u32, h: u32, interactive: bo
                 .build();
                 match built {
                     Ok(win) => win,
-                    Err(_) => return,
+                    Err(e) => {
+                        eprintln!("[overlay] erro ao criar a janela: {e}");
+                        return;
+                    }
                 }
             }
         };
@@ -653,11 +697,64 @@ fn primary_rect(app: &AppHandle) -> GameRect {
     }
 }
 
-fn read_hud() -> HudConfig {
+fn read_game_cfg() -> hud::GameCfg {
     crate::lcu::game_cfg_path()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .map(|t| hud::parse_game_cfg(&t).hud)
+        .map(|t| hud::parse_game_cfg(&t))
         .unwrap_or_default()
+}
+
+fn read_hud() -> HudConfig {
+    read_game_cfg().hud
+}
+
+/// Com o overlay ligado, troca a tela cheia do jogo por "Sem bordas" no `game.cfg` (pedido do
+/// usuário em 2026-11-27: em tela cheia exclusiva janela nenhuma aparece por cima, e desenhar
+/// dentro do jogo exigiria injeção). Só com o jogo fechado: ele regrava o arquivo ao sair. O
+/// `[General]` não vai para o `PersistedSettings.json` (sincronizado com o servidor), então basta
+/// o `game.cfg`. `true` = trocou (a janela avisa o jogador).
+pub fn ensure_borderless() -> bool {
+    if win::game_running() {
+        return false;
+    }
+    let Some(path) = crate::lcu::game_cfg_path() else {
+        return false;
+    };
+    let Some(new) = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| hud::set_borderless(&t))
+    else {
+        return false;
+    };
+    // Grava ao lado e troca: o arquivo nunca fica pela metade.
+    let tmp = path.with_extension("cfg.lc-tmp");
+    let ok = std::fs::write(&tmp, new).is_ok() && std::fs::rename(&tmp, &path).is_ok();
+    if ok {
+        eprintln!("[overlay] game.cfg: tela cheia trocada por Sem bordas");
+    } else {
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!("[overlay] game.cfg: não deu para gravar a troca para Sem bordas");
+    }
+    ok
+}
+
+/// Diagnóstico no terminal (`npm run tauri dev`): só quando a mensagem muda, sem nomes.
+fn note(last: &mut String, msg: String) {
+    if *last != msg {
+        eprintln!("[overlay] {msg}");
+        *last = msg;
+    }
+}
+
+/// Aviso do modo de vídeo: em tela cheia exclusiva o Windows não desenha janela nenhuma por cima.
+fn window_mode_note(cfg: &hud::GameCfg) -> String {
+    match cfg.window_mode {
+        Some(0) => "game.cfg: WindowMode=0 (tela cheia). Janela nenhuma aparece por cima do jogo \
+                    nesse modo; o app troca para \"Sem bordas\" na próxima seleção de campeões"
+            .into(),
+        Some(m) => format!("game.cfg: WindowMode={m}"),
+        None => "game.cfg: sem WindowMode (arquivo não achado?)".into(),
+    }
 }
 
 fn in_game(phase: &str) -> bool {
@@ -735,7 +832,11 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
         });
     }
     let mut placed: Option<(GameRect, bool)> = None;
-    let mut hud_cfg = read_hud();
+    let cfg = read_game_cfg();
+    let mut hud_cfg = cfg.hud;
+    let (mut last_state, mut last_mode) = (String::new(), String::new());
+    eprintln!("[overlay] partida: laço começou");
+    note(&mut last_mode, window_mode_note(&cfg));
     let mut ticks: u32 = 0;
     loop {
         let phase = shared.snapshot.lock().await.phase.clone();
@@ -746,6 +847,7 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
         let edit = st.editing();
         st.key.store(settings.scoreboard_key, Ordering::Relaxed);
         if !settings.enabled && !edit {
+            note(&mut last_state, "desligado nas configurações".into());
             if placed.take().is_some() {
                 close_window(&app);
             }
@@ -755,10 +857,43 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
         // O game.cfg muda quando você mexe nas opções do jogo: relê a cada 5 s.
         ticks = ticks.wrapping_add(1);
         if ticks.is_multiple_of(5) {
-            hud_cfg = read_hud();
+            let cfg = read_game_cfg();
+            hud_cfg = cfg.hud;
+            note(&mut last_mode, window_mode_note(&cfg));
         }
         let game = live::fetch(&http).await.as_ref().and_then(live::parse);
         let rect = win::game_rect();
+        match (&game, &rect) {
+            (None, _) => note(
+                &mut last_state,
+                "API da partida (127.0.0.1:2999) sem resposta: tela de carregamento?".into(),
+            ),
+            (_, None) => note(
+                &mut last_state,
+                "janela \"League of Legends (TM) Client\" não achada (ou minimizada)".into(),
+            ),
+            (Some(g), Some(r)) => {
+                let alias = st.me.lock().ok().and_then(|m| m.alias.clone());
+                let me = find_me(g, alias.as_deref()).map_or_else(
+                    || {
+                        format!(
+                            "NÃO achado (campeão da seleção: {}; {} jogadores; habilidades: {:?})",
+                            alias.as_deref().unwrap_or("nenhum"),
+                            g.players.len(),
+                            g.ability_ids
+                        )
+                    },
+                    |p| p.alias.clone(),
+                );
+                note(
+                    &mut last_state,
+                    format!(
+                        "jogo {}x{} em ({}, {}), em primeiro plano: {}; você: {me}",
+                        r.w, r.h, r.x, r.y, r.foreground
+                    ),
+                );
+            }
+        }
         let (Some(game), Some(rect)) = (game, rect) else {
             st.foreground.store(false, Ordering::Relaxed);
             if placed.is_some() {
@@ -780,7 +915,8 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
             foreground: false,
             ..rect
         };
-        if placed != Some((geometry, edit)) {
+        // Sem a janela (a criação falhou ou alguém a fechou): cria de novo.
+        if placed != Some((geometry, edit)) || app.get_webview_window(LABEL).is_none() {
             place_window(&app, rect.x, rect.y, rect.w, rect.h, edit);
             placed = Some((geometry, edit));
         }
@@ -810,6 +946,7 @@ pub async fn run(app: AppHandle, shared: Arc<Shared>) {
         let _ = app.emit_to(LABEL, "overlay", frame);
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
+    eprintln!("[overlay] partida acabou");
     st.running.store(false, Ordering::SeqCst);
     st.edit.store(false, Ordering::Relaxed);
     if let Ok(mut last) = LAST.lock() {
@@ -868,9 +1005,37 @@ mod tests {
             map: 11,
             gold: 1500.0,
             level: 10,
+            ability_ids: Vec::new(),
             players,
             events,
         }
+    }
+
+    #[test]
+    fn finds_me_by_locked_champion_or_by_ability_ids() {
+        let mut g = game(
+            vec![
+                player("Vi", Team::Order, "JUNGLE", &[], 0),
+                player("Viego", Team::Chaos, "JUNGLE", &[], 0),
+                player("Chogath", Team::Order, "TOP", &[], 0),
+            ],
+            vec![],
+            300.0,
+        );
+        // Campeão da seleção vence.
+        assert_eq!(find_me(&g, Some("chogath")).unwrap().alias, "Chogath");
+        // Sem seleção e sem habilidades: ninguém.
+        assert!(find_me(&g, None).is_none());
+        // "ViegoQ" começa com "Vi" e com "Viego": vale o mais comprido.
+        g.ability_ids = vec!["ViegoQ".into(), "ViegoPassive".into()];
+        assert_eq!(find_me(&g, None).unwrap().alias, "Viego");
+        // Campeão da seleção que não está na partida: cai nas habilidades.
+        assert_eq!(find_me(&g, Some("Lux")).unwrap().alias, "Viego");
+        g.ability_ids = vec!["ViQ".into()];
+        assert_eq!(find_me(&g, None).unwrap().alias, "Vi");
+        // Id que não começa com nenhum alias: ninguém.
+        g.ability_ids = vec!["PowerBall".into()];
+        assert!(find_me(&g, None).is_none());
     }
 
     #[test]
