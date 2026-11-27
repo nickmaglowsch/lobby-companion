@@ -18,7 +18,6 @@ use crate::metric::{self, Metric};
 use serde::Serialize;
 use std::collections::HashMap;
 
-const SHRINK: f64 = 300.0;
 const ME_WEIGHT: f64 = 2.0;
 const REASONS: usize = 2;
 
@@ -62,7 +61,7 @@ fn lane_gains<'a>(
         Metric::Wr => rows
             .into_iter()
             .map(|m| {
-                let harm = (build.wr - m.wr) * metric::shrink_factor(m.n, SHRINK);
+                let harm = (build.wr - m.wr) * metric::shrink_factor(m.n);
                 (m, m.pr / 100.0 * harm)
             })
             .collect(),
@@ -76,7 +75,7 @@ fn lane_gains<'a>(
                 .sum();
             let slot: Vec<(i64, f64, f64)> = rows
                 .iter()
-                .map(|m| (m.id, m.pr, metric::shrunk_prob(build.wr, m.wr, m.n, SHRINK)))
+                .map(|m| (m.id, m.pr, metric::shrunk_prob(build.wr, m.wr, m.n)))
                 .collect();
             rows.into_iter()
                 .zip(metric::ban_gains(&slot, listed.max(100.0) - gone, build.wr))
@@ -92,45 +91,85 @@ pub fn suggest(
     top: usize,
     metric: Metric,
 ) -> Vec<BanPick> {
+    rank(
+        inputs.iter().map(|(a, b)| (a, *b)),
+        None,
+        unavailable,
+        top,
+        metric,
+    )
+}
+
+/// Um motivo antes de virar [`Reason`] (só os `REASONS` maiores de cada inimigo viram).
+struct Hit<'a> {
+    contrib: f64,
+    ally_champion_id: i64,
+    lane: &'a str,
+    matchup: &'a Matchup,
+    base_wr: f64,
+}
+
+/// A conta de [`suggest`], só com as lanes do inimigo iguais a `only_lane` (se houver).
+fn rank<'a, I>(
+    inputs: I,
+    only_lane: Option<&str>,
+    unavailable: &[i64],
+    top: usize,
+    metric: Metric,
+) -> Vec<BanPick>
+where
+    I: Iterator<Item = (&'a Ally, &'a Build)> + Clone,
+{
     let weight = |a: &Ally| if a.me { ME_WEIGHT } else { 1.0 };
-    let total: f64 = inputs.iter().map(|(a, _)| weight(a)).sum();
+    let total: f64 = inputs.clone().map(|(a, _)| weight(a)).sum();
     if total <= 0.0 {
         return Vec::new();
     }
-    let mut acc: HashMap<i64, (f64, Vec<(f64, Reason)>)> = HashMap::new();
+    let mut acc: HashMap<i64, (f64, Vec<Hit<'a>>)> = HashMap::new();
     for (ally, build) in inputs {
         let w = weight(ally);
-        for (lane, list) in &build.matchups {
+        let lanes = build
+            .matchups
+            .iter()
+            .filter(|(l, _)| only_lane.is_none_or(|o| o == l));
+        for (lane, list) in lanes {
             for (m, contrib) in lane_gains(build, list, unavailable, metric) {
                 let e = acc.entry(m.id).or_default();
                 e.0 += w * contrib;
                 if contrib > 0.0 {
-                    e.1.push((
+                    e.1.push(Hit {
                         contrib,
-                        Reason {
-                            ally_champion_id: ally.champion_id,
-                            lane: lane.clone(),
-                            wr: m.wr,
-                            base_wr: build.wr,
-                            n: m.n,
-                        },
-                    ));
+                        ally_champion_id: ally.champion_id,
+                        lane,
+                        matchup: m,
+                        base_wr: build.wr,
+                    });
                 }
             }
         }
     }
     let mut out: Vec<BanPick> = acc
         .into_iter()
-        .map(|(id, (score, mut reasons))| {
-            reasons.sort_by(|a, b| b.0.total_cmp(&a.0));
+        .filter(|(_, (score, _))| score / total > 0.0)
+        .map(|(id, (score, mut hits))| {
+            hits.sort_by(|a, b| b.contrib.total_cmp(&a.contrib));
             BanPick {
                 champion_id: id,
                 gain: score / total,
-                reasons: reasons.into_iter().take(REASONS).map(|r| r.1).collect(),
+                reasons: hits
+                    .into_iter()
+                    .take(REASONS)
+                    .map(|h| Reason {
+                        ally_champion_id: h.ally_champion_id,
+                        lane: h.lane.to_string(),
+                        wr: h.matchup.wr,
+                        base_wr: h.base_wr,
+                        n: h.matchup.n,
+                    })
+                    .collect(),
                 tier: None,
             }
         })
-        .filter(|p| p.gain > 0.0)
         .collect();
     out.sort_by(|a, b| {
         b.gain
@@ -154,13 +193,17 @@ pub fn lane_suggest(
     metric: Metric,
 ) -> Vec<BanPick> {
     let lane = if build.lane.is_empty() {
-        me.lane.clone().unwrap_or_default()
+        me.lane.as_deref().unwrap_or_default()
     } else {
-        build.lane.clone()
+        &build.lane
     };
-    let mut mine = build.clone();
-    mine.matchups.retain(|(l, _)| *l == lane);
-    let mut out = suggest(&[(me.clone(), &mine)], unavailable, usize::MAX, metric);
+    let mut out = rank(
+        std::iter::once((me, build)),
+        Some(lane),
+        unavailable,
+        usize::MAX,
+        metric,
+    );
     out.retain(|p| !exclude.contains(&p.champion_id));
     out.truncate(top);
     out
@@ -224,7 +267,7 @@ mod tests {
         let ids: Vec<i64> = picks.iter().map(|p| p.champion_id).collect();
         assert_eq!(ids, vec![234, 122, 28]);
         // selva: 234 (9%), 64 (8%), 28 (0,1%); o resto dos 100% entra com o WR geral (53,4)
-        let p = |wr: f64, n: u64| metric::shrunk_prob(53.4, wr, n, SHRINK);
+        let p = |wr: f64, n: u64| metric::shrunk_prob(53.4, wr, n);
         let now =
             (9.0 * p(47.0, 1100) + 8.0 * p(55.0, 1000) + 0.1 * p(40.0, 12) + 82.9 * 53.4) / 100.0;
         assert!((picks[0].gain - 9.0 * (now - p(47.0, 1100)) / 91.0).abs() < 1e-9);

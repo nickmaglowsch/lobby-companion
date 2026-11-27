@@ -39,9 +39,12 @@ impl Metric {
     }
 }
 
+/// Encolhimento pela amostra, o mesmo em bans, picks e itens (e em `src/lib/metric.ts`).
+pub const SHRINK: f64 = 300.0;
+
 /// Encolhimento pela amostra (o mesmo nas duas métricas): `n/(n + 300)`.
-pub fn shrink_factor(n: u64, shrink: f64) -> f64 {
-    n as f64 / (n as f64 + shrink)
+pub fn shrink_factor(n: u64) -> f64 {
+    n as f64 / (n as f64 + SHRINK)
 }
 
 /// Win rate em % → log-odds (limitado a 1–99% para não explodir).
@@ -56,9 +59,9 @@ pub fn prob(x: f64) -> f64 {
 }
 
 /// Chance (em %) de `wr` com o efeito em log-odds encolhido pela amostra, a partir de `base`.
-pub fn shrunk_prob(base: f64, wr: f64, n: u64, shrink: f64) -> f64 {
+pub fn shrunk_prob(base: f64, wr: f64, n: u64) -> f64 {
     let b = logit(base);
-    prob(b + (logit(wr) - b) * shrink_factor(n, shrink))
+    prob(b + (logit(wr) - b) * shrink_factor(n))
 }
 
 /// Ganho de banir cada campeão de uma vaga do inimigo, em pontos percentuais da **sua** chance.
@@ -86,9 +89,6 @@ pub fn ban_gains(rows: &[(i64, f64, f64)], slot: f64, rest: f64) -> Vec<(i64, f6
         .collect()
 }
 
-/// Encolhimento dos itens (o mesmo dos bans e picks).
-pub const ITEM_SHRINK: f64 = 300.0;
-
 /// WPA de cada linha `(wr, pr, n)` de uma lista de itens do build, em pontos percentuais: a chance
 /// com ela (encolhida em log-odds para o WR do campeão) menos o contrafactual.
 /// - `one_per_game` (posição da build, botas, início, núcleo: uma linha por partida): a média da
@@ -102,7 +102,7 @@ pub const ITEM_SHRINK: f64 = 300.0;
 pub fn list_wpa(rows: &[(f64, f64, u64)], champ_wr: f64, one_per_game: bool) -> Vec<f64> {
     let p: Vec<f64> = rows
         .iter()
-        .map(|&(wr, _, n)| shrunk_prob(champ_wr, wr, n, ITEM_SHRINK))
+        .map(|&(wr, _, n)| shrunk_prob(champ_wr, wr, n))
         .collect();
     let base = if one_per_game {
         let listed: f64 = rows.iter().map(|r| r.1.max(0.0)).sum();
@@ -159,8 +159,8 @@ mod tests {
     #[test]
     fn shrinks_in_log_odds() {
         // sem amostra fica na base; com muita, perto do WR
-        assert!(close(shrunk_prob(52.0, 40.0, 0, 300.0), 52.0));
-        let big = shrunk_prob(52.0, 40.0, 1_000_000, 300.0);
+        assert!(close(shrunk_prob(52.0, 40.0, 0), 52.0));
+        let big = shrunk_prob(52.0, 40.0, 1_000_000);
         assert!((big - 40.0).abs() < 0.01);
     }
 
