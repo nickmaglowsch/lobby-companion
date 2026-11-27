@@ -17,6 +17,7 @@ pub mod metric;
 pub mod overlay;
 pub mod own_runes;
 pub mod picks;
+pub mod replay;
 pub mod settings;
 pub mod update;
 
@@ -530,6 +531,27 @@ pub fn cli(args: &[String]) -> bool {
         }
         Some("--live") => {
             tauri::async_runtime::block_on(live::diag());
+            true
+        }
+        Some("--gravar") => {
+            let out = args.get(1).map(std::path::PathBuf::from);
+            tauri::async_runtime::block_on(replay::record(out));
+            true
+        }
+        Some("--replay") => {
+            let Some(file) = args.get(1) else {
+                println!("uso: --replay <partida.jsonl> [campeão] [item,item,…]");
+                return true;
+            };
+            let path: Vec<i64> = args
+                .get(3)
+                .map(|s| s.split(',').filter_map(|x| x.trim().parse().ok()).collect())
+                .unwrap_or_default();
+            replay::replay(
+                std::path::Path::new(file),
+                args.get(2).map(String::as_str).filter(|a| !a.is_empty()),
+                &path,
+            );
             true
         }
         _ => false,

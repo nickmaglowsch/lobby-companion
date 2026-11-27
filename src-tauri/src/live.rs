@@ -182,7 +182,11 @@ fn array(v: &Value) -> &[Value] {
 
 /// Lê a resposta de `allgamedata` (passa por `sanitize` antes: nada de nomes).
 pub fn parse(all: Value) -> Option<Game> {
-    let s = sanitize(all);
+    parse_clean(&sanitize(all))
+}
+
+/// Lê uma resposta já passada por `sanitize` (a da partida gravada, `replay.rs`).
+pub fn parse_clean(s: &Value) -> Option<Game> {
     let time = s.pointer("/gameData/gameTime").and_then(Value::as_f64)?;
     let players = array(&s["allPlayers"])
         .iter()

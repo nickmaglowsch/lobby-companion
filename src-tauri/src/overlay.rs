@@ -162,7 +162,7 @@ pub struct Frame {
 }
 
 /// "Barracks_T1_L1" → (time, rota: L = topo, C = meio, R = robô).
-fn parse_barracks(s: &str) -> Option<(Team, char)> {
+pub(crate) fn parse_barracks(s: &str) -> Option<(Team, char)> {
     let rest = s.strip_prefix("Barracks_T")?;
     let mut c = rest.chars();
     let team = match c.next()? {
@@ -267,12 +267,20 @@ pub fn remaining_cost(target: i64, owned: &[i64], assets: &Assets) -> u32 {
     cost_without(target, &mut owned.to_vec(), assets, 0)
 }
 
-/// Próximo item do build que você ainda não tem, só quando o ouro da mochila dá.
+/// Próximo item do build que você ainda não tem, só quando o ouro da mochila dá. Item que não se
+/// compra (upgrade de missão ou que vem sozinho, `Assets::item_root`) conta como o item de onde
+/// sai: com o World Atlas, o Bloodsong do build já está a caminho; sem ele, o lembrete é o Atlas.
 pub fn next_item(path: &[i64], me: &Player, gold: f64, assets: &Assets) -> Option<NextItem> {
-    let mut owned: Vec<i64> = me.items.iter().map(|(id, _)| *id).collect();
-    let target = *path.iter().find(|id| !owned.contains(id))?;
-    let cost = cost_without(target, &mut owned, assets, 0);
-    (cost > 0 && gold >= f64::from(cost)).then_some(NextItem { id: target, cost })
+    let owned: Vec<i64> = me.items.iter().map(|(id, _)| *id).collect();
+    let roots: Vec<i64> = owned.iter().map(|id| assets.item_root(*id)).collect();
+    let (target, cost) = path
+        .iter()
+        .map(|id| assets.item_root(*id))
+        .filter(|root| !roots.contains(root))
+        // Custo zero (item fora do `items.json`): pula em vez de travar o lembrete.
+        .map(|root| (root, cost_without(root, &mut owned.clone(), assets, 0)))
+        .find(|(_, cost)| *cost > 0)?;
+    (gold >= f64::from(cost)).then_some(NextItem { id: target, cost })
 }
 
 /// Ordem das linhas do placar: por posição quando todos têm uma diferente (ranqueada), senão a
@@ -382,7 +390,7 @@ pub fn graph_rect(w: f64, h: f64) -> Rect {
 /// Você na lista de jogadores: pelo campeão travado na seleção (o app não lê nomes). Sem ele (app
 /// aberto no meio da partida), pelos ids das suas habilidades: "ChogathQ" começa com o alias do
 /// campeão. Vale o alias mais comprido ("ViegoQ" também começa com "Vi"); empate = ninguém.
-fn find_me<'a>(game: &'a Game, alias: Option<&str>) -> Option<&'a Player> {
+pub(crate) fn find_me<'a>(game: &'a Game, alias: Option<&str>) -> Option<&'a Player> {
     if let Some(alias) = alias
         && let Some(p) = game
             .players
@@ -1030,6 +1038,7 @@ mod tests {
             categories: cats.iter().map(|c| c.to_string()).collect(),
             price,
             from: from.to_vec(),
+            special: 0,
         }
     }
 
@@ -1143,6 +1152,80 @@ mod tests {
         // Build completo: nada.
         let done = player("Chogath", Team::Order, "JUNGLE", &[1001, 3071, 1037], 80);
         assert_eq!(next_item(&path, &done, 9999.0, &a), None);
+    }
+
+    /// Itens que não se compram, com a estrutura do `items.json` do cliente (conferida em
+    /// 2026-11-27): o do suporte sai por missão, a bota de nível 3 é de graça a partir da de nível 2
+    /// (mesmo preço total) e a Muramana vem sozinha da Manamune (`specialRecipe`).
+    fn upgrade_assets() -> Assets {
+        let mut a = assets();
+        let mut special = |id, price, from: &[i64], special| {
+            let mut i = item(price, from, &[]);
+            i.special = special;
+            a.items.insert(id, i);
+        };
+        special(3865, 400, &[], 0); // World Atlas (o que se compra)
+        special(3866, 400, &[], 3865); // Runic Compass
+        special(3867, 400, &[], 3866); // Bounty of Worlds
+        special(3877, 400, &[3867], 0); // Bloodsong: preço 0 a partir do Bounty
+        special(3006, 1100, &[1001], 0); // bota de nível 2
+        special(3172, 1100, &[3006], 0); // bota de nível 3
+        special(3004, 2900, &[1037], 0); // "Manamune" (inventada sobre a picareta)
+        special(3042, 2900, &[], 3004); // "Muramana"
+        a
+    }
+
+    #[test]
+    fn item_root_follows_upgrades_you_never_buy() {
+        let a = upgrade_assets();
+        assert_eq!(a.item_root(3877), 3865);
+        assert_eq!(a.item_root(3867), 3865);
+        assert_eq!(a.item_root(3172), 3006);
+        assert_eq!(a.item_root(3042), 3004);
+        // Itens comuns (e desconhecidos) ficam como estão.
+        assert_eq!(a.item_root(3071), 3071);
+        assert_eq!(a.item_root(3006), 3006);
+        assert_eq!(a.item_root(99999), 99999);
+    }
+
+    #[test]
+    fn next_item_skips_quest_upgrades() {
+        let a = upgrade_assets();
+        let path = [3877, 3172, 3071];
+        // Sem o item do suporte: o lembrete é o World Atlas (o Bloodsong não se compra).
+        let me = player("Lulu", Team::Order, "UTILITY", &[], 0);
+        assert_eq!(
+            next_item(&path, &me, 500.0, &a),
+            Some(NextItem {
+                id: 3865,
+                cost: 400
+            })
+        );
+        // Com o Atlas (ou o Compass, no meio da missão): o próximo é a bota de nível 2. Antes o
+        // Bloodsong ficava no lembrete por 400 até a missão acabar.
+        for quest in [3865, 3866, 3867, 3877] {
+            let me = player("Lulu", Team::Order, "UTILITY", &[quest], 0);
+            assert_eq!(
+                next_item(&path, &me, 1100.0, &a),
+                Some(NextItem {
+                    id: 3006,
+                    cost: 1100
+                }),
+                "com {quest}"
+            );
+        }
+        // Com a bota de nível 2, a de nível 3 não trava o lembrete (custava 0 e parava tudo).
+        let me = player("Lulu", Team::Order, "UTILITY", &[3865, 3006], 0);
+        assert_eq!(
+            next_item(&path, &me, 3000.0, &a),
+            Some(NextItem {
+                id: 3071,
+                cost: 3000
+            })
+        );
+        // Muramana no build com a Manamune na mochila: já tem.
+        let me = player("Ezreal", Team::Order, "BOTTOM", &[3004], 0);
+        assert_eq!(next_item(&[3042], &me, 9999.0, &a), None);
     }
 
     #[test]

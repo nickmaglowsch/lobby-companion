@@ -28,10 +28,14 @@ pub struct Named {
     /// Só itens: componentes (`from`), para descontar o que você já tem.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub from: Vec<i64>,
+    /// Só itens: `specialRecipe` = item que vira este sozinho, sem compra (Manamune → Muramana,
+    /// World Atlas → Runic Compass → Bounty of Worlds). 0 nos itens comuns.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub special: i64,
 }
 
-fn is_zero(x: &u32) -> bool {
-    *x == 0
+fn is_zero<T: Default + PartialEq>(x: &T) -> bool {
+    *x == T::default()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +123,7 @@ fn named_map(list: &Value) -> HashMap<i64, Named> {
                                 .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
                         })
                         .collect(),
+                    special: e.get("specialRecipe").and_then(Value::as_i64).unwrap_or(0),
                 },
             ))
         })
@@ -287,6 +292,24 @@ impl Assets {
     }
 
     /// O item tem essa categoria no cliente (ex. "Armor")?
+    /// Item que se compra para ter `id`: sobe pelos itens que não se compram. São os que vêm
+    /// sozinhos de outro (`specialRecipe`: Muramana, Runic Compass, Bounty of Worlds) e os de um
+    /// componente só sem custo de receita, liberados por missão (Bloodsong e os outros do suporte
+    /// saem do Bounty of Worlds; as botas de nível 3 saem das de nível 2). Itens comuns: o próprio.
+    pub fn item_root(&self, mut id: i64) -> i64 {
+        for _ in 0..8 {
+            let Some(item) = self.items.get(&id) else {
+                break;
+            };
+            id = match item.from.as_slice() {
+                _ if item.special != 0 => item.special,
+                [only] if self.items.get(only).is_some_and(|c| c.price == item.price) => *only,
+                _ => break,
+            };
+        }
+        id
+    }
+
     pub fn item_has(&self, id: i64, category: &str) -> bool {
         self.items
             .get(&id)
