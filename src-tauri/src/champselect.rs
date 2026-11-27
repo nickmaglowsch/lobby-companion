@@ -6,10 +6,8 @@ use crate::i18n::Lang;
 use serde::Serialize;
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Me {
-    pub cell_id: i64,
     /// Campeão escolhido (0 = nenhum ainda).
     pub champion_id: i64,
     /// Campeão em destaque (hover) antes de travar.
@@ -46,11 +44,33 @@ fn i(v: Option<&Value>) -> i64 {
     v.and_then(Value::as_i64).unwrap_or(0)
 }
 
+/// Lista `k` da sessão (vazia se não houver).
+fn list<'a>(session: &'a Value, k: &str) -> &'a [Value] {
+    session
+        .get(k)
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// Todas as ações (bans e picks) da sessão, de todos os turnos.
+fn actions(session: &Value) -> impl Iterator<Item = &Value> {
+    list(session, "actions")
+        .iter()
+        .filter_map(Value::as_array)
+        .flatten()
+}
+
+fn is(a: &Value, k: &str, v: &str) -> bool {
+    a.get(k).and_then(Value::as_str) == Some(v)
+}
+
+fn completed(a: &Value) -> bool {
+    a.get("completed").and_then(Value::as_bool) == Some(true)
+}
+
 pub fn parse(session: &Value) -> Option<Me> {
     let cell = session.get("localPlayerCellId")?.as_i64()?;
-    let me = session
-        .get("myTeam")?
-        .as_array()?
+    let me = list(session, "myTeam")
         .iter()
         .find(|m| m.get("cellId").and_then(Value::as_i64) == Some(cell))?;
     let champion_id = i(me.get("championId"));
@@ -58,29 +78,23 @@ pub fn parse(session: &Value) -> Option<Me> {
         .get("assignedPosition")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_ascii_lowercase());
-    let my_picks: Vec<&Value> = session
-        .get("actions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_array)
-        .flatten()
-        .filter(|a| {
-            a.get("actorCellId").and_then(Value::as_i64) == Some(cell)
-                && a.get("type").and_then(Value::as_str) == Some("pick")
-        })
-        .collect();
+        .map(str::to_ascii_lowercase);
+    let (mut has_pick, mut picked) = (false, false);
+    for a in actions(session).filter(|a| {
+        a.get("actorCellId").and_then(Value::as_i64) == Some(cell) && is(a, "type", "pick")
+    }) {
+        has_pick = true;
+        picked |= completed(a);
+    }
     let phase = session
         .pointer("/timer/phase")
         .and_then(Value::as_str)
         .unwrap_or("");
     let locked = champion_id > 0
-        && (my_picks.is_empty() // ARAM/sem ações: campeão atribuído
-            || my_picks.iter().any(|a| a.get("completed").and_then(Value::as_bool).unwrap_or(false))
+        && (!has_pick // ARAM/sem ações: campeão atribuído
+            || picked
             || matches!(phase, "FINALIZATION" | "GAME_STARTING"));
     Some(Me {
-        cell_id: cell,
         champion_id,
         hover_id: i(me.get("championPickIntent")),
         position,
@@ -114,16 +128,9 @@ pub struct Draft {
 
 pub fn parse_draft(session: &Value) -> Option<Draft> {
     let cell = session.get("localPlayerCellId")?.as_i64()?;
-    let team = |k: &str| -> Vec<Value> {
-        session
-            .get(k)
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-    };
     let mut unavailable: Vec<i64> = Vec::new();
     let mut allies = Vec::new();
-    for m in team("myTeam") {
+    for m in list(session, "myTeam") {
         let champ = i(m.get("championId"));
         let shown = if champ > 0 {
             champ
@@ -146,47 +153,28 @@ pub fn parse_draft(session: &Value) -> Option<Draft> {
             me: i(m.get("cellId")) == cell,
         });
     }
-    let enemies: Vec<i64> = team("theirTeam")
+    let enemies: Vec<i64> = list(session, "theirTeam")
         .iter()
         .map(|m| i(m.get("championId")))
         .filter(|c| *c > 0)
         .collect();
     unavailable.extend(&enemies);
-    for k in ["myTeamBans", "theirTeamBans"] {
-        unavailable.extend(
-            session
-                .pointer(&format!("/bans/{k}"))
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_i64),
-        );
+    if let Some(bans) = session.get("bans") {
+        for k in ["myTeamBans", "theirTeamBans"] {
+            unavailable.extend(list(bans, k).iter().filter_map(Value::as_i64));
+        }
     }
-    unavailable.extend(
-        session
-            .get("actions")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_array)
-            .flatten()
-            .filter(|a| a.get("completed").and_then(Value::as_bool) == Some(true))
-            .map(|a| i(a.get("championId"))),
-    );
+    let mut banning = false;
+    for a in actions(session) {
+        if completed(a) {
+            unavailable.push(i(a.get("championId")));
+        } else if is(a, "type", "ban") {
+            banning = true;
+        }
+    }
     unavailable.retain(|c| *c > 0);
     unavailable.sort_unstable();
     unavailable.dedup();
-    let banning = session
-        .get("actions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_array)
-        .flatten()
-        .any(|a| {
-            a.get("type").and_then(Value::as_str) == Some("ban")
-                && a.get("completed").and_then(Value::as_bool) != Some(true)
-        });
     Some(Draft {
         allies,
         enemies,
@@ -199,17 +187,12 @@ pub fn parse_draft(session: &Value) -> Option<Draft> {
 /// Só `type == "ban"` do `localPlayerCellId`: a vez de escolher nunca entra aqui.
 pub fn my_ban_action(session: &Value) -> Option<i64> {
     let cell = session.get("localPlayerCellId")?.as_i64()?;
-    session
-        .get("actions")?
-        .as_array()?
-        .iter()
-        .filter_map(Value::as_array)
-        .flatten()
+    actions(session)
         .find(|a| {
             a.get("actorCellId").and_then(Value::as_i64) == Some(cell)
-                && a.get("type").and_then(Value::as_str) == Some("ban")
+                && is(a, "type", "ban")
                 && a.get("isInProgress").and_then(Value::as_bool) == Some(true)
-                && a.get("completed").and_then(Value::as_bool) != Some(true)
+                && !completed(a)
         })?
         .get("id")?
         .as_i64()
