@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lobby Companion</title>
-  <meta name="description" content="Runas, feitiços e conjunto de itens do lolalytics importados na seleção de campeões do League of Legends. Leve, sem overlay, gratuito e de código aberto." />
+  <meta name="description" content="Runas, feitiços e conjunto de itens do lolalytics importados na seleção de campeões do League of Legends, e um overlay opcional na partida. Leve, gratuito e de código aberto." />
   <meta property="og:title" content="Lobby Companion" />
-  <meta property="og:description" content="Runas, feitiços e itens do lolalytics na seleção de campeões. Leve, sem overlay." />
+  <meta property="og:description" content="Runas, feitiços e itens do lolalytics na seleção de campeões, e um overlay leve na partida." />
   <meta property="og:image" content="img/fase-build.png" />
   <link rel="icon" href="favicon.png" />
   <style>
@@ -83,6 +83,14 @@
     .steps button[aria-pressed="true"] { color: var(--gold); background: #1e282d; }
     .steps button[aria-pressed="true"] .n { border-color: var(--gold); }
     .classic-shot { max-width: 380px; }
+
+    /* overlay: o print grande e os recortes dentro dos cartões */
+    .ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin-top: 16px; }
+    .ov-grid .card img { border: 1px solid var(--line); border-radius: 4px; margin-bottom: 10px; }
+    .ov-grid .card.wide { grid-column: span 2; }
+    @media (max-width: 600px) { .ov-grid .card.wide { grid-column: auto; } }
+    .ov-note { margin: 14px 0 0; font-size: 14px; }
+    .ov-note strong { color: var(--text); }
     [hidden] { display: none !important; }
 
     /* recursos: cartões como os do app */
@@ -128,6 +136,7 @@
       <a class="brand" href="#"><img src="img/icon.png" alt="" />Lobby Companion</a>
       <div class="links">
         <a href="#layouts">Layouts</a>
+        <a href="#overlay">Overlay</a>
         <a href="#recursos">Recursos</a>
         <a href="#seguranca">Segurança</a>
         <a href="#instalar">Instalar</a>
@@ -141,7 +150,7 @@
       <div>
         <div class="eyebrow">League of Legends · seleção de campeões</div>
         <h1>Trave o campeão.<br /><span>O build já está no cliente.</span></h1>
-        <p class="lead">Runas, feitiços e um conjunto de itens com o win rate de cada item, direto do lolalytics, importados assim que você trava o campeão. Sugere bans e picks para o seu time. Leve, sem overlay e sem nada durante a partida.</p>
+        <p class="lead">Runas, feitiços e um conjunto de itens com o win rate de cada item, direto do lolalytics, importados assim que você trava o campeão. Sugere bans e picks para o seu time. Na partida, um overlay leve e opcional: timer de inibidor, próximo item, CS por minuto e a diferença de ouro com o Tab.</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/nickmaglowsch/lobby-companion/releases/latest/download/LobbyCompanion-setup.exe">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
@@ -208,7 +217,26 @@
     </div>
   </section>
 
-  <section id="recursos" class="alt">
+  <section id="overlay" class="alt">
+    <div class="wrap">
+      <h2>Overlay na partida <span class="muted" style="font-size: 15px; font-weight: 400">· novo na 0.8.0</span></h2>
+      <p class="sub">Uma camada transparente por cima do jogo, que deixa o clique passar e só mostra o que o jogo já mostra ou anuncia para todos. Cada recurso liga e desliga nas configurações. As imagens são um print de uma partida real com o overlay de exemplo por cima.</p>
+      <div class="shot"><img src="img/overlay-tab.jpg" width="1920" height="1080" alt="Partida com o Tab segurado: o overlay mostra a diferença de ouro em itens no meio de cada linha do placar, o gráfico do ouro dos times embaixo dele, o CS por minuto, o próximo item e o timer de um inibidor no minimapa" loading="lazy" /></div>
+      <div class="ov-grid">
+        <div class="card wide">
+          <img src="img/overlay-mapa.jpg" width="840" height="300" alt="Lembrete Comprar Égide de Fogo Solar por 650 de ouro, acima do inventário, e o timer 2:34 sobre o inibidor do meio inimigo no minimapa" loading="lazy" />
+          <h3>Próximo item e inibidores</h3><p>Quando o ouro da mochila dá, aparece o próximo item do build que o app importou, já descontando os componentes que você tem. No minimapa, cada inibidor derrubado mostra quanto falta para voltar.</p></div>
+        <div class="card">
+          <img src="img/overlay-cs.jpg" width="420" height="110" alt="CS por minuto, 5,9 (85 no total), embaixo do placar de abates e do FPS" loading="lazy" />
+          <h3>CS por minuto</h3><p>Sempre à vista, embaixo das estatísticas do jogo. Ele e o próximo item se arrastam para onde você preferir em <em>Ajustar overlay</em>.</p></div>
+        <div class="card">
+          <h3>Com o Tab segurado</h3><p>No meio de cada linha do placar, a diferença de ouro em itens da sua rota: seta azul para o seu lado quando você está na frente, vermelha para o inimigo. Embaixo do placar, o gráfico do ouro em itens dos times na partida toda.</p></div>
+      </div>
+      <p class="muted ov-note"><strong>Encaixe automático:</strong> a posição do minimapa e do placar vem do layout do próprio jogo (16:9, 21:9 ou 4:3, minimapa à direita ou à esquerda, em qualquer tamanho). Funciona em tela cheia e sem bordas, sem ajuste à mão.</p>
+    </div>
+  </section>
+
+  <section id="recursos">
     <div class="wrap">
       <h2>O que ele faz</h2>
       <p class="sub">Dados do lolalytics (ranqueada solo, Esmeralda+ global por padrão; elo, região e período configuráveis), com cache de 6 horas.</p>
@@ -230,20 +258,20 @@
         <div class="card">
           <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></span>Atualiza no clique</h3><p>Avisa quando sai versão nova e instala quando você clicar, conferindo a assinatura do pacote. Nunca sozinho, nunca na seleção.</p></div>
         <div class="card">
-          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg></span>Leve e sem overlay</h3><p>A janela abre na seleção e é destruída quando a partida começa. Durante o jogo fica só um ícone na bandeja.</p></div>
+          <h3><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg></span>Leve</h3><p>A janela abre na seleção e é destruída quando a partida começa. Durante o jogo ficam só o overlay (se ligado) e um ícone na bandeja.</p></div>
       </div>
     </div>
   </section>
 
-  <section id="seguranca">
+  <section id="seguranca" class="alt">
     <div class="wrap">
       <h2>O que ele nunca faz</h2>
-      <p class="sub">Usa só a API local do próprio cliente do League, sem ler memória do jogo e sem nada desenhado por cima da partida.</p>
+      <p class="sub">Usa só a API local do cliente do League e a API de dados da partida que o próprio jogo oferece. Não lê memória e não mexe no jogo: o overlay é uma janela à parte.</p>
       <div class="two">
         <ul class="check no">
           <li><strong>Não escolhe nem age sozinho.</strong> Nada de pick, aceitar fila ou trocar posição. O único ban é o que você clica numa sugestão, na sua vez de banir.</li>
           <li><strong>Não revela ninguém.</strong> Dos outros jogadores lê só campeões e posições, o que a própria tela mostra. Nunca nomes ou Riot IDs.</li>
-          <li><strong>Não roda na partida.</strong> Sem overlay, sem timers, sem informação ao vivo do jogo.</li>
+          <li><strong>Não mostra o que está escondido.</strong> O overlay só usa o que o jogo já mostra ou anuncia para todos: nada de recarga de ultimate ou feitiço do inimigo, timer da selva ou anúncio na tela.</li>
         </ul>
         <ul class="check">
           <li><strong>Escreve só o que você faria à mão:</strong> página de runas, conjunto de itens, feitiços e o ban que você clicou. Suas páginas e conjuntos ficam intactos.</li>
@@ -254,7 +282,7 @@
     </div>
   </section>
 
-  <section id="instalar" class="alt">
+  <section id="instalar">
     <div class="wrap">
       <h2>Instalar</h2>
       <ol class="install">
@@ -269,11 +297,13 @@
     </div>
   </section>
 
-  <section id="faq">
+  <section id="faq" class="alt">
     <div class="wrap">
       <h2>Perguntas</h2>
       <details><summary>É permitido pela Riot?</summary>
-        <p>O app usa a API local do cliente para importar runas, itens e feitiços, como os apps conhecidos de build. Ele não age sozinho (o único ban é o que você clica, na sua vez), não revela nomes ocultos e não mostra nada durante a partida. Não é afiliado nem endossado pela Riot Games.</p></details>
+        <p>O app usa a API local do cliente para importar runas, itens e feitiços, como os apps conhecidos de build. Ele não age sozinho (o único ban é o que você clica, na sua vez) e não revela nomes ocultos. O overlay segue as regras da Riot para apps de terceiros: lê só a API de dados da partida que o próprio jogo oferece, numa janela separada, sem injetar nada no jogo e sem ler memória, e não mostra informação que o jogador não teria. Não é afiliado nem endossado pela Riot Games.</p></details>
+      <details><summary>O overlay funciona em tela cheia?</summary>
+        <p>Sim, no modo de tela cheia padrão do Windows 10 e 11 e no sem bordas. Se você desligou as "otimizações de tela cheia" do League, use o modo sem bordas. Dá para desligar o overlay inteiro ou cada recurso nas configurações.</p></details>
       <details><summary>Por que o Smart App Control ou o SmartScreen bloqueiam?</summary>
         <p>Porque o instalador ainda não tem certificado de assinatura de código do Windows, que é pago. O SmartScreen deixa executar em "Mais informações"; o Smart App Control, quando ligado, pode bloquear.</p></details>
       <details><summary>Dá para usar as minhas próprias runas?</summary>

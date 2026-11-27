@@ -20,7 +20,11 @@
 
   onMount(() => {
     document.documentElement.classList.add("overlay");
-    if (!("__TAURI_INTERNALS__" in window)) document.documentElement.classList.add("overlay-dev");
+    if (!("__TAURI_INTERNALS__" in window)) {
+      // Navegador (`npm run dev`): placar "segurado", a não ser com &tab=0.
+      document.documentElement.classList.add("overlay-dev");
+      tab = new URLSearchParams(location.search).get("tab") !== "0";
+    }
     api.snapshot().then((s) => setLocale(s.locale)).catch(() => {});
     api.assets().then((a) => (assets = a)).catch(() => {});
     api.overlayFrame().then((f) => f && (frame = f)).catch(() => {});

@@ -80,7 +80,7 @@ npm run dev                            # só a UI no navegador (dados sintético
                                        # fase=bans também liga "sua vez de banir" (clicar numa sugestão "bane")
                                        # &own=0 começa sem página própria (o mock tem uma para o Cho'Gath na selva)
                                        # &lang=ja_JP (qualquer locale do cliente; padrão pt_BR) para ver cada idioma
-                                       # ?overlay=1 a janela do overlay com o quadro de exemplo de 1920×1080 (&edit=0 sem o modo de ajuste)
+                                       # ?overlay=1 a janela do overlay com o quadro de exemplo de 1920×1080 (&edit=0 sem o modo de ajuste, &tab=0 sem o placar)
 npm run check && npm run build         # tipos + build da UI
 cd src-tauri && cargo test && cargo clippy --all-targets
 cargo run -- --diag                    # estado do cliente, inclusive o idioma (só GET)
