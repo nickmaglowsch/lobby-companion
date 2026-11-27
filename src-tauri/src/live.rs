@@ -140,7 +140,8 @@ pub struct Player {
 pub struct Event {
     pub name: String,
     pub time: f64,
-    /// Estrutura do evento de inibidor (`InhibKilled`/`InhibRespawned`: "Barracks_T1_L1").
+    /// Estrutura do evento de inibidor (`InhibKilled`/`InhibRespawned`:
+    /// "Inhib_TChaos_L1_P1_1931666598_0"; antes "Barracks_T1_L1").
     pub target: Option<String>,
 }
 
@@ -182,7 +183,11 @@ fn array(v: &Value) -> &[Value] {
 
 /// Lê a resposta de `allgamedata` (passa por `sanitize` antes: nada de nomes).
 pub fn parse(all: Value) -> Option<Game> {
-    let s = sanitize(all);
+    parse_clean(&sanitize(all))
+}
+
+/// Lê uma resposta já passada por `sanitize` (a da partida gravada, `replay.rs`).
+pub fn parse_clean(s: &Value) -> Option<Game> {
     let time = s.pointer("/gameData/gameTime").and_then(Value::as_f64)?;
     let players = array(&s["allPlayers"])
         .iter()
