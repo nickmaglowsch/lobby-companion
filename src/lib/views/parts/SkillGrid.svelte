@@ -3,13 +3,13 @@
   import { pct } from "$lib/api";
   import { app } from "$lib/app.svelte";
 
-  let { cell = 12, numbers = false, priority = true }: { cell?: number; numbers?: boolean; priority?: boolean } = $props();
+  let { cell = 12, numbers = false }: { cell?: number; numbers?: boolean } = $props();
   const b = $derived(app.build);
   const letters = ["Q", "W", "E", "R"];
 </script>
 
 {#if b}
-  {#if priority && b.skillPriority[0]}
+  {#if b.skillPriority[0]}
     <div class="prio">{b.skillPriority[0].ids.join(" › ")} <span class="muted">{pct(b.skillPriority[0].wr)}</span></div>
   {/if}
   {#if b.skillOrder}

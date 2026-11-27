@@ -89,7 +89,6 @@
   .item { display: grid; justify-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
   .item img { width: 30px; height: 30px; border-radius: 4px; border: 1px solid var(--good); }
   .note { color: var(--good); margin: 6px 0 0; }
-  .muted { color: var(--muted); }
   .small { font-size: 12px; }
   .tiny { font-size: 10px; }
 </style>

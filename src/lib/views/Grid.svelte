@@ -1,8 +1,7 @@
 <script lang="ts">
   // Layout "Grade": três colunas fixas (draft · runas · itens), tudo numa tela, sem rolagem.
   // A coluna da etapa atual da seleção fica destacada; detalhes ficam no tooltip.
-  import { openUrl } from "@tauri-apps/plugin-opener";
-  import { icon, pct, LANES, coreSets, firstBack, situationalItems } from "$lib/api";
+  import { icon, pct, laneName, api } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
   import TopBar from "./parts/TopBar.svelte";
@@ -19,9 +18,9 @@
   import DamageMix from "./parts/DamageMix.svelte";
 
   const b = $derived(app.build);
+  const core = $derived(app.cores[0]);
   const bans = $derived(app.snap?.bans ?? null);
   const draftFocus = $derived(app.stage === "bans" || app.stage === "picks");
-  const core = $derived(b ? coreSets(b, app.assets, app.minGames)[0] : undefined);
   const item = (id: number | string) => app.assets?.items[String(id)];
 </script>
 
@@ -33,7 +32,7 @@
     <section class:focus={draftFocus || !b}>
       {#if bans}
         <h2>{t("views.bans")} <span class="muted">{bans.byTier
-          ? (bans.lane ? t("vGrid.tierListLane", { lane: LANES[bans.lane] ?? bans.lane }) : t("vGrid.tierList"))
+          ? (bans.lane ? t("vGrid.tierListLane", { lane: laneName(bans.lane) }) : t("vGrid.tierList"))
           : t("vGrid.byTeam")}</span>
           <MetricToggle />
           {#if bans.loading}<span class="muted">…</span>{/if}</h2>
@@ -42,7 +41,7 @@
         {#if bans.lanePicks.length}<BanList list={bans.lanePicks} variant="strip" />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
       {/if}
       {#if app.snap?.inChampSelect && app.snap.picks}
-        <h2>{t("vGrid.pick")} <span class="muted">{LANES[app.snap.picks.lane ?? ""] ?? ""} · {app.snap.picks.pool === "tier" ? t("vGrid.tierList") : t("vGrid.ownPool")}</span>{#if !bans}<MetricToggle />{/if}</h2>
+        <h2>{t("vGrid.pick")} <span class="muted">{laneName(app.snap.picks.lane)} · {app.snap.picks.pool === "tier" ? t("vGrid.tierList") : t("vGrid.ownPool")}</span>{#if !bans}<MetricToggle />{/if}</h2>
         <PickList variant="rows" max={3} />
       {/if}
       {#if app.composition}
@@ -82,10 +81,10 @@
             <span class="small">{app.startText(0)}</span>
           </div>
         {/if}
-        {#if firstBack(b, app.assets, app.minGames).length}
+        {#if app.firstBackItems.length}
           <div class="irow">
             <span class="lbl">{t("common.firstBack")}</span>
-            <div class="icons">{#each firstBack(b, app.assets, app.minGames).slice(0, 3) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div>
+            <div class="icons">{#each app.firstBackItems.slice(0, 3) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div>
           </div>
         {/if}
         {#if core}
@@ -103,10 +102,10 @@
             </div>
           {/if}
         {/each}
-        {#if situationalItems(b, app.assets, app.minGames, app.metric).length}
+        {#if app.situational.length}
           <div class="irow">
             <span class="lbl">{t("common.situationalShort")}</span>
-            <div class="icons">{#each situationalItems(b, app.assets, app.minGames, app.metric).slice(0, 3) as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={28} />{/each}</div>
+            <div class="icons">{#each app.situational.slice(0, 3) as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={28} />{/each}</div>
           </div>
         {/if}
       {/if}
@@ -117,7 +116,7 @@
     <ImportButton />
     <span class="grow"></span>
     {#if b}<VsPicker />{/if}
-    {#if app.snap?.pageUrl}<button class="link" onclick={() => openUrl(app.snap!.pageUrl!)}>lolalytics ↗</button>{/if}
+    {#if app.snap?.pageUrl}<button class="link" onclick={() => api.openUrl(app.snap!.pageUrl!)}>lolalytics ↗</button>{/if}
   </footer>
 </div>
 
@@ -139,7 +138,6 @@
   .icons img { width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--gold-dim); }
   footer { display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--panel); border-top: 1px solid var(--line); }
   .grow { flex: 1; }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
   .empty { margin-top: 24px; text-align: center; }
 </style>

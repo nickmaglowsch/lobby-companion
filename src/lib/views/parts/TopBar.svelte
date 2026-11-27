@@ -2,22 +2,22 @@
   // Ponto de conexão + fase do cliente (à esquerda), o conteúdo do layout no meio e
   // busca + configurações à direita.
   import type { Snippet } from "svelte";
-  import { PHASES } from "$lib/api";
+  import { phaseName } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
   import Search from "./Search.svelte";
 
-  let { children, status = true, searchWidth = 130 }: { children?: Snippet; status?: boolean; searchWidth?: number } = $props();
+  let { children, status = true }: { children?: Snippet; status?: boolean } = $props();
 </script>
 
 <header>
   <span class="dot" class:on={app.snap?.connected} title={app.snap?.connected ? t("topBar.connected") : t("common.clientClosedLong")}></span>
   {#if status}
-    <span class="phase">{#if !app.snap?.connected}{t("common.clientClosed")}{:else}{PHASES[app.snap.phase] ?? app.snap.phase}{/if}</span>
+    <span class="phase">{#if !app.snap?.connected}{t("common.clientClosed")}{:else}{phaseName(app.snap.phase)}{/if}</span>
   {/if}
   {@render children?.()}
   <span class="grow"></span>
-  <Search width={searchWidth} />
+  <Search width={130} />
   <button class="icon" title={t("parts.settings")} onclick={() => (app.settingsOpen = true)}>⚙</button>
 </header>
 

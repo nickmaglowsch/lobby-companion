@@ -49,6 +49,4 @@
   .seq { display: flex; gap: 1px; }
   .k { width: 14px; height: 15px; display: grid; place-items: center; font-size: 10px; font-weight: 600; border-radius: 2px; background: var(--line); }
   .kR { background: var(--gold); color: var(--bg); }
-  .muted { color: var(--muted); }
-  .up { color: var(--good); }
 </style>

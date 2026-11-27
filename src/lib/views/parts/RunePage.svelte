@@ -2,23 +2,19 @@
   // Página de runas compacta com a escolha entre as suas páginas do campeão (pelo nome),
   // Mais jogada e Maior WR (a escolha vai para o cliente).
   // `size` = tamanho das runas comuns.
-  import { icon, pct, perkStat } from "$lib/api";
+  import { icon, pct, perkStat, runeTrees } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { i18n, t } from "$lib/i18n/index.svelte";
   import OwnRunes from "./OwnRunes.svelte";
 
-  let { size = 28, layout = "rows", toggle = true, compact = true }: {
-    size?: number; layout?: "rows" | "key"; toggle?: boolean;
+  let { size = 28, layout = "rows", compact = true }: {
+    size?: number; layout?: "rows" | "key";
     /** Diferenças da página própria como ícones (true) ou uma linha por runa. */
     compact?: boolean;
   } = $props();
   const set = $derived(app.runeSet);
   const perk = (id: number) => app.assets?.perks[id];
-  const styleOf = (id: number) => app.assets?.styles.find((s) => s.perks.includes(id));
-  const primary = $derived(set ? styleOf(set.primary[0]) : undefined);
-  const secondary = $derived(
-    set ? app.assets?.styles.find((s) => s.id !== primary?.id && set.secondary.every((p) => s.perks.includes(p))) : undefined,
-  );
+  const [primary, secondary] = $derived(set ? runeTrees(app.assets?.styles, set) : []);
   const hasWin = $derived(!!app.build?.runesWin);
   const mine = $derived(!!app.ownPage);
   /** Nome + WR da runa naquele lugar da página (posição 0–8, como em `perkStat`). */
@@ -36,16 +32,14 @@
 
 {#if set}
   <div class="rp" style="--r: {size}px">
-    {#if toggle}
-      <div class="seg">
-        {#each app.championPages as p (p.id)}
-          <button class="own-tab" class:on={app.runeTab === `own:${p.id}`} onclick={() => app.chooseRunes(`own:${p.id}`)}
-            title={t("parts.ownTabTip", { name: p.name })}>{p.name}</button>
-        {/each}
-        <button class:on={app.runeTab === "pick"} onclick={() => app.chooseRunes("pick")}>{t("parts.mostPlayed")}</button>
-        <button class:on={app.runeTab === "win"} onclick={() => app.chooseRunes("win")} disabled={!hasWin}>{t("parts.highestWr")}</button>
-      </div>
-    {/if}
+    <div class="seg">
+      {#each app.championPages as p (p.id)}
+        <button class="own-tab" class:on={app.runeTab === `own:${p.id}`} onclick={() => app.chooseRunes(`own:${p.id}`)}
+          title={t("parts.ownTabTip", { name: p.name })}>{p.name}</button>
+      {/each}
+      <button class:on={app.runeTab === "pick"} onclick={() => app.chooseRunes("pick")}>{t("parts.mostPlayed")}</button>
+      <button class:on={app.runeTab === "win"} onclick={() => app.chooseRunes("win")} disabled={!hasWin}>{t("parts.highestWr")}</button>
+    </div>
     {#if layout === "key"}
       <div class="keyed">
         {@render rune(set.primary[0], 0, "key big")}
