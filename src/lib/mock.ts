@@ -1,6 +1,6 @@
 // Dados sintéticos para ver a interface no navegador (`npm run dev`), fora do Tauri.
 // Números inventados: não redistribuímos dados do lolalytics.
-import type { Assets, Composition, OwnPage, Settings, Snapshot, UpdateInfo } from "./api";
+import type { Assets, Composition, OverlayFrame, OwnPage, Settings, Snapshot, UpdateInfo } from "./api";
 
 const item = (name: string, categories: string[] = []) => ({ name, icon: "", categories });
 
@@ -205,6 +205,29 @@ export const mockSettings: Settings = {
   importSpells: true, runeChoice: "pick", minGames: 200, replaceCurrentPage: false, flashSlot: 1, closeInGame: true,
   suggestBans: true, suggestPicks: true, pickPool: "mastery", metric: "wpa", checkUpdates: true, layout: "phase",
   language: "", clientLocale: "pt_BR",
+  overlay: {
+    enabled: true, inhibitors: true, nextItem: true, goldDiff: true, csPerMin: true, goldGraph: true,
+    scoreboardKey: 9, csPos: null, itemPos: null,
+  },
+};
+
+/** Quadro de exemplo do overlay em 1920×1080 (os mesmos números de `overlay::preview_frame`). */
+export const mockOverlay: OverlayFrame = {
+  preview: true, edit: true, visible: true, tab: true, width: 1920, height: 1080, scale: 0.9, gameTime: 900,
+  minimap: { x: 1654.5, y: 812.7, w: 254.7, h: 254.7 },
+  scoreboard: { x: 380.4, y: 235.8, w: 1157.4, h: 465.3 },
+  inhibitors: [{ x: 1853.4, y: 867.3, seconds: 154, ally: false }],
+  nextItem: { id: 3068, cost: 2700 },
+  cs: { total: 112, perMin: 7.5 },
+  lanes: [200, 1350, 75, 900, 410].map((gold, i) => ({ x: 959.55, y: 349.2 + 75.6 * i, gold, allyAhead: i % 2 === 0 })),
+  graph: {
+    rect: { x: 680.1, y: 710.1, w: 558, h: 135 },
+    points: Array.from({ length: 91 }, (_, i) => [i * 10, Math.sin((i * 10) / 60) * 900 + i * 60] as [number, number]),
+  },
+  settings: {
+    enabled: true, inhibitors: true, nextItem: true, goldDiff: true, csPerMin: true, goldGraph: true,
+    scoreboardKey: 9, csPos: null, itemPos: null,
+  },
 };
 
 // Mensagens que no app vêm traduzidas pelo Rust: no navegador, dos mesmos arquivos do backend.

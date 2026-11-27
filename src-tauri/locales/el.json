@@ -7,6 +7,7 @@
   "lane.bottom": "Κάτω",
   "lane.support": "Υποστήριξη",
   "tray.open": "Άνοιγμα",
+  "tray.overlayEdit": "Προσαρμογή overlay",
   "tray.quit": "Έξοδος",
   "tray.update": "Ενημέρωση σε v{version}…",
   "tray.tipUpdate": "Lobby Companion: διαθέσιμη η v{version}",

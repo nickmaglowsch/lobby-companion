@@ -7,6 +7,7 @@
   "lane.bottom": "Dół",
   "lane.support": "Wsparcie",
   "tray.open": "Otwórz",
+  "tray.overlayEdit": "Dostosuj nakładkę",
   "tray.quit": "Zakończ",
   "tray.update": "Aktualizuj do v{version}…",
   "tray.tipUpdate": "Lobby Companion: dostępna v{version}",

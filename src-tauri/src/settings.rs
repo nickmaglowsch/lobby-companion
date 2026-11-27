@@ -45,6 +45,47 @@ pub struct Settings {
     /// Último locale lido do cliente (`GET /riotclient/region-locale`): o app abre sem o cliente
     /// e precisa lembrar o idioma.
     pub client_locale: String,
+    /// Overlay na partida (`overlay.rs`).
+    pub overlay: OverlaySettings,
+}
+
+/// Overlay na partida: liga e desliga cada recurso, tecla do placar e posição das janelinhas.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct OverlaySettings {
+    pub enabled: bool,
+    /// Timer de volta dos inibidores no minimapa.
+    pub inhibitors: bool,
+    /// Próximo item do build importado quando o ouro dá.
+    pub next_item: bool,
+    /// Diferença de ouro em itens por rota (com a tecla do placar).
+    pub gold_diff: bool,
+    /// CS por minuto.
+    pub cs_per_min: bool,
+    /// Gráfico do ouro em itens dos times (com a tecla do placar).
+    pub gold_graph: bool,
+    /// Tecla do placar (código virtual do Windows; 9 = Tab).
+    pub scoreboard_key: u32,
+    /// Posição da janelinha do CS/min (fração da tela, canto superior esquerdo). `None` = padrão.
+    pub cs_pos: Option<(f64, f64)>,
+    /// Idem para o próximo item.
+    pub item_pos: Option<(f64, f64)>,
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            inhibitors: true,
+            next_item: true,
+            gold_diff: true,
+            cs_per_min: true,
+            gold_graph: true,
+            scoreboard_key: 9,
+            cs_pos: None,
+            item_pos: None,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -70,6 +111,7 @@ impl Default for Settings {
             layout: "phase".into(),
             language: String::new(),
             client_locale: String::new(),
+            overlay: OverlaySettings::default(),
         }
     }
 }
@@ -127,6 +169,15 @@ mod tests {
         assert_eq!(s.metric, "wpa");
         assert_eq!(s.language, "");
         assert_eq!(s.client_locale, "");
+        assert_eq!(s.overlay, OverlaySettings::default());
+        assert!(s.overlay.enabled && s.overlay.gold_graph);
+        assert_eq!(s.overlay.scoreboard_key, 9);
+        // Bloco do overlay incompleto: o resto no padrão.
+        let s: Settings =
+            serde_json::from_str(r#"{"overlay": {"goldDiff": false, "csPos": [0.5, 0.25]}}"#)
+                .unwrap();
+        assert!(!s.overlay.gold_diff && s.overlay.next_item);
+        assert_eq!(s.overlay.cs_pos, Some((0.5, 0.25)));
     }
 
     #[test]

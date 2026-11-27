@@ -7,6 +7,7 @@
   "lane.bottom": "Alsó",
   "lane.support": "Támogató",
   "tray.open": "Megnyitás",
+  "tray.overlayEdit": "Overlay beállítása",
   "tray.quit": "Kilépés",
   "tray.update": "Frissítés erre: v{version}…",
   "tray.tipUpdate": "Lobby Companion: elérhető a v{version}",

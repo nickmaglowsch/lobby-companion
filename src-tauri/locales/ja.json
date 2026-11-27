@@ -7,6 +7,7 @@
   "lane.bottom": "ボット",
   "lane.support": "サポート",
   "tray.open": "開く",
+  "tray.overlayEdit": "オーバーレイを調整",
   "tray.quit": "終了",
   "tray.update": "v{version}に更新…",
   "tray.tipUpdate": "Lobby Companion: v{version}があります",

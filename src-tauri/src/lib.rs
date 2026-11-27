@@ -1,5 +1,6 @@
 //! Lobby Companion: importa runas, feitiços e conjuntos de itens do lolalytics na seleção de campeões.
-//! Sem overlay: a janela abre na seleção e fecha quando a partida começa; fora disso, só o ícone na bandeja.
+//! A janela abre na seleção e fecha quando a partida começa; na partida, só o overlay (`overlay.rs`)
+//! e o ícone na bandeja.
 
 pub mod app;
 pub mod assets;
@@ -13,6 +14,7 @@ pub mod lcu;
 pub mod live;
 pub mod lola;
 pub mod metric;
+pub mod overlay;
 pub mod own_runes;
 pub mod picks;
 pub mod settings;
@@ -78,14 +80,21 @@ pub fn close_main(app: &AppHandle) {
 /// Menu da bandeja; com versão nova, o primeiro item avisa (e abre a janela, onde fica o botão).
 fn tray_menu(app: &AppHandle, update: Option<&str>) -> tauri::Result<Menu<tauri::Wry>> {
     let open = MenuItem::with_id(app, "open", t!("tray.open"), true, None::<&str>)?;
+    let edit = MenuItem::with_id(
+        app,
+        "overlay_edit",
+        t!("tray.overlayEdit"),
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", t!("tray.quit"), true, None::<&str>)?;
     match update {
         Some(v) => {
             let label = t!("tray.update", version = v.trim_start_matches('v'));
             let up = MenuItem::with_id(app, "update", label, true, None::<&str>)?;
-            Menu::with_items(app, &[&up, &open, &quit])
+            Menu::with_items(app, &[&up, &open, &edit, &quit])
         }
-        None => Menu::with_items(app, &[&open, &quit]),
+        None => Menu::with_items(app, &[&open, &edit, &quit]),
     }
 }
 
@@ -118,6 +127,12 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
             "open" | "update" => show_main(app),
+            "overlay_edit" => {
+                let on = app
+                    .try_state::<Arc<overlay::OverlayState>>()
+                    .is_some_and(|s| !s.editing());
+                overlay::set_edit(app, on);
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -163,6 +178,9 @@ async fn save_settings(
         let mut cur = shared.settings.lock().await;
         // O locale do cliente é do backend (`detect_locale`): a cópia da janela pode estar velha.
         settings.client_locale.clone_from(&cur.client_locale);
+        // Posições do overlay são salvas pela janela do overlay (`save_overlay_pos`).
+        settings.overlay.cs_pos = cur.overlay.cs_pos;
+        settings.overlay.item_pos = cur.overlay.item_pos;
         settings
             .save(&shared.settings_path)
             .map_err(|e| e.to_string())?;
@@ -353,6 +371,36 @@ async fn choose_runes(
     app::choose_runes(&app, shared.inner(), choice, page_id).await
 }
 
+/// Último quadro do overlay (a janela pede ao carregar; depois vem pelo evento `overlay`).
+#[tauri::command]
+fn overlay_frame() -> Option<overlay::Frame> {
+    overlay::last_frame()
+}
+
+/// Liga/desliga o modo de ajuste do overlay (arrastar as janelinhas).
+#[tauri::command]
+fn overlay_edit(app: AppHandle, on: bool) {
+    overlay::set_edit(&app, on);
+}
+
+/// Posição de uma janelinha do overlay ("cs" ou "item"), em fração da tela do jogo.
+#[tauri::command]
+async fn save_overlay_pos(
+    shared: State<'_, Arc<Shared>>,
+    widget: String,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    let pos = Some((x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)));
+    let mut s = shared.settings.lock().await;
+    match widget.as_str() {
+        "cs" => s.overlay.cs_pos = pos,
+        "item" => s.overlay.item_pos = pos,
+        _ => return Err(format!("janelinha desconhecida: {widget}")),
+    }
+    s.save(&shared.settings_path).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn get_update(app: AppHandle) -> Result<Option<update::UpdateInfo>, String> {
     Ok(update::pending(&app).await)
@@ -399,10 +447,9 @@ pub fn run() {
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             let cache_dir = app.path().app_cache_dir()?.join("lolalytics");
-            app.manage(Arc::new(Shared::new(
-                config_dir.join("settings.json"),
-                cache_dir,
-            )));
+            let shared = Arc::new(Shared::new(config_dir.join("settings.json"), cache_dir));
+            app.manage(shared.overlay.clone());
+            app.manage(shared);
             create_tray(app.handle())?;
             show_main(app.handle());
             tauri::async_runtime::spawn(app::worker(app.handle().clone()));
@@ -424,6 +471,9 @@ pub fn run() {
             save_own_runes_page,
             delete_own_runes,
             choose_runes,
+            overlay_frame,
+            overlay_edit,
+            save_overlay_pos,
             get_update,
             check_update,
             install_update

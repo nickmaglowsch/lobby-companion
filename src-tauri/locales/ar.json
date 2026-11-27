@@ -7,6 +7,7 @@
   "lane.bottom": "السفلي",
   "lane.support": "الدعم",
   "tray.open": "فتح",
+  "tray.overlayEdit": "ضبط طبقة العرض",
   "tray.quit": "خروج",
   "tray.update": "التحديث إلى v{version}…",
   "tray.tipUpdate": "Lobby Companion: الإصدار v{version} متاح",

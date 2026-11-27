@@ -1,6 +1,6 @@
 <script lang="ts">
   // Formulário de configurações (no Clássico fica no fim da página; nos outros, numa janela por cima).
-  import { tiers, regions, patches, championIcon } from "$lib/api";
+  import { api, tiers, regions, patches, championIcon } from "$lib/api";
   import { app, layouts } from "$lib/app.svelte";
   import { compare, LOCALES, t } from "$lib/i18n/index.svelte";
 
@@ -62,6 +62,24 @@
     {/if}
     <label><input type="checkbox" bind:checked={settings.checkUpdates} onchange={toggleUpdates} /> {t("settings.checkUpdates")}</label>
   </div>
+  <div class="checks overlay">
+    <span class="muted small">{t("settings.overlay")}</span>
+    <label><input type="checkbox" bind:checked={settings.overlay.enabled} onchange={() => app.save()} /> {t("settings.overlayEnabled")}</label>
+    {#if settings.overlay.enabled}
+      <label class="sub"><input type="checkbox" bind:checked={settings.overlay.inhibitors} onchange={() => app.save()} /> {t("settings.overlayInhibitors")}</label>
+      <label class="sub"><input type="checkbox" bind:checked={settings.overlay.nextItem} onchange={() => app.save()} /> {t("settings.overlayNextItem")}</label>
+      <label class="sub"><input type="checkbox" bind:checked={settings.overlay.csPerMin} onchange={() => app.save()} /> {t("settings.overlayCs")}</label>
+      <label class="sub"><input type="checkbox" bind:checked={settings.overlay.goldDiff} onchange={() => app.save()} /> {t("settings.overlayGoldDiff")}</label>
+      <label class="sub"><input type="checkbox" bind:checked={settings.overlay.goldGraph} onchange={() => app.save()} /> {t("settings.overlayGraph")}</label>
+      <label class="sub">{t("settings.overlayKey")}
+        <select bind:value={settings.overlay.scoreboardKey} onchange={() => app.save()}>
+          <option value={9}>Tab</option>
+          <option value={192}>`</option>
+        </select>
+      </label>
+      <span class="sub"><button onclick={() => api.overlayEdit(true)}>{t("settings.overlayAdjust")}</button></span>
+    {/if}
+  </div>
   <div class="own">
     <span class="muted small">{t("settings.ownPages")}</span>
     {#each [...app.ownPages].sort((a, b) => compare(app.champName(a.championId), app.champName(b.championId)) || a.id - b.id) as p (`${p.championId}:${p.id}`)}
@@ -96,6 +114,7 @@
   .lang span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .checks { display: grid; gap: 4px; font-size: 13px; }
   .checks .sub { padding-inline-start: 22px; color: var(--muted); }
+  .checks.overlay { margin-top: 10px; }
   .own { display: grid; gap: 4px; margin-top: 10px; font-size: 13px; }
   .own-row { display: flex; align-items: center; gap: 6px; }
   .own-row img { width: 20px; height: 20px; border-radius: 3px; }

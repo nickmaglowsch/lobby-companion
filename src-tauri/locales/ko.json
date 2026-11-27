@@ -7,6 +7,7 @@
   "lane.bottom": "바텀",
   "lane.support": "서포터",
   "tray.open": "열기",
+  "tray.overlayEdit": "오버레이 조정",
   "tray.quit": "종료",
   "tray.update": "v{version}(으)로 업데이트…",
   "tray.tipUpdate": "Lobby Companion: v{version} 사용 가능",

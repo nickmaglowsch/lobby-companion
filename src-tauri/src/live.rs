@@ -6,6 +6,7 @@
 //! de outros jogadores. Por isso tudo aqui passa por listas de campos permitidos: o que não está
 //! na lista é descartado (no diagnóstico só aparece o nome do campo, nunca o valor).
 
+use serde::Serialize;
 use serde_json::{Map, Value};
 use std::time::Duration;
 
@@ -14,6 +15,8 @@ pub const BASE: &str = "https://127.0.0.1:2999/liveclientdata";
 /// Campos de cada jogador (`allPlayers[]`) que o app pode usar.
 const PLAYER_FIELDS: &[&str] = &[
     "championName",
+    // "game_character_displayname_Chogath": nome interno do campeão (não é do jogador).
+    "rawChampionName",
     "team",
     "position",
     "level",
@@ -98,6 +101,154 @@ pub fn sanitize(all: &Value) -> Value {
         "allPlayers": players,
         "events": events,
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Team {
+    /// Azul (time 100, embaixo à esquerda).
+    Order,
+    /// Vermelho (time 200).
+    Chaos,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Player {
+    /// Alias do campeão (`rawChampionName` sem o prefixo, ex. "Chogath"); comparar sem caixa.
+    pub alias: String,
+    pub team: Team,
+    /// "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | "" (fora da ranqueada pode vir vazio).
+    pub position: String,
+    /// `(itemID, count)`.
+    pub items: Vec<(i64, u32)>,
+    pub cs: u32,
+    pub level: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Event {
+    pub name: String,
+    pub time: f64,
+    /// Estrutura do evento de inibidor (`InhibKilled`/`InhibRespawned`: "Barracks_T1_L1").
+    pub target: Option<String>,
+}
+
+/// O que o overlay usa da partida (já sem nomes de jogadores).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Game {
+    pub time: f64,
+    pub map: i64,
+    /// Ouro na sua mochila.
+    pub gold: f64,
+    pub level: u32,
+    pub players: Vec<Player>,
+    pub events: Vec<Event>,
+}
+
+fn alias_of(p: &Value) -> String {
+    let raw = p
+        .get("rawChampionName")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    match raw.rsplit_once("displayname_") {
+        Some((_, a)) if !a.is_empty() => a.to_string(),
+        _ => p
+            .get("championName")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+    }
+}
+
+/// Lê a resposta de `allgamedata` (passa por `sanitize` antes: nada de nomes).
+pub fn parse(all: &Value) -> Option<Game> {
+    let s = sanitize(all);
+    let time = s.pointer("/gameData/gameTime").and_then(Value::as_f64)?;
+    let u32_of = |v: Option<&Value>| {
+        v.and_then(Value::as_u64)
+            .and_then(|x| u32::try_from(x).ok())
+            .unwrap_or(0)
+    };
+    let players = s["allPlayers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            let team = match p.get("team").and_then(Value::as_str)? {
+                "ORDER" => Team::Order,
+                "CHAOS" => Team::Chaos,
+                _ => return None,
+            };
+            Some(Player {
+                alias: alias_of(p),
+                team,
+                position: p
+                    .get("position")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_ascii_uppercase(),
+                items: p["items"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|i| {
+                        let id = i.get("itemID").and_then(Value::as_i64)?;
+                        Some((id, u32_of(i.get("count")).max(1)))
+                    })
+                    .collect(),
+                cs: u32_of(p.pointer("/scores/creepScore")),
+                level: u32_of(p.get("level")),
+            })
+        })
+        .collect();
+    let events = s["events"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.get("EventName").and_then(Value::as_str)?.to_string();
+            let target = e
+                .get(name.as_str())
+                .and_then(Value::as_str)
+                .map(String::from);
+            Some(Event {
+                time: e.get("EventTime").and_then(Value::as_f64).unwrap_or(0.0),
+                target,
+                name,
+            })
+        })
+        .collect();
+    Some(Game {
+        time,
+        map: s
+            .pointer("/gameData/mapNumber")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+        gold: s
+            .pointer("/activePlayer/currentGold")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0),
+        level: u32_of(s.pointer("/activePlayer/level")),
+        players,
+        events,
+    })
+}
+
+/// Cliente da API da partida (certificado autoassinado aceito: só 127.0.0.1).
+pub fn client() -> Option<reqwest::Client> {
+    reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(2))
+        .build()
+        .ok()
+}
+
+/// `allgamedata` (só GET). `None` fora da partida ou na tela de carregamento.
+pub async fn fetch(http: &reqwest::Client) -> Option<Value> {
+    let r = http.get(format!("{BASE}/allgamedata")).send().await.ok()?;
+    if !r.status().is_success() {
+        return None;
+    }
+    r.json().await.ok()
 }
 
 /// `cargo run -- --live`: formato da API durante uma partida, sem nomes de jogadores.
@@ -208,5 +359,20 @@ mod tests {
         assert_eq!(s["events"][1]["InhibKilled"], json!("Barracks_T2_L1"));
         assert!(s["events"][0].get("KillerName").is_none());
         assert_eq!(s["gameData"]["gameTime"], json!(341.2));
+        let g = parse(&all).unwrap();
+        assert_eq!(g.time, 341.2);
+        assert_eq!(g.map, 11);
+        assert_eq!(g.gold, 671.5);
+        assert_eq!(g.players.len(), 1);
+        let p = &g.players[0];
+        assert_eq!(p.alias, "Chogath");
+        assert_eq!(p.team, Team::Order);
+        assert_eq!(p.position, "JUNGLE");
+        assert_eq!(p.items, vec![(3068, 1)]);
+        assert_eq!(p.cs, 85);
+        assert_eq!(g.events[1].target.as_deref(), Some("Barracks_T2_L1"));
+        assert_eq!(g.events[0].target, None);
+        // Fora da partida (sem tempo de jogo): nada.
+        assert!(parse(&json!({})).is_none());
     }
 }

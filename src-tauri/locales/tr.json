@@ -7,6 +7,7 @@
   "lane.bottom": "Alt",
   "lane.support": "Destek",
   "tray.open": "Aç",
+  "tray.overlayEdit": "Kaplamayı ayarla",
   "tray.quit": "Çık",
   "tray.update": "v{version} sürümüne güncelle…",
   "tray.tipUpdate": "Lobby Companion: v{version} mevcut",
