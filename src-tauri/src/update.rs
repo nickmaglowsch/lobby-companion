@@ -12,6 +12,7 @@
 use crate::app::Shared;
 use serde::Serialize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -21,7 +22,7 @@ const FIRST_CHECK: Duration = Duration::from_secs(8);
 const EVERY: Duration = Duration::from_secs(6 * 3600);
 const RELEASES: &str = "https://github.com/nickmaglowsch/lobby-companion/releases";
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInfo {
     pub version: String,
@@ -41,7 +42,11 @@ pub struct Progress {
 
 /// Atualização encontrada na última consulta (a que o botão instala).
 #[derive(Default)]
-pub struct Pending(pub Mutex<Option<Update>>);
+pub struct Pending {
+    update: Mutex<Option<Update>>,
+    /// Um download por vez: dois cliques não rodam dois instaladores.
+    installing: AtomicBool,
+}
 
 pub fn release_url(version: &str) -> String {
     format!("{RELEASES}/tag/v{}", version.trim_start_matches('v'))
@@ -65,7 +70,7 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
         .await
         .map_err(|e| crate::t!("update.checkFailed", error = e))?;
     let found = update.as_ref().map(info);
-    *app.state::<Pending>().0.lock().await = update;
+    *app.state::<Pending>().update.lock().await = update;
     crate::set_tray_update(app, found.as_ref().map(|i| i.version.as_str()));
     if let Some(i) = &found {
         let _ = app.emit("update-available", i);
@@ -74,7 +79,12 @@ pub async fn check(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
 }
 
 pub async fn pending(app: &AppHandle) -> Option<UpdateInfo> {
-    app.state::<Pending>().0.lock().await.as_ref().map(info)
+    app.state::<Pending>()
+        .update
+        .lock()
+        .await
+        .as_ref()
+        .map(info)
 }
 
 /// Laço da bandeja: consulta ao abrir e a cada 6 h, se a configuração deixar. Erro de rede é
@@ -98,16 +108,20 @@ pub async fn watcher(app: AppHandle) {
 /// Baixa, confere a assinatura e roda o instalador. No Windows o processo termina aqui
 /// (o instalador reabre o app); só volta se der erro.
 pub async fn install(app: &AppHandle) -> Result<(), String> {
-    let update = app
-        .state::<Pending>()
-        .0
+    let pending = app.state::<Pending>();
+    let update = pending
+        .update
         .lock()
         .await
         .clone()
         .ok_or_else(|| crate::t!("update.none"))?;
+    // Já baixando (clique duplo, janela e bandeja): o primeiro segue e mostra o progresso.
+    if pending.installing.swap(true, Ordering::AcqRel) {
+        return Ok(());
+    }
     let emitter = app.clone();
     let mut downloaded: u64 = 0;
-    update
+    let result = update
         .download_and_install(
             move |chunk, total| {
                 downloaded += chunk as u64;
@@ -115,8 +129,11 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
             },
             || {},
         )
-        .await
-        .map_err(|e| crate::t!("update.failed", error = e))?;
+        .await;
+    if let Err(e) = result {
+        pending.installing.store(false, Ordering::Release);
+        return Err(crate::t!("update.failed", error = e));
+    }
     // Fora do Windows o plugin não reinicia sozinho.
     app.restart()
 }

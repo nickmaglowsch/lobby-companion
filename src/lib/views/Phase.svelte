@@ -1,8 +1,7 @@
 <script lang="ts">
   // Layout "Por fase": a tela inteira é da etapa atual da seleção (bans → escolha → build).
   // A etapa segue o cliente sozinha; dá para olhar outra clicando nos passos de cima.
-  import { openUrl } from "@tauri-apps/plugin-opener";
-  import { championIcon, icon, pct, LANES, coreSets, firstBack, situationalItems } from "$lib/api";
+  import { championIcon, icon, pct, laneName, api } from "$lib/api";
   import { app, type Stage } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
   import TopBar from "./parts/TopBar.svelte";
@@ -28,8 +27,8 @@
   const step = $derived<Stage>(chosen ?? app.stage);
   const stageIndex = $derived(STEPS.findIndex(([s]) => s === app.stage));
   const b = $derived(app.build);
+  const core = $derived(app.cores[0]);
   const bans = $derived(app.snap?.bans ?? null);
-  const core = $derived(b ? coreSets(b, app.assets, app.minGames)[0] : undefined);
   const item = (id: number | string) => app.assets?.items[String(id)];
   const me = $derived(bans?.laneFor ?? null);
 </script>
@@ -55,8 +54,8 @@
           <h2>{bans.byTier ? t("vPhase.strongestInLane") : t("vPhase.byYourTeam")} <MetricToggle /> {#if bans.loading}<span class="muted small">{t("common.calculating")}</span>{/if}</h2>
           <p class="muted small sub">
             {#if bans.byTier}
-              {bans.lane ? t("vPhase.noneDeclaredLane", { lane: LANES[bans.lane] ?? bans.lane }) : t("vPhase.noneDeclared")}
-              {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>{t("vPhase.view")}</button>{/if}
+              {bans.lane ? t("vPhase.noneDeclaredLane", { lane: laneName(bans.lane) }) : t("vPhase.noneDeclared")}
+              {#if bans.pageUrl}<button class="link" onclick={() => api.openUrl(bans.pageUrl!)}>{t("vPhase.view")}</button>{/if}
             {:else}
               {#each bans.basedOn as a (a.championId)}<img class="mini" class:me={a.me} src={championIcon(a.championId)} alt="" title={app.champName(a.championId)} />{/each}
               {t("vPhase.dropsYourWr")}
@@ -68,7 +67,7 @@
           <h2>{t("views.vsYourPick")}</h2>
           <p class="muted small sub">
             {#if me}<img class="mini me" src={championIcon(me.championId)} alt="" /> {me.lane
-              ? t("vPhase.badMatchupLane", { champ: app.champName(me.championId), lane: LANES[me.lane] ?? me.lane })
+              ? t("vPhase.badMatchupLane", { champ: app.champName(me.championId), lane: laneName(me.lane) })
               : t("vPhase.badMatchup", { champ: app.champName(me.championId) })}{:else}&nbsp;{/if}
           </p>
           {#if bans.lanePicks.length}<BanList list={bans.lanePicks} variant="cards" />{:else}<p class="muted small">{bans.laneNote ?? "—"}</p>{/if}
@@ -81,7 +80,7 @@
     <main class="picks">
       {#if app.snap?.picks}
         {@const p = app.snap.picks}
-        {@const laneLabel = LANES[p.lane ?? ""]}
+        {@const laneLabel = laneName(p.lane)}
         <h2>{laneLabel ? t("vPhase.forLane", { lane: laneLabel }) : t("vPhase.forYourPosition")}
           <span class="muted small">· {p.enemies.length
             ? t(p.pool === "tier" ? "vPhase.poolTierVs" : "vPhase.poolOwnVs", { enemies: p.enemies.map(app.champName).join(", ") })
@@ -117,11 +116,11 @@
           <div>
             <div class="bname">{app.champ?.name ?? b.slug}</div>
             <div class="muted small">
-              {#if b.lanes.filter(([, x]) => x >= 1).length > 1}
+              {#if app.lanes.length > 1}
                 <select class="lane" value={b.lane} onchange={(e) => app.changeLane(e.currentTarget.value)}>
-                  {#each b.lanes.filter(([, x]) => x >= 1) as [lane, x] (lane)}<option value={lane}>{LANES[lane] ?? lane} {Math.round(x)}%</option>{/each}
+                  {#each app.lanes as [lane, x] (lane)}<option value={lane}>{laneName(lane)} {Math.round(x)}%</option>{/each}
                 </select>
-              {:else}{LANES[b.lane] ?? b.lane}{/if}
+              {:else}{laneName(b.lane)}{/if}
               · WR <b class="txt">{pct(b.wr)}</b>{#if b.rank} · #{b.rank}{/if} · {b.patch}
             </div>
           </div>
@@ -140,10 +139,10 @@
             <div class="pstep"><span class="lbl">{t("common.start")} · {app.startText(0)}</span>
               <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div></div>
           {/if}
-          {#if firstBack(b, app.assets, app.minGames).length}
+          {#if app.firstBackItems.length}
             <span class="arrow">›</span>
             <div class="pstep"><span class="lbl">{t("common.firstBack")}</span>
-              <div class="icons">{#each firstBack(b, app.assets, app.minGames).slice(0, 2) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div></div>
+              <div class="icons">{#each app.firstBackItems.slice(0, 2) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div></div>
           {/if}
           {#if core}
             <span class="arrow">›</span>
@@ -153,7 +152,7 @@
         </div>
         <h2>{t("vPhase.later")}</h2>
         <div class="table">
-          {#each [[t("common.boots"), b.boots, b.boots, true], [t("common.itemN", { n: 4 }), b.slots[3] ?? [], b.slots[3] ?? [], true], [t("common.itemN", { n: 5 }), b.slots[4] ?? [], b.slots[4] ?? [], true], [t("common.situationalShort"), situationalItems(b, app.assets, app.minGames, app.metric), b.winningItems ?? [], false]] as const as [label, list, from, slot] (label)}
+          {#each [[t("common.boots"), b.boots, b.boots, true], [t("common.itemN", { n: 4 }), b.slots[3] ?? [], b.slots[3] ?? [], true], [t("common.itemN", { n: 5 }), b.slots[4] ?? [], b.slots[4] ?? [], true], [t("common.situationalShort"), app.situational, b.winningItems ?? [], false]] as const as [label, list, from, slot] (label)}
             {#if list.length}
               <span class="lbl">{label}</span>
               <div class="icons">{#each list.filter((i) => item(i.id)).slice(0, 3) as it (it.id)}<Item {it} {from} {slot} size={32} />{/each}</div>
@@ -163,7 +162,7 @@
         {#if app.composition?.need}<DamageMix mode="def" />{/if}
         <div class="foot">
           <VsPicker size={26} />
-          {#if app.snap?.pageUrl}<button class="link" onclick={() => openUrl(app.snap!.pageUrl!)}>lolalytics ↗</button>{/if}
+          {#if app.snap?.pageUrl}<button class="link" onclick={() => api.openUrl(app.snap!.pageUrl!)}>lolalytics ↗</button>{/if}
         </div>
       </section>
     </main>
@@ -211,8 +210,5 @@
   .table .icons { gap: 10px; }
   .foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
   .empty { padding: 40px 24px; text-align: center; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
 </style>

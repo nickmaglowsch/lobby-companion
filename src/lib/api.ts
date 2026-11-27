@@ -241,15 +241,16 @@ export interface OverlayFrame {
 export interface UpdateInfo { version: string; current: string; notes: string | null; url: string }
 export interface UpdateProgress { downloaded: number; total: number | null }
 
-/** Fora do Tauri (navegador com `npm run dev`) a página usa dados sintéticos de `mock.ts`. */
-const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+/** Fora do Tauri (navegador com `npm run dev`) a página usa dados sintéticos de `mock.ts`.
+ *  Só no `vite dev`: no build o mock (e as traduções do Rust que ele lê) nem entra no pacote. */
+const browserMock = import.meta.env.DEV && typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window);
 
 let mockAssetsWithIcons: Promise<Assets> | undefined;
 let mockBanTurnSet = false;
 let mockLang: Promise<void> | undefined;
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (inTauri) return invoke<T>(cmd, args);
+  if (!browserMock) return invoke<T>(cmd, args);
   const m = await import("./mock");
   // Para ver cada layout e etapa no navegador: ?layout=phase|grid|tabs|classic&fase=bans|picks|build
   const q = new URLSearchParams(location.search);
@@ -328,36 +329,38 @@ export const api = {
   deleteOwnRunes: (championId: number, pageId: number) => call<OwnPage[]>("delete_own_runes", { championId, pageId }),
   /** Mais jogada / Maior WR / uma página sua no campeão em tela (o backend leva para o cliente). */
   chooseRunes: (choice: "pick" | "win" | "own", pageId: number | null) => call<OwnPage[]>("choose_runes", { choice, pageId }),
-  onSnapshot: (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
-    inTauri ? listen<Snapshot>("snapshot", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  onSnapshot: (cb: (s: Snapshot) => void) => on("snapshot", cb),
   /** Atualização já encontrada nesta execução (a janela é recriada a cada seleção). */
   update: () => call<UpdateInfo | null>("get_update"),
   /** Consulta o GitHub agora. */
   checkUpdate: () => call<UpdateInfo | null>("check_update"),
   /** Baixa, confere a assinatura e instala; o app fecha e o instalador o abre de novo. */
   installUpdate: () => call<void>("install_update"),
-  onUpdate: (cb: (u: UpdateInfo) => void): Promise<UnlistenFn> =>
-    inTauri ? listen<UpdateInfo>("update-available", (e) => cb(e.payload)) : Promise.resolve(() => {}),
-  onUpdateProgress: (cb: (p: UpdateProgress) => void): Promise<UnlistenFn> =>
-    inTauri ? listen<UpdateProgress>("update-progress", (e) => cb(e.payload)) : Promise.resolve(() => {}),
+  onUpdate: (cb: (u: UpdateInfo) => void) => on("update-available", cb),
+  onUpdateProgress: (cb: (p: UpdateProgress) => void) => on("update-progress", cb),
   /** Último quadro do overlay (depois chegam pelo `onOverlay`). */
   overlayFrame: () => call<OverlayFrame | null>("overlay_frame"),
   /** Liga/desliga o modo de ajuste do overlay. */
   overlayEdit: (on: boolean) => call<void>("overlay_edit", { on }),
   /** Posição de uma janelinha do overlay, em fração da tela do jogo. */
   saveOverlayPos: (widget: "cs" | "item", x: number, y: number) => call<void>("save_overlay_pos", { widget, x, y }),
-  onOverlay: (cb: (f: OverlayFrame) => void): Promise<UnlistenFn> =>
-    inTauri ? listen<OverlayFrame>("overlay", (e) => cb(e.payload)) : Promise.resolve(() => {}),
-  onOverlayTab: (cb: (down: boolean) => void): Promise<UnlistenFn> =>
-    inTauri ? listen<boolean>("overlay-tab", (e) => cb(e.payload)) : Promise.resolve(() => {}),
-  /** Versão instalada ("dev" no navegador). */
-  version: async (): Promise<string> => (inTauri ? (await import("@tauri-apps/api/app")).getVersion() : "dev"),
+  onOverlay: (cb: (f: OverlayFrame) => void) => on("overlay", cb),
+  onOverlayTab: (cb: (down: boolean) => void) => on("overlay-tab", cb),
+  /** Versão instalada ("dev" no navegador); o comando do `getVersion` de `@tauri-apps/api/app`. */
+  version: () => (browserMock ? Promise.resolve("dev") : invoke<string>("plugin:app|version")),
+  /** Abre o link no navegador do sistema; o comando do `openUrl` de `@tauri-apps/plugin-opener`. */
+  openUrl: (url: string) => (browserMock ? void open(url, "_blank") : void invoke("plugin:opener|open_url", { url })),
 };
+
+/** Evento do backend (no navegador, com o mock, nunca chega). */
+function on<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn> {
+  return browserMock ? Promise.resolve(() => {}) : listen<T>(event, (e) => cb(e.payload));
+}
 
 /** Ícones servidos pelo backend a partir do cliente (protocolo `lcu`). */
 export function icon(path: string | undefined | null): string {
   if (!path) return "";
-  if (!inTauri) return cdragonUrl(path);
+  if (browserMock) return cdragonUrl(path);
   const windows = navigator.userAgent.includes("Windows");
   return (windows ? "http://lcu.localhost" : "lcu://localhost") + path;
 }
@@ -366,31 +369,10 @@ export function championIcon(id: number): string {
   return icon(`/lol-game-data/assets/v1/champion-icons/${id}.png`);
 }
 
-export { pct, pts, num } from "./i18n/index.svelte";
+export { pct, pts, num, laneName, phaseName } from "./i18n/index.svelte";
 
-const LANE_IDS = ["top", "jungle", "middle", "bottom", "support"];
-const PHASE_IDS = [
-  "None", "Lobby", "Matchmaking", "ReadyCheck", "ChampSelect", "GameStart", "InProgress", "Reconnect",
-  "WaitingForStats", "PreEndOfGame", "EndOfGame",
-];
-
-/** Objeto de leitura que traduz na hora (`LANES.jungle` = "Selva" em pt_BR); `undefined` fora da lista. */
-function translated(ids: string[], prefix: string): Record<string, string> {
-  return new Proxy({} as Record<string, string>, {
-    get: (_, k) => (typeof k === "string" && ids.includes(k) ? t(`${prefix}.${k}`) : undefined),
-    has: (_, k) => typeof k === "string" && ids.includes(k),
-    ownKeys: () => ids,
-    getOwnPropertyDescriptor: (_, k) =>
-      typeof k === "string" && ids.includes(k)
-        ? { enumerable: true, configurable: true, value: t(`${prefix}.${k}`) }
-        : undefined,
-  });
-}
-
-/** Nomes das lanes do lolalytics no idioma da janela. */
-export const LANES = translated(LANE_IDS, "lane");
-/** Fases do cliente (`gameflow-phase`) no idioma da janela. */
-export const PHASES = translated(PHASE_IDS, "phase");
+/** Lanes do lolalytics (o nome no idioma da janela vem de `laneName`). */
+export const LANE_IDS = ["top", "jungle", "middle", "bottom", "support"];
 
 /** Filtros de elo (os nomes vêm da tradução). */
 export const tiers = (): [string, string][] =>
@@ -464,10 +446,15 @@ export function situationalItems(build: Build, assets: Assets | null, minGames: 
     .slice(0, EXTRA_ITEMS);
 }
 
-
 /** A página própria no formato das do lolalytics (sem WR nem amostra). */
 export function ownRuneSet(p: OwnPage): RuneSet {
   return { primary: p.perks.slice(0, 4), secondary: p.perks.slice(4, 6), shards: p.perks.slice(6, 9), wr: 0, n: 0 };
+}
+
+/** Árvores principal e secundária de uma página (a secundária é a outra árvore com as duas runas dela). */
+export function runeTrees(styles: Style[] | undefined, set: RuneSet): [Style | undefined, Style | undefined] {
+  const primary = styles?.find((s) => s.perks.includes(set.primary[0]));
+  return [primary, styles?.find((s) => s.id !== primary?.id && set.secondary.every((p) => s.perks.includes(p)))];
 }
 
 /** WR da runa na posição `i` da página (0–3 primária, 4–5 secundária, 6–8 fragmentos), como em `RuneAlternatives`. */

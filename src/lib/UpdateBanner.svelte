@@ -2,7 +2,6 @@
   // Aviso de versão nova: aparece no topo quando `update.rs` acha uma release mais nova no GitHub.
   // Só instala no clique. "Depois" esconde esta versão por 24 h (guardado no navegador do app).
   import { onMount } from "svelte";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, type UpdateInfo, type UpdateProgress } from "$lib/api";
   import { t } from "$lib/i18n/index.svelte";
 
@@ -47,6 +46,7 @@
   }
 
   async function install() {
+    if (installing) return;
     installing = true;
     error = null;
     try {
@@ -59,13 +59,20 @@
   }
 
   onMount(() => {
-    const unlisten: (() => void)[] = [];
-    (async () => {
-      show(await api.update());
-      unlisten.push(await api.onUpdate(show));
-      unlisten.push(await api.onUpdateProgress((p) => (progress = p)));
-    })();
-    return () => unlisten.forEach((u) => u());
+    // Ouve antes de perguntar: o aviso que chega no meio vale mais que a resposta (e não se perde).
+    let heard = false;
+    const listening = [
+      api.onUpdate((u) => {
+        heard = true;
+        show(u);
+      }),
+      api.onUpdateProgress((p) => (progress = p)),
+    ];
+    Promise.all(listening)
+      .then(() => api.update())
+      .then((u) => { if (!heard) show(u); }, () => {});
+    // Desmontado antes de os ouvintes ficarem prontos: eles saem assim que ficarem.
+    return () => listening.forEach((l) => l.then((un) => un()));
   });
 </script>
 
@@ -85,7 +92,7 @@
       <div class="row">
         <button class="primary" onclick={install} disabled={inChampSelect}
           title={inChampSelect ? t("updateBanner.champSelect") : ""}>{t("updateBanner.install")}</button>
-        <button class="link" onclick={() => openUrl(info!.url)}>{t("updateBanner.notes")}</button>
+        <button class="link" onclick={() => api.openUrl(info!.url)}>{t("updateBanner.notes")}</button>
         <button class="link later" onclick={later}>{t("updateBanner.later")}</button>
       </div>
       {#if inChampSelect && !floating}
@@ -101,14 +108,9 @@
   .update.floating { position: fixed; inset-inline-end: 12px; bottom: 52px; z-index: 10; width: 300px; padding: 6px 10px; gap: 4px; font-size: 13px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.6); }
   p { margin: 0; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  button { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--gold); }
-  button:disabled { opacity: 0.5; cursor: default; }
-  button.primary { background: #1e282d; border-color: var(--gold); color: var(--gold); font-weight: 600; }
-  button.link { border: none; background: none; color: var(--gold); padding: 4px 6px; }
+  /* O resto dos botões vem do estilo global (`+page.svelte`). */
+  .link { padding: 4px 6px; }
   .later { margin-inline-start: auto; color: var(--muted); }
-  button.later { color: var(--muted); }
-  .muted { color: var(--muted); }
   .small { font-size: 12px; }
   .bad { color: var(--bad); }
   .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }

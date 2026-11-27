@@ -1,5 +1,11 @@
 //! Estado do app e o laço principal: espera o cliente, ouve o WebSocket e reage
 //! à seleção de campeões (buscar build → importar → avisar a janela).
+//!
+//! Concorrência: o laço do WebSocket é o único que escreve o estado da seleção ([`Selection`]);
+//! buscas e contas rodam em tarefas soltas. Cada tipo de conta (build em tela, bans, picks) tem
+//! um contador de geração: quem começa sobe o contador, e só a geração atual escreve no snapshot
+//! (conferido com o snapshot travado, em [`update_if`]). Assim uma resposta atrasada nunca
+//! escreve por cima de uma mais nova, nem deixa "carregando" para trás.
 
 use crate::assets::{Assets, lolalytics_slug};
 use crate::bans::{self, BanPick};
@@ -8,7 +14,7 @@ use crate::i18n::{self, Lang};
 use crate::import::{ban, itemset, runes, spells};
 use crate::lcu::ws::{self, LcuEvent};
 use crate::lcu::{self, Lcu};
-use crate::lola::extra::{self, Counters, Team, TierList};
+use crate::lola::extra::{self, Counters, Team};
 use crate::lola::model::{self, Build};
 use crate::lola::{Ep, Lolalytics, Query};
 use crate::metric::Metric;
@@ -19,11 +25,12 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::task::AbortHandle;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Outcome {
@@ -87,11 +94,6 @@ impl Scope {
         items: false,
         spells: false,
     };
-    pub const ITEMS: Self = Self {
-        runes: false,
-        items: true,
-        spells: false,
-    };
 }
 
 /// Tudo o que a janela mostra. Vai inteiro no evento "snapshot".
@@ -110,7 +112,8 @@ pub struct Snapshot {
     /// Lane do lolalytics (`None` = a mais jogada do campeão).
     pub lane: Option<String>,
     pub loading: bool,
-    pub build: Option<Build>,
+    /// `Arc`: importar e a composição leem o build sem copiar.
+    pub build: Option<Arc<Build>>,
     pub page_url: Option<String>,
     pub warning: Option<String>,
     pub error: Option<String>,
@@ -189,34 +192,43 @@ pub struct SynergyAdvice {
     pub page_url: Option<String>,
 }
 
+/// O que o laço do WebSocket leu da seleção atual. Uma trava só: quem lê vê tudo da mesma sessão.
+#[derive(Default)]
+struct Selection {
+    me: Option<Me>,
+    draft: Option<Draft>,
+    /// Sua lane do lolalytics (posição atribuída), atualizada antes de recalcular bans e picks.
+    my_lane: Option<String>,
+    /// "campeão:lane" já importado nesta seleção (importa de novo só se trocar).
+    auto_key: Option<String>,
+    /// Maestria do jogador local `[(campeão, pontos)]`, lida uma vez por seleção (GET).
+    mastery: Option<Vec<(i64, u64)>>,
+}
+
 pub struct Shared {
     pub lcu: RwLock<Option<Lcu>>,
     pub assets: RwLock<Option<Arc<Assets>>>,
     pub snapshot: Mutex<Snapshot>,
     pub settings: Mutex<Settings>,
     pub settings_path: PathBuf,
+    /// Layout "classic" (o tamanho da janela depende dele): cópia das configurações para abrir a
+    /// janela sem esperar a trava delas.
+    pub classic_layout: AtomicBool,
     pub lola: Lolalytics,
     icons: Mutex<HashMap<String, (Vec<u8>, String)>>,
     /// `assets.json` e `icons/` (cópia do cliente para usar sem ele aberto).
     data_dir: PathBuf,
-    me: Mutex<Option<Me>>,
-    /// "campeão:lane" do build em tela; respostas atrasadas de outro campeão são descartadas.
-    current_key: Mutex<Option<String>>,
-    /// "campeão:lane" já importado nesta seleção (importa de novo só se trocar).
-    auto_key: Mutex<Option<String>>,
+    /// Download dos ícones das runas da conexão atual (trava síncrona: nunca atravessa `.await`).
+    prefetch: std::sync::Mutex<Option<AbortHandle>>,
+    select: Mutex<Selection>,
+    /// Geração do build em tela (`load_build`): respostas atrasadas são descartadas.
+    build_gen: AtomicU64,
     /// Uma importação por vez: cliques rápidos não podem intercalar apagar/criar página.
     import_lock: Mutex<()>,
-    /// Campeão do outro lado e a lane dele (escolhidos na janela).
-    vs: Mutex<Option<(i64, Option<String>)>>,
-    draft: Mutex<Option<Draft>>,
-    /// Só a conta de bans mais nova escreve no snapshot.
+    /// Geração da conta de bans.
     bans_gen: AtomicU64,
-    /// Idem para a sugestão de pick.
+    /// Geração da sugestão de pick e da sinergia.
     picks_gen: AtomicU64,
-    /// Sua lane do lolalytics (posição atribuída), atualizada antes de recalcular bans e picks.
-    my_lane: Mutex<Option<String>>,
-    /// Maestria do jogador local `[(campeão, pontos)]`, lida uma vez por seleção (GET).
-    mastery: Mutex<Option<Vec<(i64, u64)>>>,
     /// Páginas de runas próprias (`rune-pages.json`, ao lado de `settings.json`).
     own_runes: Mutex<OwnPages>,
     own_runes_path: PathBuf,
@@ -246,21 +258,18 @@ impl Shared {
                 locale: locale.into(),
                 ..Default::default()
             }),
+            classic_layout: AtomicBool::new(settings.is_classic()),
             settings: Mutex::new(settings),
             settings_path,
             lola: Lolalytics::new(cache_dir),
             icons: Mutex::new(HashMap::new()),
             data_dir,
-            me: Mutex::new(None),
-            current_key: Mutex::new(None),
-            auto_key: Mutex::new(None),
+            prefetch: std::sync::Mutex::default(),
+            select: Mutex::default(),
+            build_gen: AtomicU64::new(0),
             import_lock: Mutex::new(()),
-            vs: Mutex::new(None),
-            draft: Mutex::new(None),
             bans_gen: AtomicU64::new(0),
             picks_gen: AtomicU64::new(0),
-            my_lane: Mutex::new(None),
-            mastery: Mutex::new(None),
             own_runes: Mutex::new(OwnPages::load(&own_runes_path)),
             own_runes_path,
             system_locale,
@@ -272,15 +281,16 @@ impl Shared {
 /// Recalcula o idioma pelas configurações; se mudou, avisa a janela (que recarrega os textos),
 /// troca o menu da bandeja e refaz as notas de bans e picks no idioma novo.
 pub async fn apply_locale(app: &AppHandle, shared: &Arc<Shared>) {
-    let locale = shared
-        .settings
-        .lock()
-        .await
-        .locale(shared.system_locale.as_deref());
-    if !i18n::set_current(locale) {
+    // Troca com as configurações travadas: duas chamadas juntas aplicam na ordem em que leram.
+    let changed = {
+        let s = shared.settings.lock().await;
+        i18n::set_current(s.locale(shared.system_locale.as_deref()))
+    };
+    if !changed {
         return;
     }
-    update(app, shared, |s| s.locale = locale.into()).await;
+    // O idioma em vigor agora (não o lido acima): a última escrita no snapshot é sempre o atual.
+    update(app, shared, |s| s.locale = Lang::current().locale.into()).await;
     crate::refresh_tray(app).await;
     let (app, shared) = (app.clone(), shared.clone());
     tauri::async_runtime::spawn(async move {
@@ -313,13 +323,42 @@ async fn detect_locale(app: &AppHandle, shared: &Arc<Shared>, client: &Lcu) {
     apply_locale(app, shared).await;
 }
 
-async fn update(app: &AppHandle, shared: &Shared, f: impl FnOnce(&mut Snapshot)) {
-    let snap = {
-        let mut s = shared.snapshot.lock().await;
-        f(&mut s);
-        s.clone()
-    };
-    let _ = app.emit("snapshot", snap);
+/// Muda o snapshot e manda para a janela **com a trava segura**: os eventos chegam na ordem em
+/// que o estado mudou (soltar antes de mandar deixava um snapshot velho chegar por último) e
+/// vão por referência, sem copiar o snapshot.
+pub(crate) async fn update<R>(
+    app: &AppHandle,
+    shared: &Shared,
+    f: impl FnOnce(&mut Snapshot) -> R,
+) -> R {
+    let mut s = shared.snapshot.lock().await;
+    let r = f(&mut s);
+    let _ = app.emit_to(crate::MAIN, "snapshot", &*s);
+    r
+}
+
+/// Como [`update`], mas só se `mine` ainda é a geração atual de `generation`. A conferência é
+/// feita com o snapshot travado: uma conta nova sobe o contador antes de escrever, então escreve
+/// depois desta; e uma conta velha nunca escreve por cima da nova.
+async fn update_if<R>(
+    app: &AppHandle,
+    shared: &Shared,
+    generation: &AtomicU64,
+    mine: u64,
+    f: impl FnOnce(&mut Snapshot) -> R,
+) -> Option<R> {
+    let mut s = shared.snapshot.lock().await;
+    if generation.load(Ordering::SeqCst) != mine {
+        return None;
+    }
+    let r = f(&mut s);
+    let _ = app.emit_to(crate::MAIN, "snapshot", &*s);
+    Some(r)
+}
+
+/// Começa uma geração nova (as contas em andamento da anterior deixam de escrever).
+fn next_gen(generation: &AtomicU64) -> u64 {
+    generation.fetch_add(1, Ordering::SeqCst) + 1
 }
 
 /// Laço principal (roda o tempo todo; leve quando o cliente está fechado ou em partida).
@@ -336,21 +375,32 @@ pub async fn worker(app: AppHandle) {
             continue;
         };
         // O lockfile aparece antes da API responder enquanto o cliente abre.
-        let phase = match client.get("/lol-gameflow/v1/gameflow-phase").await {
-            Ok(v) => v.as_str().unwrap_or("None").to_string(),
-            Err(_) => {
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                continue;
-            }
-        };
+        if client.get("/lol-gameflow/v1/gameflow-phase").await.is_err() {
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            continue;
+        }
         match Assets::load(&client).await {
             Ok(a) => {
                 let a = Arc::new(a);
                 *shared.assets.write().await = Some(a.clone());
-                // Cópia para usar sem o cliente; os ícones das runas vêm junto, em segundo plano.
-                let _ = a.save_cached(&shared.data_dir.join("assets.json"));
-                let shared = shared.clone();
-                tokio::spawn(async move { prefetch_rune_icons(&shared, &a).await });
+                // Cópia para usar sem o cliente e os ícones das runas, em segundo plano (o laço
+                // segue para a fase e a sessão). Reconectou no meio da anterior: a velha para
+                // (as duas baixariam os mesmos ícones).
+                let task = {
+                    let shared = shared.clone();
+                    tokio::spawn(async move {
+                        let _ = a.save_cached(&shared.data_dir.join("assets.json"));
+                        prefetch_rune_icons(&shared, &a).await
+                    })
+                };
+                let old = shared
+                    .prefetch
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .replace(task.abort_handle());
+                if let Some(old) = old {
+                    old.abort();
+                }
             }
             Err(e) => {
                 update(&app, &shared, |s| {
@@ -368,15 +418,25 @@ pub async fn worker(app: AppHandle) {
             s.error = None;
         })
         .await;
+        // Assina antes de ler a fase e a sessão: o que mudar depois da leitura chega como evento
+        // (antes, uma troca de fase durante o carregamento dos dados do cliente se perdia).
+        let (tx, mut rx) = mpsc::channel(64);
+        let Ok(events) = ws::subscribe(&creds, tx).await else {
+            disconnect(&app, &shared).await;
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            continue;
+        };
+        let ws_task = tokio::spawn(events);
+        let phase = match client.get("/lol-gameflow/v1/gameflow-phase").await {
+            Ok(Value::String(p)) => p,
+            _ => "None".into(),
+        };
         handle_phase(&app, &shared, &phase).await;
         if phase == "ChampSelect"
             && let Ok(sess) = client.get("/lol-champ-select/v1/session").await
         {
             handle_session(&app, &shared, Some(sess)).await;
         }
-
-        let (tx, mut rx) = mpsc::channel(64);
-        let ws_task = tokio::spawn(ws::run(creds.clone(), tx));
         while let Some(ev) = rx.recv().await {
             match ev {
                 LcuEvent::Phase(p) => handle_phase(&app, &shared, &p).await,
@@ -391,8 +451,11 @@ pub async fn worker(app: AppHandle) {
 
 async fn disconnect(app: &AppHandle, shared: &Shared) {
     let was = shared.lcu.write().await.take().is_some();
-    *shared.me.lock().await = None;
-    *shared.draft.lock().await = None;
+    {
+        let mut sel = shared.select.lock().await;
+        sel.me = None;
+        sel.draft = None;
+    }
     if was || shared.snapshot.lock().await.connected {
         update(app, shared, |s| {
             s.connected = false;
@@ -409,23 +472,22 @@ async fn disconnect(app: &AppHandle, shared: &Shared) {
 async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
     // Diagnóstico no terminal (`npm run tauri dev`).
     eprintln!("[fase] {phase}");
-    let close_in_game = shared.settings.lock().await.close_in_game;
     match phase {
         "ChampSelect" => {
-            *shared.auto_key.lock().await = None;
-            *shared.me.lock().await = None;
-            // Seleção nova: o confronto e os bans da anterior não valem mais.
-            *shared.vs.lock().await = None;
-            *shared.draft.lock().await = None;
-            *shared.my_lane.lock().await = None;
-            *shared.mastery.lock().await = None;
+            *shared.select.lock().await = Selection::default();
             // Overlay: em tela cheia exclusiva ele não aparece. O jogo ainda está fechado aqui.
             let overlay_on = shared.settings.lock().await.overlay.enabled;
             let switched = overlay_on && crate::overlay::ensure_borderless();
             update(app, shared, |s| {
+                // Seleção nova: o confronto, os bans e as buscas em andamento (do lobby ou da
+                // seleção anterior) não valem mais; nada delas escreve nem importa daqui em diante.
+                for g in [&shared.build_gen, &shared.bans_gen, &shared.picks_gen] {
+                    next_gen(g);
+                }
                 s.phase = phase.into();
                 s.in_champ_select = true;
                 s.borderless_switched = switched;
+                s.loading = false;
                 s.locked = false;
                 s.import = None;
                 s.error = None;
@@ -449,7 +511,7 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
                 s.can_ban = false;
             })
             .await;
-            if close_in_game {
+            if shared.settings.lock().await.close_in_game {
                 crate::close_main(app);
             }
             // Overlay: o laço espera a API da partida responder e termina com a partida.
@@ -461,10 +523,16 @@ async fn handle_phase(app: &AppHandle, shared: &Arc<Shared>, phase: &str) {
 }
 
 async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<Value>) {
-    let Some(me) = session.as_ref().and_then(champselect::parse) else {
-        *shared.me.lock().await = None;
-        *shared.auto_key.lock().await = None;
-        *shared.draft.lock().await = None;
+    let Some((session, me)) = session
+        .as_ref()
+        .and_then(|s| Some((s, champselect::parse(s)?)))
+    else {
+        {
+            let mut sel = shared.select.lock().await;
+            sel.me = None;
+            sel.auto_key = None;
+            sel.draft = None;
+        }
         update(app, shared, |s| {
             s.in_champ_select = false;
             s.banning = false;
@@ -476,104 +544,87 @@ async fn handle_session(app: &AppHandle, shared: &Arc<Shared>, session: Option<V
         .await;
         return;
     };
-    let draft = session.as_ref().and_then(champselect::parse_draft);
+    let draft = champselect::parse_draft(session);
     // Vez de banir: só avisa a janela quando muda (a sessão chega a cada segundo).
-    let can_ban = session
-        .as_ref()
-        .and_then(champselect::my_ban_action)
-        .is_some();
-    if shared.snapshot.lock().await.can_ban != can_ban {
-        update(app, shared, |s| s.can_ban = can_ban).await;
-    }
+    let can_ban = champselect::my_ban_action(session).is_some();
     // Overlay: você na partida é achado pelo campeão (o app não lê nomes).
     if me.current_champion() > 0 {
         let alias = champion_alias(shared, me.current_champion()).await;
         shared.overlay.set_champion(alias);
     }
-    let my_lane = me
+    let lane = me
         .position
         .as_deref()
-        .and_then(champselect::lolalytics_lane)
-        .map(String::from);
-    let lane_changed = {
-        let mut prev = shared.my_lane.lock().await;
-        let changed = *prev != my_lane;
-        *prev = my_lane;
-        changed
-    };
-    let draft_changed = {
-        let mut prev = shared.draft.lock().await;
-        let changed = *prev != draft;
-        if changed {
-            prev.clone_from(&draft);
+        .and_then(champselect::lolalytics_lane);
+    // Tudo numa trava: a sessão muda a cada segundo (timer) e só reagimos quando o que importa
+    // muda (o time visível, a sua posição, o seu campeão).
+    let (draft_view, me_changed, start) = {
+        let mut sel = shared.select.lock().await;
+        let draft_view = if sel.draft != draft || sel.my_lane.as_deref() != lane {
+            let view = draft.as_ref().map(|d| {
+                (
+                    d.allies.iter().map(|a| a.champion_id).collect::<Vec<_>>(),
+                    d.enemies.clone(),
+                    d.banning,
+                )
+            });
+            sel.draft = draft;
+            sel.my_lane = lane.map(String::from);
+            Some(view.unwrap_or_default())
+        } else {
+            None
+        };
+        let me_changed = sel.me.as_ref() != Some(&me);
+        // Travou (ou trocou de campeão/lane depois de travar): busca e importa uma vez.
+        let mut start = None;
+        if me_changed {
+            if me.locked && me.champion_id > 0 {
+                let key = format!("{}:{}", me.champion_id, lane.unwrap_or("default"));
+                if sel.auto_key.as_deref() != Some(key.as_str()) {
+                    sel.auto_key = Some(key);
+                    start = Some(next_gen(&shared.build_gen));
+                }
+            }
+            sel.me = Some(me.clone());
         }
-        changed
+        (draft_view, me_changed, start)
     };
-    if draft_changed || lane_changed {
-        let allies = draft
-            .as_ref()
-            .map(|d| d.allies.iter().map(|a| a.champion_id).collect())
-            .unwrap_or_default();
-        let banning = draft.as_ref().is_some_and(|d| d.banning);
-        let enemies = draft.map(|d| d.enemies).unwrap_or_default();
-        update(app, shared, |s| {
+    let ban_changed = shared.snapshot.lock().await.can_ban != can_ban;
+    if draft_view.is_none() && !me_changed && !ban_changed {
+        return;
+    }
+    let refresh = draft_view.is_some();
+    let shown = me.current_champion();
+    update(app, shared, |s| {
+        s.can_ban = can_ban;
+        if let Some((allies, enemies, banning)) = draft_view {
             s.in_champ_select = true;
             s.banning = banning;
             s.enemy_picks = enemies;
             s.ally_picks = allies;
-        })
-        .await;
+        }
+        if me_changed {
+            s.in_champ_select = true;
+            s.locked = me.locked;
+            if start.is_none() && s.build.is_none() && shown > 0 {
+                s.champion_id = shown;
+            }
+        }
+    })
+    .await;
+    if refresh {
         let (app, shared) = (app.clone(), shared.clone());
         tauri::async_runtime::spawn(async move {
             refresh_bans(&app, &shared).await;
             refresh_picks(&app, &shared).await;
         });
     }
-    {
-        // A sessão muda a cada segundo (timer); só reagimos quando o NOSSO estado muda.
-        let mut prev = shared.me.lock().await;
-        if prev.as_ref() == Some(&me) {
-            return;
-        }
-        *prev = Some(me.clone());
-    }
-    let shown = if me.champion_id > 0 {
-        me.champion_id
-    } else {
-        me.hover_id
-    };
-    let lane = me
-        .position
-        .as_deref()
-        .and_then(champselect::lolalytics_lane)
-        .map(String::from);
-    let key = format!(
-        "{}:{}",
-        me.champion_id,
-        lane.as_deref().unwrap_or("default")
-    );
-    let start = me.locked && me.champion_id > 0 && {
-        let mut auto = shared.auto_key.lock().await;
-        let changed = auto.as_deref() != Some(key.as_str());
-        if changed {
-            *auto = Some(key.clone());
-            *shared.current_key.lock().await = Some(key.clone());
-        }
-        changed
-    };
-    update(app, shared, |s| {
-        s.in_champ_select = true;
-        s.locked = me.locked;
-        if !start && s.build.is_none() && shown > 0 {
-            s.champion_id = shown;
-        }
-    })
-    .await;
-    if start {
+    if let Some(generation) = start {
         let auto = shared.settings.lock().await.auto_import;
         let (app, shared) = (app.clone(), shared.clone());
+        let lane = lane.map(String::from);
         tauri::async_runtime::spawn(async move {
-            load_build(&app, &shared, me.champion_id, lane, auto, key).await;
+            load_build(&app, &shared, me.champion_id, lane, auto, generation).await;
         });
     }
 }
@@ -585,49 +636,52 @@ pub async fn load_build(
     champion_id: i64,
     lane: Option<String>,
     do_import: bool,
-    key: String,
+    generation: u64,
 ) {
-    update(app, shared, |s| {
+    let current = &shared.build_gen;
+    // O confronto vem do snapshot, lido junto com o início da busca.
+    let Some(vs) = update_if(app, shared, current, generation, |s| {
         s.champion_id = champion_id;
-        s.lane = lane.clone();
+        s.lane.clone_from(&lane);
         s.loading = true;
         s.error = None;
         s.warning = None;
         s.import = None;
+        (s.vs_champion_id > 0).then(|| (s.vs_champion_id, s.vs_lane.clone()))
     })
-    .await;
-    let assets = shared.assets.read().await.clone();
-    let Some(champ) = assets
-        .as_ref()
-        .and_then(|a| a.champion(champion_id).cloned())
+    .await
     else {
-        update(app, shared, |s| {
+        return; // outra busca já começou
+    };
+    let assets = shared.assets.read().await.clone();
+    let Some(champ) = assets.as_ref().and_then(|a| a.champion(champion_id)) else {
+        update_if(app, shared, current, generation, |s| {
             s.loading = false;
+            // Sem o build antigo (de outro campeão) na tela, "Importar" não o manda com este nome.
+            s.build = None;
             s.error = Some(crate::t!("err.unknownChampion"));
         })
         .await;
         return;
     };
     let settings = shared.settings.lock().await.clone();
-    let vs = shared.vs.lock().await.clone();
-    let vs_champ = vs.as_ref().and_then(|(id, l)| {
-        let c = assets.as_ref()?.champion(*id)?;
-        Some((lolalytics_slug(&c.alias), c.name.clone(), l.clone()))
+    let vs_champ = vs.and_then(|(id, l)| {
+        let c = assets.as_ref()?.champion(id)?;
+        Some((lolalytics_slug(&c.alias), &c.name, l))
     });
-    let mut q = Query {
-        slug: lolalytics_slug(&champ.alias),
+    let mut q = query(
+        &settings,
+        Ep::BuildFull,
+        lolalytics_slug(&champ.alias),
         lane,
-        tier: settings.tier.clone(),
-        region: settings.region.clone(),
-        patch: settings.patch_opt(),
-        ..Default::default()
-    };
-    let result = match &vs_champ {
-        Some((slug, vs_name, vs_lane)) if *slug != q.slug => {
+        None,
+    );
+    let result = match vs_champ {
+        Some((slug, vs_name, vs_lane)) if slug != q.slug => {
             let vq = Query {
-                vs: Some(slug.clone()),
                 // Sem lane escolhida: o oponente na mesma lane que você.
-                vs_lane: vs_lane.clone().or_else(|| q.lane.clone()),
+                vs_lane: vs_lane.or_else(|| q.lane.clone()),
+                vs: Some(slug),
                 ..q.clone()
             };
             match fetch_build(shared, &vq).await {
@@ -662,13 +716,10 @@ pub async fn load_build(
         }
         _ => fetch_build(shared, &q).await,
     };
-    if shared.current_key.lock().await.as_deref() != Some(key.as_str()) {
-        return; // trocou de campeão enquanto buscava
-    }
     let ok = result.is_ok();
-    match result {
+    let shown = match result {
         Err(e) => {
-            update(app, shared, |s| {
+            update_if(app, shared, current, generation, |s| {
                 s.loading = false;
                 s.build = None;
                 s.error = Some(e);
@@ -676,28 +727,36 @@ pub async fn load_build(
             .await
         }
         Ok((mut build, warning)) => {
-            build.slug = q.slug.clone();
+            build.slug.clone_from(&q.slug);
             if !build.lane.is_empty() {
                 q.lane = Some(build.lane.clone());
             }
             let url = q.page_url();
-            update(app, shared, |s| {
+            update_if(app, shared, current, generation, |s| {
                 s.loading = false;
-                s.lane = q.lane.clone();
+                s.lane = q.lane;
                 s.page_url = Some(url);
                 s.warning = warning;
-                s.build = Some(build);
+                s.build = Some(Arc::new(build));
             })
-            .await;
+            .await
         }
+    };
+    if shown.is_none() {
+        return; // trocou de campeão enquanto buscava
     }
     if ok && do_import {
-        let report = run_import(shared).await;
-        update(app, shared, |s| match report {
-            Ok(r) => s.import = Some(r),
-            Err(e) => s.warning = Some(e),
-        })
-        .await;
+        // Só o build desta busca: se outra começou enquanto esperava a vez, ela decide o dela.
+        let still = |_: &Snapshot| current.load(Ordering::SeqCst) == generation;
+        match run_import_scoped(shared, Scope::ALL, still).await {
+            Ok(None) => {}
+            Ok(Some(r)) => {
+                update_if(app, shared, current, generation, |s| s.import = Some(r)).await;
+            }
+            Err(e) => {
+                update_if(app, shared, current, generation, |s| s.warning = Some(e)).await;
+            }
+        }
     }
     // Fora da seleção, os bans são os do campeão em tela; na seleção, vêm do time (`handle_session`).
     if ok && !shared.snapshot.lock().await.in_champ_select {
@@ -708,7 +767,7 @@ pub async fn load_build(
 async fn fetch_build(shared: &Shared, q: &Query) -> Result<(Build, Option<String>), String> {
     shared
         .lola
-        .build_full(q)
+        .get(q)
         .await
         .and_then(|f| model::parse_build_full(&f.data).map(|b| (b, f.stale_warning)))
 }
@@ -716,36 +775,39 @@ async fn fetch_build(shared: &Shared, q: &Query) -> Result<(Build, Option<String
 /// Recalcula a sugestão de bans: na seleção, pelos campeões do seu time (escolhidos ou
 /// declarados); fora dela, pelo campeão em tela. Um build geral por campeão (cache de 6 h).
 pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
-    let generation = shared.bans_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let current = &shared.bans_gen;
+    let generation = next_gen(current);
     let settings = shared.settings.lock().await.clone();
     if !settings.suggest_bans {
-        update(app, shared, |s| s.bans = None).await;
+        update_if(app, shared, current, generation, |s| s.bans = None).await;
         return;
     }
     let (in_select, champion_id, lane) = {
         let s = shared.snapshot.lock().await;
         (s.in_champ_select, s.champion_id, s.lane.clone())
     };
-    let draft = shared.draft.lock().await.clone();
-    let (allies, unavailable) = match draft {
-        Some(d) if in_select => (d.allies, d.unavailable),
-        _ if !in_select && champion_id > 0 => (
-            vec![Ally {
-                champion_id,
-                lane,
-                me: true,
-            }],
-            vec![champion_id],
-        ),
-        _ => (Vec::new(), Vec::new()),
+    let (allies, unavailable, my_lane) = {
+        let sel = shared.select.lock().await;
+        let (allies, unavailable) = match &sel.draft {
+            Some(d) if in_select => (d.allies.clone(), d.unavailable.clone()),
+            _ if !in_select && champion_id > 0 => (
+                vec![Ally {
+                    champion_id,
+                    lane,
+                    me: true,
+                }],
+                vec![champion_id],
+            ),
+            _ => (Vec::new(), Vec::new()),
+        };
+        (allies, unavailable, sel.my_lane.clone())
     };
-    let my_lane = shared.my_lane.lock().await.clone();
     if let Some(lane) = my_lane.filter(|_| in_select && allies.is_empty()) {
         bans_by_tier(app, shared, generation, &settings, lane, &unavailable).await;
         return;
     }
     if allies.is_empty() {
-        update(app, shared, |s| {
+        update_if(app, shared, current, generation, |s| {
             s.bans = in_select.then(|| BanAdvice {
                 note: Some(crate::t!("bans.declareAny")),
                 ..Default::default()
@@ -754,7 +816,7 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         .await;
         return;
     }
-    update(app, shared, |s| {
+    update_if(app, shared, current, generation, |s| {
         // Os da tier list não valem para a conta pelo time.
         let (picks, lane_picks, lane_for, metric) = s
             .bans
@@ -780,19 +842,18 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         let Some(c) = assets.as_ref().and_then(|a| a.champion(ally.champion_id)) else {
             continue;
         };
-        let q = Query {
-            slug: lolalytics_slug(&c.alias),
-            lane: ally.lane.clone(),
-            tier: settings.tier.clone(),
-            region: settings.region.clone(),
-            patch: settings.patch_opt(),
-            ..Default::default()
-        };
+        let q = query(
+            &settings,
+            Ep::BuildFull,
+            lolalytics_slug(&c.alias),
+            ally.lane.clone(),
+            None,
+        );
         match fetch_build(shared, &q).await {
             Ok((b, _)) if !b.matchups.is_empty() => builds.push((ally.clone(), b)),
             _ => missing.push(c.name.clone()),
         }
-        if shared.bans_gen.load(Ordering::SeqCst) != generation {
+        if current.load(Ordering::SeqCst) != generation {
             return; // o time mudou enquanto buscava; a conta nova assume
         }
     }
@@ -819,10 +880,7 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
         None
     };
     let note = (!missing.is_empty()).then(|| crate::t!("bans.noData", names = missing.join(", ")));
-    if shared.bans_gen.load(Ordering::SeqCst) != generation {
-        return;
-    }
-    update(app, shared, |s| {
+    update_if(app, shared, current, generation, |s| {
         s.bans = Some(BanAdvice {
             loading: false,
             based_on: allies,
@@ -838,8 +896,8 @@ pub async fn refresh_bans(app: &AppHandle, shared: &Arc<Shared>) {
     .await;
 }
 
-/// Consulta de `list`/`counter`/`build-team` com os filtros das configurações.
-fn extra_query(
+/// Consulta ao lolalytics com os filtros das configurações (elo, região, patch).
+fn query(
     settings: &Settings,
     ep: Ep,
     slug: String,
@@ -858,28 +916,13 @@ fn extra_query(
     }
 }
 
-async fn fetch_list(shared: &Shared, q: &Query) -> Result<TierList, String> {
-    shared
-        .lola
-        .get(q)
-        .await
-        .and_then(|f| extra::parse_list(&f.data))
-}
-
-async fn fetch_counter(shared: &Shared, q: &Query) -> Result<Counters, String> {
-    shared
-        .lola
-        .get(q)
-        .await
-        .and_then(|f| extra::parse_counter(&f.data))
-}
-
-async fn fetch_team(shared: &Shared, q: &Query) -> Result<Team, String> {
-    shared
-        .lola
-        .get(q)
-        .await
-        .and_then(|f| extra::parse_build_team(&f.data))
+/// `list`/`counter`/`build-team` (cache de 6 h) já lidos pelo parser do endpoint.
+async fn fetch<T>(
+    shared: &Shared,
+    q: &Query,
+    parse: impl FnOnce(&Value) -> Result<T, String>,
+) -> Result<T, String> {
+    shared.lola.get(q).await.and_then(|f| parse(&f.data))
 }
 
 /// Ninguém do seu time declarou ainda: bans pela força geral na sua lane (uma tier list, com cache).
@@ -893,7 +936,8 @@ async fn bans_by_tier(
     lane: String,
     unavailable: &[i64],
 ) {
-    update(app, shared, |s| {
+    let current = &shared.bans_gen;
+    update_if(app, shared, current, generation, |s| {
         let (picks, metric) = s
             .bans
             .take()
@@ -910,12 +954,9 @@ async fn bans_by_tier(
         });
     })
     .await;
-    let q = extra_query(settings, Ep::List, String::new(), Some(lane.clone()), None);
+    let q = query(settings, Ep::List, String::new(), Some(lane.clone()), None);
     let metric = Metric::from_setting(&settings.metric);
-    let result = fetch_list(shared, &q).await;
-    if shared.bans_gen.load(Ordering::SeqCst) != generation {
-        return;
-    }
+    let result = fetch(shared, &q, extra::parse_list).await;
     let advice = match result {
         // Ninguém declarou, nem você: a lista individual espera o seu campeão.
         Ok(list) => BanAdvice {
@@ -935,12 +976,12 @@ async fn bans_by_tier(
             ..Default::default()
         },
     };
-    update(app, shared, |s| s.bans = Some(advice)).await;
+    update_if(app, shared, current, generation, |s| s.bans = Some(advice)).await;
 }
 
 /// Maestria do jogador local (só GET; uma vez por seleção).
 async fn mastery(shared: &Shared) -> Result<Vec<(i64, u64)>, String> {
-    if let Some(m) = shared.mastery.lock().await.clone() {
+    if let Some(m) = shared.select.lock().await.mastery.clone() {
         return Ok(m);
     }
     let lcu = shared
@@ -954,7 +995,7 @@ async fn mastery(shared: &Shared) -> Result<Vec<(i64, u64)>, String> {
         .await
         .map_err(|e| e.to_string())?;
     let m = extra::parse_mastery(&v);
-    *shared.mastery.lock().await = Some(m.clone());
+    shared.select.lock().await.mastery = Some(m.clone());
     Ok(m)
 }
 
@@ -962,20 +1003,26 @@ async fn mastery(shared: &Shared) -> Result<Vec<(i64, u64)>, String> {
 /// (cache de 6 h): a tier list da sua lane, o `build-team` do seu campeão (sinergia), um
 /// `counter` por inimigo visível (até 5) e um `build-team` por aliado com lane (até 4).
 pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
-    let generation = shared.picks_gen.fetch_add(1, Ordering::SeqCst) + 1;
-    let stale = || shared.picks_gen.load(Ordering::SeqCst) != generation;
+    let current = &shared.picks_gen;
+    let generation = next_gen(current);
+    // Para de buscar assim que uma conta mais nova começa (as escritas também conferem).
+    let stale = || current.load(Ordering::SeqCst) != generation;
     let settings = shared.settings.lock().await.clone();
     let in_select = shared.snapshot.lock().await.in_champ_select;
     if !settings.suggest_picks || !in_select {
-        update(app, shared, |s| {
+        update_if(app, shared, current, generation, |s| {
             s.picks = None;
             s.synergy = None;
         })
         .await;
         return;
     }
-    let Some(lane) = shared.my_lane.lock().await.clone() else {
-        update(app, shared, |s| {
+    let (lane, draft) = {
+        let sel = shared.select.lock().await;
+        (sel.my_lane.clone(), sel.draft.clone().unwrap_or_default())
+    };
+    let Some(lane) = lane else {
+        update_if(app, shared, current, generation, |s| {
             s.picks = Some(PickAdvice {
                 note: Some(crate::t!("picks.noPosition")),
                 ..Default::default()
@@ -985,7 +1032,6 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         .await;
         return;
     };
-    let draft = shared.draft.lock().await.clone().unwrap_or_default();
     let mates: Vec<Ally> = draft
         .allies
         .iter()
@@ -994,7 +1040,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         .cloned()
         .collect();
     let enemies: Vec<i64> = draft.enemies.iter().take(5).copied().collect();
-    update(app, shared, |s| {
+    update_if(app, shared, current, generation, |s| {
         let (prev, metric) = s
             .picks
             .take()
@@ -1019,19 +1065,17 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
             .and_then(|a| a.champion(id))
             .map(|c| (lolalytics_slug(&c.alias), c.name.clone()))
     };
-    let list_q = extra_query(&settings, Ep::List, String::new(), Some(lane.clone()), None);
-    let list = match fetch_list(shared, &list_q).await {
+    let list_q = query(&settings, Ep::List, String::new(), Some(lane.clone()), None);
+    let list = match fetch(shared, &list_q, extra::parse_list).await {
         Ok(l) => l,
         Err(e) => {
-            if !stale() {
-                update(app, shared, |s| {
-                    if let Some(p) = s.picks.as_mut() {
-                        p.loading = false;
-                        p.note = Some(crate::t!("tierList.unavailable", error = e));
-                    }
-                })
-                .await;
-            }
+            update_if(app, shared, current, generation, |s| {
+                if let Some(p) = s.picks.as_mut() {
+                    p.loading = false;
+                    p.note = Some(crate::t!("tierList.unavailable", error = e));
+                }
+            })
+            .await;
             return;
         }
     };
@@ -1046,8 +1090,9 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         .and_then(|m| Some((m.champion_id, slug(m.champion_id)?)))
     {
         Some((id, (my_slug, _))) if !mates.is_empty() => {
-            let q = extra_query(&settings, Ep::BuildTeam, my_slug, Some(lane.clone()), None);
-            fetch_team(shared, &q).await.ok().map(|team| SynergyAdvice {
+            let q = query(&settings, Ep::BuildTeam, my_slug, Some(lane.clone()), None);
+            let team = fetch(shared, &q, extra::parse_build_team).await;
+            team.ok().map(|team| SynergyAdvice {
                 champion_id: id,
                 lane: lane.clone(),
                 base_wr: list.get(id).map(|e| e.wr),
@@ -1057,10 +1102,12 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         }
         _ => None,
     };
-    if stale() {
+    if update_if(app, shared, current, generation, |s| s.synergy = synergy)
+        .await
+        .is_none()
+    {
         return;
     }
-    update(app, shared, |s| s.synergy = synergy).await;
 
     // Candidatos: o seu pool (maestria) ou a tier list da lane. O seu próprio campeão continua
     // valendo (dá para ver como ele se compara); o resto do que está indisponível sai.
@@ -1098,14 +1145,14 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
             continue;
         };
         let e_lane = picks::enemy_lane(&list, e, &lane);
-        let q = extra_query(
+        let q = query(
             &settings,
             Ep::Counter,
             e_slug,
             Some(e_lane.clone()),
             Some(lane.clone()),
         );
-        match fetch_counter(shared, &q).await {
+        match fetch(shared, &q, extra::parse_counter).await {
             Ok(c) => counters.push((e, e_lane, c)),
             Err(_) => notes.push(crate::t!("picks.noCounter", name = name)),
         }
@@ -1118,8 +1165,8 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         let (Some((a_slug, name)), Some(a_lane)) = (slug(a.champion_id), a.lane.clone()) else {
             continue;
         };
-        let q = extra_query(&settings, Ep::BuildTeam, a_slug, Some(a_lane.clone()), None);
-        match fetch_team(shared, &q).await {
+        let q = query(&settings, Ep::BuildTeam, a_slug, Some(a_lane.clone()), None);
+        match fetch(shared, &q, extra::parse_build_team).await {
             Ok(t) => teams.push((a.champion_id, a_lane, t)),
             Err(_) => notes.push(crate::t!("picks.noSynergy", name = name)),
         }
@@ -1154,10 +1201,7 @@ pub async fn refresh_picks(app: &AppHandle, shared: &Arc<Shared>) {
         picks::TOP,
         metric,
     );
-    if stale() {
-        return;
-    }
-    update(app, shared, |s| {
+    update_if(app, shared, current, generation, |s| {
         s.picks = Some(PickAdvice {
             loading: false,
             lane: Some(lane),
@@ -1181,14 +1225,12 @@ pub async fn set_vs(
     vs_lane: Option<String>,
 ) {
     let vs = vs_champion_id.filter(|id| *id > 0);
-    *shared.vs.lock().await = vs.map(|id| (id, vs_lane.clone()));
-    let (champion_id, lane) = {
-        let s = shared.snapshot.lock().await;
-        (s.champion_id, s.lane.clone())
-    };
-    update(app, shared, |s| {
+    // O confronto mora só no snapshot (a busca lê de lá): escolher e ler o campeão em tela
+    // acontecem juntos, sem uma cópia à parte que pudesse ficar fora de ordem.
+    let (champion_id, lane) = update(app, shared, |s| {
         s.vs_champion_id = vs.unwrap_or(0);
         s.vs_lane = vs.and(vs_lane);
+        (s.champion_id, s.lane.clone())
     })
     .await;
     if champion_id > 0 {
@@ -1196,9 +1238,13 @@ pub async fn set_vs(
     }
 }
 
-/// Importa tudo do build em tela para o cliente, conforme as configurações.
-pub async fn run_import(shared: &Shared) -> Result<ImportReport, String> {
-    run_import_scoped(shared, Scope::ALL).await
+/// Botão "Importar": manda o build em tela para o cliente, conforme as configurações.
+pub async fn reimport(app: &AppHandle, shared: &Shared) -> Result<ImportReport, String> {
+    let report = run_import_scoped(shared, Scope::ALL, |_| true)
+        .await?
+        .ok_or_else(|| crate::t!("import.noBuild"))?;
+    update(app, shared, |s| s.import = Some(report.clone())).await;
+    Ok(report)
 }
 
 /// A janela pode mandar sozinha o que está na tela para o cliente agora?
@@ -1211,25 +1257,34 @@ async fn should_auto_apply(shared: &Shared, champion_id: i64) -> bool {
         let s = shared.snapshot.lock().await;
         (s.phase.clone(), s.in_champ_select)
     };
-    let me = shared.me.lock().await.clone();
-    champselect::may_apply(&phase, in_select, me.as_ref(), champion_id)
+    let sel = shared.select.lock().await;
+    champselect::may_apply(&phase, in_select, sel.me.as_ref(), champion_id)
 }
 
 /// Algo mudou na janela (runa, amostra mínima): leva a mudança para o cliente.
 pub async fn apply_change(app: &AppHandle, shared: &Arc<Shared>, scope: Scope) {
-    let (champion_id, has_build) = {
+    // Carregando: a busca em andamento importa (ou não) com as configurações novas.
+    let viewed = {
         let s = shared.snapshot.lock().await;
-        (s.champion_id, s.build.is_some())
+        (s.build.is_some() && !s.loading).then_some(s.champion_id)
     };
-    if !has_build || !should_auto_apply(shared, champion_id).await {
+    let Some(champion_id) = viewed else {
+        return;
+    };
+    if !should_auto_apply(shared, champion_id).await {
         return;
     }
-    let report = run_import_scoped(shared, scope).await;
-    update(app, shared, |s| match report {
-        Ok(r) => s.import.get_or_insert_with(Default::default).merge(r),
-        Err(e) => s.warning = Some(e),
-    })
-    .await;
+    // Importa só se a tela ainda mostra o campeão conferido acima (o de outro não vai).
+    match run_import_scoped(shared, scope, |s| s.champion_id == champion_id).await {
+        Ok(None) => {}
+        Ok(Some(r)) => {
+            update(app, shared, |s| {
+                s.import.get_or_insert_with(Default::default).merge(r)
+            })
+            .await
+        }
+        Err(e) => update(app, shared, |s| s.warning = Some(e)).await,
+    }
 }
 
 /// Alias do campeão no cliente (o mesmo do `rawChampionName` da API da partida).
@@ -1251,9 +1306,26 @@ fn overlay_path(shared: &Shared, build: &Build, champion_id: i64, assets: &Asset
     );
 }
 
-async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport, String> {
+/// Importa o build em tela. `still` confere, com o snapshot travado e já na vez desta importação,
+/// se ela ainda vale; senão (ou com o build ainda carregando) devolve `Ok(None)` sem mexer em nada.
+/// O build e o campeão são lidos juntos: nunca vai o build de um com o nome de outro.
+async fn run_import_scoped(
+    shared: &Shared,
+    scope: Scope,
+    still: impl FnOnce(&Snapshot) -> bool,
+) -> Result<Option<ImportReport>, String> {
     let _one_at_a_time = shared.import_lock.lock().await;
     let lang = Lang::current();
+    let (build, champion_id) = {
+        let s = shared.snapshot.lock().await;
+        if s.loading || !still(&s) {
+            return Ok(None);
+        }
+        (
+            s.build.clone().ok_or_else(|| lang.t("import.noBuild"))?,
+            s.champion_id,
+        )
+    };
     let lcu = shared
         .lcu
         .read()
@@ -1266,13 +1338,6 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
         .await
         .clone()
         .ok_or_else(|| lang.t("import.assetsNotLoaded"))?;
-    let (build, champion_id) = {
-        let s = shared.snapshot.lock().await;
-        (
-            s.build.clone().ok_or_else(|| lang.t("import.noBuild"))?,
-            s.champion_id,
-        )
-    };
     let settings = shared.settings.lock().await.clone();
     // Os dados são de ranqueada no Summoner's Rift: em outros mapas não importamos nada.
     if let Ok(gs) = lcu.get("/lol-gameflow/v1/session").await {
@@ -1378,7 +1443,7 @@ async fn run_import_scoped(shared: &Shared, scope: Scope) -> Result<ImportReport
             }
         };
     }
-    Ok(rep)
+    Ok(Some(rep))
 }
 
 /// Arquivo do ícone na cópia em disco (nome só com letras, dígitos, `.`, `-` e `_`).
@@ -1398,17 +1463,18 @@ fn icon_file(shared: &Shared, path: &str) -> PathBuf {
 }
 
 fn content_type(path: &str) -> &'static str {
-    match path
-        .rsplit('.')
-        .next()
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("svg") => "image/svg+xml",
-        Some("webp") => "image/webp",
-        _ => "application/octet-stream",
+    let ext = path.rsplit('.').next().unwrap_or_default();
+    let is = |e: &str| ext.eq_ignore_ascii_case(e);
+    if is("png") {
+        "image/png"
+    } else if is("jpg") || is("jpeg") {
+        "image/jpeg"
+    } else if is("svg") {
+        "image/svg+xml"
+    } else if is("webp") {
+        "image/webp"
+    } else {
+        "application/octet-stream"
     }
 }
 
@@ -1435,10 +1501,7 @@ pub async fn fetch_icon(shared: &Shared, path: &str) -> Result<(Vec<u8>, String)
     let got = match lcu {
         Some(lcu) => {
             let got = lcu.get_bytes(path).await.map_err(|e| e.to_string())?;
-            if let Some(dir) = file.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let _ = std::fs::write(&file, &got.0);
+            let _ = crate::assets::write_atomic(&file, &got.0);
             got
         }
         None => {
@@ -1456,14 +1519,10 @@ pub async fn fetch_icon(shared: &Shared, path: &str) -> Result<(Vec<u8>, String)
 
 /// Troca de campeão, lane ou filtro na janela: carrega e, quando pode, já leva para o cliente.
 pub async fn lookup(app: &AppHandle, shared: &Arc<Shared>, champion_id: i64, lane: Option<String>) {
-    let vs = shared.vs.lock().await.clone();
-    let key = format!(
-        "lookup:{champion_id}:{}:{vs:?}",
-        lane.as_deref().unwrap_or("default")
-    );
-    *shared.current_key.lock().await = Some(key.clone());
+    // A última escolhida vence: as buscas anteriores param de escrever e de importar.
+    let generation = next_gen(&shared.build_gen);
     let apply = should_auto_apply(shared, champion_id).await;
-    load_build(app, shared, champion_id, lane, apply, key).await;
+    load_build(app, shared, champion_id, lane, apply, generation).await;
 }
 
 /// Campeão do build em tela (as páginas próprias são por campeão).
@@ -1472,11 +1531,16 @@ async fn view_champion(shared: &Shared) -> Option<i64> {
     (s.build.is_some() && s.champion_id > 0).then_some(s.champion_id)
 }
 
-/// Grava o arquivo e devolve a lista para a janela.
-fn store_own(shared: &Shared, pages: &OwnPages) -> Result<Vec<OwnEntry>, String> {
-    pages
-        .save(&shared.own_runes_path)
+/// Grava `next` e só então troca as páginas da memória (se a gravação falhar, memória e arquivo
+/// continuam iguais); devolve a lista para a janela.
+fn store_own(
+    shared: &Shared,
+    pages: &mut OwnPages,
+    next: OwnPages,
+) -> Result<Vec<OwnEntry>, String> {
+    next.save(&shared.own_runes_path)
         .map_err(|e| crate::t!("own.saveFailed", error = e))?;
+    *pages = next;
     Ok(pages.entries())
 }
 
@@ -1496,8 +1560,9 @@ async fn store_page(
 ) -> Result<Vec<OwnEntry>, String> {
     let list = {
         let mut pages = shared.own_runes.lock().await;
-        pages.upsert(champion_id, page_id, page);
-        store_own(shared, &pages)?
+        let mut next = pages.clone();
+        next.upsert(champion_id, page_id, page);
+        store_own(shared, &mut pages, next)?
     };
     if import && view_champion(shared).await == Some(champion_id) {
         let (app, shared) = (app.clone(), shared.clone());
@@ -1577,8 +1642,12 @@ pub async fn delete_own_runes(
 ) -> Result<Vec<OwnEntry>, String> {
     let (list, was_active) = {
         let mut pages = shared.own_runes.lock().await;
-        let old = pages.remove(champion_id, page_id);
-        (store_own(shared, &pages)?, old.is_some_and(|(_, was)| was))
+        let mut next = pages.clone();
+        let old = next.remove(champion_id, page_id);
+        (
+            store_own(shared, &mut pages, next)?,
+            old.is_some_and(|(_, was)| was),
+        )
     };
     if was_active && view_champion(shared).await == Some(champion_id) {
         let (app, shared) = (app.clone(), shared.clone());
@@ -1599,7 +1668,7 @@ pub async fn choose_runes(
         return Err(crate::t!("own.unknownChoice", choice = choice));
     }
     let champion = view_champion(shared).await;
-    let mut changed = false;
+    let mut changed;
     let list = {
         let mut pages = shared.own_runes.lock().await;
         let target = if choice == "own" { page_id } else { None };
@@ -1608,11 +1677,10 @@ pub async fn choose_runes(
         {
             return Err(crate::t!("own.pageGone"));
         }
-        if let Some(c) = champion {
-            changed = pages.set_active(c, target);
-        }
+        let mut next = pages.clone();
+        changed = champion.is_some_and(|c| next.set_active(c, target));
         if changed {
-            store_own(shared, &pages)?
+            store_own(shared, &mut pages, next)?
         } else {
             pages.entries()
         }

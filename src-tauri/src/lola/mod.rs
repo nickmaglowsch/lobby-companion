@@ -10,7 +10,8 @@ pub mod extra;
 pub mod model;
 
 use serde_json::Value;
-use std::path::PathBuf;
+use std::fmt::{self, Write as _};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::Mutex;
 
@@ -79,152 +80,90 @@ pub struct Query {
 
 impl Query {
     pub fn api_url(&self) -> String {
-        if self.ep != Ep::BuildFull {
-            return self.extra_api_url();
+        let mut url = String::with_capacity(160);
+        let (slug, tier, region) = (Enc(&self.slug), Enc(&self.tier), Enc(&self.region));
+        match (self.ep, &self.vs) {
+            (Ep::BuildFull, None) => {
+                let _ = write!(
+                    url,
+                    "{API}?ep=build-full&v=1&c={slug}&tier={tier}&queue=ranked&region={region}"
+                );
+                param(&mut url, "lane", self.lane.as_deref());
+            }
+            (Ep::BuildFull, Some(vs)) => {
+                let _ = write!(
+                    url,
+                    "{API_VS}?ep=build-full&v=1&c={slug}&vs={}&tier={tier}&queue=ranked",
+                    Enc(vs)
+                );
+                param(&mut url, "lane", self.lane.as_deref());
+                param(&mut url, "vslane", self.vs_lane.as_deref());
+            }
+            // `list`, `counter` e `build-team`: sempre no `a1`, com região.
+            (ep, _) => {
+                let _ = write!(url, "{API}?ep={}&v=1", ep.name());
+                if ep != Ep::List {
+                    let _ = write!(url, "&c={slug}");
+                }
+                param(&mut url, "lane", self.lane.as_deref());
+                if ep == Ep::Counter {
+                    param(&mut url, "vslane", self.vs_lane.as_deref());
+                }
+                let _ = write!(url, "&tier={tier}&queue=ranked&region={region}");
+            }
         }
-        let mut url = match &self.vs {
-            None => format!(
-                "{API}?ep=build-full&v=1&c={}&tier={}&queue=ranked&region={}",
-                enc(&self.slug),
-                enc(&self.tier),
-                enc(&self.region)
-            ),
-            Some(vs) => format!(
-                "{API_VS}?ep=build-full&v=1&c={}&vs={}&tier={}&queue=ranked",
-                enc(&self.slug),
-                enc(vs),
-                enc(&self.tier)
-            ),
-        };
-        if let Some(l) = &self.lane {
-            url.push_str(&format!("&lane={}", enc(l)));
-        }
-        if self.vs.is_some()
-            && let Some(l) = &self.vs_lane
-        {
-            url.push_str(&format!("&vslane={}", enc(l)));
-        }
-        if let Some(p) = &self.patch {
-            url.push_str(&format!("&patch={}", enc(p)));
-        }
-        url
-    }
-
-    /// `list`, `counter` e `build-team`: sempre no `a1`, com região.
-    fn extra_api_url(&self) -> String {
-        let mut url = format!("{API}?ep={}&v=1", self.ep.name());
-        if self.ep != Ep::List {
-            url.push_str(&format!("&c={}", enc(&self.slug)));
-        }
-        if let Some(l) = &self.lane {
-            url.push_str(&format!("&lane={}", enc(l)));
-        }
-        if self.ep == Ep::Counter
-            && let Some(l) = &self.vs_lane
-        {
-            url.push_str(&format!("&vslane={}", enc(l)));
-        }
-        url.push_str(&format!(
-            "&tier={}&queue=ranked&region={}",
-            enc(&self.tier),
-            enc(&self.region)
-        ));
-        if let Some(p) = &self.patch {
-            url.push_str(&format!("&patch={}", enc(p)));
-        }
+        param(&mut url, "patch", self.patch.as_deref());
         url
     }
 
     /// Página do lolalytics para o usuário abrir (atribuição).
     pub fn page_url(&self) -> String {
-        match self.ep {
-            Ep::BuildFull => {}
-            Ep::List | Ep::Counter => {
-                let mut url = if self.ep == Ep::List {
-                    format!(
-                        "https://lolalytics.com/lol/tierlist/?tier={}",
-                        enc(&self.tier)
-                    )
-                } else {
-                    format!(
-                        "https://lolalytics.com/lol/{}/counters/?tier={}",
-                        enc(&self.slug),
-                        enc(&self.tier)
-                    )
-                };
-                if let Some(l) = &self.lane {
-                    url.push_str(&format!("&lane={}", enc(l)));
-                }
-                if self.ep == Ep::Counter
-                    && let Some(l) = &self.vs_lane
-                {
-                    url.push_str(&format!("&vslane={}", enc(l)));
-                }
-                if self.region != "all" {
-                    url.push_str(&format!("&region={}", enc(&self.region)));
-                }
-                if let Some(p) = &self.patch {
-                    url.push_str(&format!("&patch={}", enc(p)));
-                }
-                return url;
-            }
-            // A sinergia aparece na página do build do campeão.
-            Ep::BuildTeam => {
-                return Query {
-                    ep: Ep::BuildFull,
-                    ..self.clone()
-                }
-                .page_url();
-            }
-        }
-        let mut url = match &self.vs {
-            None => format!(
-                "https://lolalytics.com/lol/{}/build/?tier={}",
-                enc(&self.slug),
-                enc(&self.tier)
+        let mut url = String::with_capacity(120);
+        let (slug, tier) = (Enc(&self.slug), Enc(&self.tier));
+        // A sinergia (`build-team`) aparece na página do build do campeão.
+        let build = matches!(self.ep, Ep::BuildFull | Ep::BuildTeam);
+        let _ = match (self.ep, &self.vs) {
+            (Ep::List, _) => write!(url, "https://lolalytics.com/lol/tierlist/?tier={tier}"),
+            (Ep::Counter, _) => write!(
+                url,
+                "https://lolalytics.com/lol/{slug}/counters/?tier={tier}"
             ),
-            Some(vs) => format!(
-                "https://lolalytics.com/lol/{}/vs/{}/build/?tier={}",
-                enc(&self.slug),
-                enc(vs),
-                enc(&self.tier)
+            (_, None) => write!(url, "https://lolalytics.com/lol/{slug}/build/?tier={tier}"),
+            (_, Some(vs)) => write!(
+                url,
+                "https://lolalytics.com/lol/{slug}/vs/{}/build/?tier={tier}",
+                Enc(vs)
             ),
         };
-        if let Some(l) = &self.lane {
-            url.push_str(&format!("&lane={}", enc(l)));
+        let vs_build = build && self.vs.is_some();
+        param(&mut url, "lane", self.lane.as_deref());
+        if vs_build || self.ep == Ep::Counter {
+            param(&mut url, "vslane", self.vs_lane.as_deref());
         }
-        if self.vs.is_some() {
-            if let Some(l) = &self.vs_lane {
-                url.push_str(&format!("&vslane={}", enc(l)));
-            }
-        } else if self.region != "all" {
-            url.push_str(&format!("&region={}", enc(&self.region)));
+        // O confronto não tem região (sempre global).
+        if !vs_build && self.region != "all" {
+            param(&mut url, "region", Some(&self.region));
         }
-        if let Some(p) = &self.patch {
-            url.push_str(&format!("&patch={}", enc(p)));
-        }
+        param(&mut url, "patch", self.patch.as_deref());
         url
     }
 
     fn cache_key(&self) -> String {
-        let vs = match &self.vs {
-            None => String::new(),
-            Some(v) => format!("_vs_{v}_{}", self.vs_lane.as_deref().unwrap_or("default")),
-        };
+        fn or_default(o: Option<&str>) -> &str {
+            o.unwrap_or("default")
+        }
+        let mut key = String::with_capacity(96);
         // O build geral mantém a chave antiga (o cache de quem atualiza continua valendo).
-        let ep = match self.ep {
-            Ep::BuildFull => String::new(),
-            Ep::Counter => format!(
-                "{}_{}_",
-                self.ep.name(),
-                self.vs_lane.as_deref().unwrap_or("default")
-            ),
-            e => format!("{}_", e.name()),
+        let _ = match self.ep {
+            Ep::BuildFull => Ok(()),
+            Ep::Counter => write!(key, "counter_{}_", or_default(self.vs_lane.as_deref())),
+            e => write!(key, "{}_", e.name()),
         };
-        format!(
-            "{ep}{}_{}_{}_{}_{}{vs}.json",
+        let _ = write!(
+            key,
+            "{}_{}_{}_{}_{}",
             self.slug,
-            self.lane.as_deref().unwrap_or("default"),
+            or_default(self.lane.as_deref()),
             self.tier,
             if self.vs.is_some() {
                 "all"
@@ -232,24 +171,40 @@ impl Query {
                 &self.region
             },
             self.patch.as_deref().unwrap_or("atual")
-        )
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect()
+        );
+        if let Some(v) = &self.vs {
+            let _ = write!(key, "_vs_{v}_{}", or_default(self.vs_lane.as_deref()));
+        }
+        key.push_str(".json");
+        key.chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect()
     }
 }
 
-/// Só deixa passar o que aparece nos parâmetros (slugs, tiers, regiões, patches).
-fn enc(s: &str) -> String {
-    s.chars()
-        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
-        .collect()
+/// Só deixa passar o que aparece nos parâmetros (slugs, tiers, regiões, patches), sem alocar.
+struct Enc<'a>(&'a str);
+
+impl fmt::Display for Enc<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+            .try_for_each(|c| f.write_char(c))
+    }
+}
+
+/// `&nome=valor` quando há valor.
+fn param(url: &mut String, name: &str, value: Option<&str>) {
+    if let Some(v) = value {
+        let _ = write!(url, "&{name}={}", Enc(v));
+    }
 }
 
 pub struct Fetched {
@@ -261,6 +216,9 @@ pub struct Fetched {
 pub struct Lolalytics {
     http: reqwest::Client,
     cache_dir: PathBuf,
+    /// Início da última requisição. Quem busca no site fica com o lock do começo ao fim (espera
+    /// do intervalo, requisição e gravação no cache): as requisições saem uma por vez, a ≥1 s uma
+    /// da outra, e quem esperava pela mesma chave acha o cache novo em vez de repetir a busca.
     last: Mutex<Option<Instant>>,
 }
 
@@ -278,76 +236,71 @@ impl Lolalytics {
         }
     }
 
-    fn read_cache(&self, q: &Query) -> Option<(Value, Duration)> {
-        let p = self.cache_dir.join(q.cache_key());
-        let meta = std::fs::metadata(&p).ok()?;
-        let age = SystemTime::now()
-            .duration_since(meta.modified().ok()?)
-            .unwrap_or_default();
-        let v = serde_json::from_slice(&std::fs::read(&p).ok()?).ok()?;
-        Some((v, age))
+    /// Idade do arquivo do cache (sem ler o conteúdo).
+    fn cache_age(path: &Path) -> Option<Duration> {
+        let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+        Some(
+            SystemTime::now()
+                .duration_since(modified)
+                .unwrap_or_default(),
+        )
     }
 
-    fn write_cache(&self, q: &Query, v: &Value) {
-        let _ = std::fs::create_dir_all(&self.cache_dir);
-        let p = self.cache_dir.join(q.cache_key());
-        let tmp = p.with_extension("tmp");
-        if std::fs::write(&tmp, serde_json::to_vec(v).unwrap_or_default()).is_ok() {
-            let _ = std::fs::rename(&tmp, &p);
+    fn read_cache(path: &Path) -> Option<Value> {
+        serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+    }
+
+    /// O cache, se tem menos de 6 h e dá para ler.
+    fn fresh(path: &Path) -> Option<Fetched> {
+        if Self::cache_age(path)? >= TTL {
+            return None;
         }
-    }
-
-    pub async fn build_full(&self, q: &Query) -> Result<Fetched, String> {
-        self.get(q).await
+        Some(Fetched {
+            data: Self::read_cache(path)?,
+            stale_warning: None,
+        })
     }
 
     /// Qualquer endpoint: cache de 6 h, depois o site; se o site falhar, o cache vencido.
     pub async fn get(&self, q: &Query) -> Result<Fetched, String> {
-        let cached = self.read_cache(q);
-        if let Some((v, age)) = &cached
-            && *age < TTL
-        {
-            return Ok(Fetched {
-                data: v.clone(),
+        let path = self.cache_dir.join(q.cache_key());
+        if let Some(hit) = Self::fresh(&path) {
+            return Ok(hit);
+        }
+        let mut last = self.last.lock().await;
+        // Outra tarefa pode ter buscado a mesma chave enquanto esta esperava a vez.
+        if let Some(hit) = Self::fresh(&path) {
+            return Ok(hit);
+        }
+        if let Some(wait) = last.and_then(|t| MIN_GAP.checked_sub(t.elapsed())) {
+            tokio::time::sleep(wait).await;
+        }
+        *last = Some(Instant::now());
+        let result = self.fetch(q, &path).await;
+        drop(last);
+        result
+            .map(|data| Fetched {
+                data,
                 stale_warning: None,
-            });
-        }
-        match self.fetch(q).await {
-            Ok(v) => {
-                // Erros "de dados" ({"status": 404x}) não vão para o cache.
-                if q.ep.valid(&v) {
-                    self.write_cache(q, &v);
-                }
-                Ok(Fetched {
-                    data: v,
-                    stale_warning: None,
-                })
-            }
-            Err(e) => match cached {
-                Some((v, age)) => Ok(Fetched {
-                    data: v,
-                    stale_warning: Some(crate::t!(
-                        "lola.stale",
-                        error = e,
-                        hours = age.as_secs() / 3600
-                    )),
-                }),
-                None => Err(e),
-            },
-        }
+            })
+            .or_else(
+                |e| match (Self::cache_age(&path), Self::read_cache(&path)) {
+                    (Some(age), Some(data)) => Ok(Fetched {
+                        data,
+                        stale_warning: Some(crate::t!(
+                            "lola.stale",
+                            error = e,
+                            hours = age.as_secs() / 3600
+                        )),
+                    }),
+                    _ => Err(e),
+                },
+            )
     }
 
-    async fn fetch(&self, q: &Query) -> Result<Value, String> {
-        {
-            let mut last = self.last.lock().await;
-            if let Some(t) = *last {
-                let since = t.elapsed();
-                if since < MIN_GAP {
-                    tokio::time::sleep(MIN_GAP - since).await;
-                }
-            }
-            *last = Some(Instant::now());
-        }
+    /// Busca no site e grava no cache a resposta como veio (sem serializar de novo), num arquivo
+    /// ao lado que depois troca de nome: quem lê o cache nunca vê um arquivo pela metade.
+    async fn fetch(&self, q: &Query, path: &Path) -> Result<Value, String> {
         let resp = self
             .http
             .get(q.api_url())
@@ -358,9 +311,14 @@ impl Lolalytics {
         if !status.is_success() {
             return Err(format!("HTTP {}", status.as_u16()));
         }
-        resp.json::<Value>()
-            .await
-            .map_err(|e| crate::t!("lola.invalid", error = e))
+        let invalid = |e: &dyn fmt::Display| crate::t!("lola.invalid", error = e);
+        let body = resp.bytes().await.map_err(|e| invalid(&e))?;
+        let data: Value = serde_json::from_slice(&body).map_err(|e| invalid(&e))?;
+        // Erros "de dados" ({"status": 404x}) não vão para o cache.
+        if q.ep.valid(&data) {
+            let _ = crate::assets::write_atomic(path, &body);
+        }
+        Ok(data)
     }
 }
 
@@ -474,5 +432,29 @@ mod tests {
         );
         assert!(Ep::Counter.valid(&serde_json::json!({"counters": []})));
         assert!(!Ep::List.valid(&serde_json::json!({"status": 4044})));
+    }
+
+    #[test]
+    fn fresh_cache_skips_the_site() {
+        let dir = std::env::temp_dir().join(format!("lc-lola-{}", std::process::id()));
+        let q = Query {
+            ep: Ep::List,
+            lane: Some("jungle".into()),
+            tier: "emerald_plus".into(),
+            region: "all".into(),
+            ..Default::default()
+        };
+        std::fs::create_dir_all(&dir).unwrap();
+        // A resposta vai para o cache como veio do site.
+        std::fs::write(dir.join(q.cache_key()), br#"{"cid": {}}"#).unwrap();
+        let lola = Lolalytics::new(dir.clone());
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let f = rt.block_on(lola.get(&q)).unwrap();
+        assert!(f.stale_warning.is_none());
+        assert!(f.data.get("cid").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

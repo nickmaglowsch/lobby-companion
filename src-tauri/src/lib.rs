@@ -23,17 +23,20 @@ pub mod update;
 use app::{ImportReport, Shared, Snapshot};
 use settings::Settings;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 const MAIN: &str = "main";
 
-/// Tamanho da janela pelo layout escolhido (padrão se as configurações estiverem ocupadas).
+/// Tamanho da janela pelo layout escolhido. Lê a cópia atômica do layout: com `try_lock` nas
+/// configurações, a janela abria no tamanho padrão quando outra tarefa as estava lendo.
 fn window_size(app: &AppHandle) -> (f64, f64, f64, f64) {
-    app.try_state::<Arc<Shared>>()
-        .and_then(|s| s.settings.try_lock().ok().map(|s| s.window_size()))
-        .unwrap_or_else(|| Settings::default().window_size())
+    let classic = app
+        .try_state::<Arc<Shared>>()
+        .is_some_and(|s| s.classic_layout.load(Ordering::Relaxed));
+    Settings::window_size_for(classic)
 }
 
 /// Troca o tamanho da janela aberta quando o layout muda.
@@ -198,6 +201,9 @@ async fn save_settings(
         if cur.window_size() != settings.window_size() {
             apply_window_size(&app, settings.window_size());
         }
+        shared
+            .classic_layout
+            .store(settings.is_classic(), Ordering::Relaxed);
         *cur = settings;
         changed
     };
@@ -263,14 +269,7 @@ async fn set_vs(
 
 #[tauri::command]
 async fn reimport(app: AppHandle, shared: State<'_, Arc<Shared>>) -> Result<ImportReport, String> {
-    let report = app::run_import(&shared).await?;
-    let snap = {
-        let mut s = shared.snapshot.lock().await;
-        s.import = Some(report.clone());
-        s.clone()
-    };
-    let _ = app.emit("snapshot", snap);
-    Ok(report)
+    app::reimport(&app, &shared).await
 }
 
 /// Composição de dano dos dois times e itens defensivos do build em tela (só exibição).
@@ -293,7 +292,7 @@ async fn get_composition(
         &allies,
         &enemies,
         &types,
-        build.as_ref(),
+        build.as_deref(),
         assets.as_deref(),
         min_games,
         i18n::Lang::current(),
@@ -631,7 +630,7 @@ async fn lola_cli(slug: String, lane: Option<String>, vs: Option<String>) {
     };
     let client = lola::Lolalytics::new(std::env::temp_dir().join("lobby-companion-cli"));
     match client
-        .build_full(&q)
+        .get(&q)
         .await
         .and_then(|f| lola::model::parse_build_full(&f.data))
     {

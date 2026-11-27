@@ -1,8 +1,7 @@
 <script lang="ts">
   // Layout "Abas": cabeçalho fixo com o campeão e o Importar; o corpo é uma aba por vez
   // (Draft · Build · Runas · Confronto). A aba segue a etapa da seleção até você clicar em outra.
-  import { openUrl } from "@tauri-apps/plugin-opener";
-  import { championIcon, icon, pct, LANES, coreSets, firstBack, situationalItems } from "$lib/api";
+  import { championIcon, icon, pct, laneName, phaseName, api } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import Search from "./parts/Search.svelte";
   import Notices from "./parts/Notices.svelte";
@@ -19,7 +18,6 @@
   import Trend from "$lib/Trend.svelte";
   import DamageBar from "$lib/DamageBar.svelte";
   import RuneAlternatives from "$lib/RuneAlternatives.svelte";
-  import { PHASES } from "$lib/api";
   import { t } from "$lib/i18n/index.svelte";
 
   type Tab = "draft" | "build" | "runas" | "confronto";
@@ -35,8 +33,8 @@
   });
   const tab = $derived<Tab>(chosen ?? (app.stage === "bans" || app.stage === "picks" ? "draft" : "build"));
   const b = $derived(app.build);
+  const core = $derived(app.cores[0]);
   const bans = $derived(app.snap?.bans ?? null);
-  const core = $derived(b ? coreSets(b, app.assets, app.minGames)[0] : undefined);
   const item = (id: number | string) => app.assets?.items[String(id)];
 </script>
 
@@ -47,11 +45,11 @@
       <div class="who">
         <div class="title">
           <b>{app.champ?.name ?? b.slug}</b>
-          {#if b.lanes.filter(([, p]) => p >= 1).length > 1}
+          {#if app.lanes.length > 1}
             <select class="lane" value={b.lane} onchange={(e) => app.changeLane(e.currentTarget.value)}>
-              {#each b.lanes.filter(([, p]) => p >= 1) as [lane, p] (lane)}<option value={lane}>{LANES[lane] ?? lane} {Math.round(p)}%</option>{/each}
+              {#each app.lanes as [lane, p] (lane)}<option value={lane}>{laneName(lane)} {Math.round(p)}%</option>{/each}
             </select>
-          {:else}<span class="muted">{LANES[b.lane] ?? b.lane}</span>{/if}
+          {:else}<span class="muted">{laneName(b.lane)}</span>{/if}
           <span class="muted small">{b.patch}</span>
         </div>
         <div class="muted small">WR <b class="txt">{pct(b.wr)}</b> · PR {pct(b.pr)} · BR {pct(b.br)}{#if b.rank} · #{b.rank}/{b.rankTotal}{/if} · {t("common.games", { count: b.n })}</div>
@@ -60,7 +58,7 @@
       <div class="who"><div class="title"><b>Lobby Companion</b></div><div class="muted small">{app.snap?.inChampSelect ? t("vTabs.lockToSee") : t("vTabs.searchToSee")}</div></div>
     {/if}
     <div class="right">
-      <span class="phase"><span class="dot" class:on={app.snap?.connected}></span>{#if !app.snap?.connected}{t("common.clientClosed")}{:else}{PHASES[app.snap.phase] ?? app.snap.phase}{/if}</span>
+      <span class="phase"><span class="dot" class:on={app.snap?.connected}></span>{#if !app.snap?.connected}{t("common.clientClosed")}{:else}{phaseName(app.snap.phase)}{/if}</span>
       <ImportButton labels={false} />
     </div>
   </header>
@@ -98,7 +96,7 @@
         </section>
         <section>
           {#if app.snap?.inChampSelect && app.snap.picks}
-            {@const laneLabel = LANES[app.snap.picks.lane ?? ""]}
+            {@const laneLabel = laneName(app.snap.picks.lane)}
             <h2>{laneLabel ? t("vTabs.pickFor", { lane: laneLabel }) : t("vTabs.pickForPosition")} <MetricToggle /></h2>
             <PickList variant="detailed" />
           {/if}
@@ -125,9 +123,9 @@
               <div class="icons">{#each b.startSets[0].ids as id, i (i)}<img src={icon(item(id)?.icon)} alt="" title={item(id)?.name} />{/each}</div>
               <span class="small">{app.startText(0)}</span></div>
           {/if}
-          {#if firstBack(b, app.assets, app.minGames).length}
+          {#if app.firstBackItems.length}
             <div class="irow"><span class="lbl">{t("common.firstBack")}</span>
-              <div class="icons">{#each firstBack(b, app.assets, app.minGames).slice(0, 4) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div></div>
+              <div class="icons">{#each app.firstBackItems.slice(0, 4) as it (it.id)}<img src={icon(item(it.id)?.icon)} alt="" title="{item(it.id)?.name} · {pct(it.wr)}" />{/each}</div></div>
           {/if}
           {#if core}
             <div class="irow"><span class="lbl">{t("common.core")}</span>
@@ -142,9 +140,9 @@
               </div>
             {/each}
           </div>
-          {#if situationalItems(b, app.assets, app.minGames, app.metric).length}
+          {#if app.situational.length}
             <div class="irow"><span class="lbl">{t("common.situationalShort")}</span>
-              <div class="icons">{#each situationalItems(b, app.assets, app.minGames, app.metric) as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={26} />{/each}</div></div>
+              <div class="icons">{#each app.situational as it (it.id)}<Item {it} from={b.winningItems ?? []} slot={false} size={26} />{/each}</div></div>
           {/if}
         </section>
         <section>
@@ -159,7 +157,7 @@
           <SkillGrid cell={15} numbers />
           {#if b.trend}<h2>{t("vTabs.trend")}</h2><Trend trend={b.trend} />{/if}
           {#if b.damage}<DamageBar damage={b.damage} />{/if}
-          {#if app.snap?.pageUrl}<button class="link more" onclick={() => openUrl(app.snap!.pageUrl!)}>{t("views.openLolalytics")}</button>{/if}
+          {#if app.snap?.pageUrl}<button class="link more" onclick={() => api.openUrl(app.snap!.pageUrl!)}>{t("views.openLolalytics")}</button>{/if}
         </section>
       </div>
     {:else if tab === "runas"}
@@ -228,8 +226,5 @@
   /* Única coluna que rola: as alternativas de runa passam da altura da janela. */
   .alts { overflow-y: auto; }
   .empty { padding: 40px 24px; text-align: center; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
 </style>

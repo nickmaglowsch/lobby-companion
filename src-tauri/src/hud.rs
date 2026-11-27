@@ -13,6 +13,7 @@
 //! em que está preso.
 
 use serde::Serialize;
+use std::fmt::Write;
 
 pub const REF_W: f64 = 1600.0;
 pub const REF_H: f64 = 1200.0;
@@ -24,12 +25,6 @@ pub struct Rect {
     pub y: f64,
     pub w: f64,
     pub h: f64,
-}
-
-impl Rect {
-    pub fn center(&self) -> (f64, f64) {
-        (self.x + self.w / 2.0, self.y + self.h / 2.0)
-    }
 }
 
 /// Elemento do layout do jogo, em coordenadas de 1600×1200.
@@ -65,8 +60,7 @@ const SCOREBOARD_ROW_H: f64 = 84.0;
 const SCOREBOARD_DIVIDER_X: f64 = 777.0 + 45.0 / 2.0;
 
 /// Configuração do HUD que muda a posição do que o overlay usa.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HudConfig {
     /// 1.0 = 100 %.
     pub minimap_scale: f64,
@@ -138,8 +132,7 @@ pub fn scoreboard_row_center(row: usize, w: f64, h: f64) -> (f64, f64) {
 }
 
 /// O que o overlay lê do `Config/game.cfg` do jogo (formato INI).
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default)]
 pub struct GameCfg {
     /// Resolução salva (a área de desenho real vem da janela do jogo; isto é só o plano B).
     pub width: Option<u32>,
@@ -149,42 +142,61 @@ pub struct GameCfg {
     pub hud: HudConfig,
 }
 
+/// Seção do `game.cfg` que importa (as outras são ignoradas).
+#[derive(Clone, Copy, PartialEq)]
+enum Section {
+    General,
+    Hud,
+    Other,
+}
+
+/// `[Nome]` → a seção; `None` se a linha não é cabeçalho.
+fn section_of(line: &str) -> Option<Section> {
+    let s = line.strip_prefix('[')?.strip_suffix(']')?.trim();
+    Some(if s.eq_ignore_ascii_case("general") {
+        Section::General
+    } else if s.eq_ignore_ascii_case("hud") {
+        Section::Hud
+    } else {
+        Section::Other
+    })
+}
+
 /// Lê o `game.cfg`. Chaves sem diferença de maiúsculas; o que faltar fica no padrão.
 pub fn parse_game_cfg(text: &str) -> GameCfg {
     let mut out = GameCfg::default();
-    let mut section = String::new();
+    let mut section = Section::Other;
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
             continue;
         }
-        if let Some(s) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            section = s.trim().to_ascii_lowercase();
+        if let Some(s) = section_of(line) {
+            section = s;
             continue;
         }
         let Some((k, v)) = line.split_once('=') else {
             continue;
         };
-        let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
-        match (section.as_str(), k.as_str()) {
-            ("general", "width") => out.width = v.parse().ok(),
-            ("general", "height") => out.height = v.parse().ok(),
-            ("general", "windowmode") => out.window_mode = v.parse().ok(),
-            ("hud", "minimapscale") => {
+        let (k, v) = (k.trim(), v.trim());
+        let is = |name: &str| k.eq_ignore_ascii_case(name);
+        match section {
+            Section::General if is("width") => out.width = v.parse().ok(),
+            Section::General if is("height") => out.height = v.parse().ok(),
+            Section::General if is("windowmode") => out.window_mode = v.parse().ok(),
+            Section::Hud if is("minimapscale") => {
                 if let Ok(s) = v.parse::<f64>() {
                     out.hud.minimap_scale = s;
                 }
             }
             // "Mostrar minimapa à esquerda" nas opções do jogo.
-            ("hud", "flipminimap") => out.hud.minimap_left = truthy(v),
+            Section::Hud if is("flipminimap") => {
+                out.hud.minimap_left = v == "1" || v.eq_ignore_ascii_case("true");
+            }
             _ => {}
         }
     }
     out
-}
-
-fn truthy(v: &str) -> bool {
-    matches!(v.to_ascii_lowercase().as_str(), "1" | "true")
 }
 
 /// Modo de vídeo "Sem bordas" (`WindowMode` do `[General]`).
@@ -194,21 +206,21 @@ pub const BORDERLESS: u32 = 2;
 /// `[General]`. `None` = nada a mudar (já em janela ou sem bordas, ou sem a chave). Mantém o
 /// resto do arquivo como está, inclusive as quebras de linha.
 pub fn set_borderless(text: &str) -> Option<String> {
-    let mut section = String::new();
+    let mut section = Section::Other;
     let mut changed = false;
     let mut out = String::with_capacity(text.len() + 1);
     for raw in text.split_inclusive('\n') {
         let body = raw.trim_end_matches(['\r', '\n']);
         let ending = &raw[body.len()..];
         let line = body.trim();
-        if let Some(s) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            section = s.trim().to_ascii_lowercase();
-        } else if section == "general"
+        if let Some(s) = section_of(line) {
+            section = s;
+        } else if section == Section::General
             && let Some((k, v)) = line.split_once('=')
             && k.trim().eq_ignore_ascii_case("windowmode")
             && v.trim() == "0"
         {
-            out.push_str(&format!("{}={BORDERLESS}{ending}", k.trim()));
+            let _ = write!(out, "{}={BORDERLESS}{ending}", k.trim());
             changed = true;
             continue;
         }
@@ -326,7 +338,7 @@ mod tests {
         let (x, _) = scoreboard_row_center(0, 2560.0, 1080.0);
         assert!(near(x, 1280.0 - 0.45, 0.01));
         let sb = scoreboard(2560.0, 1080.0);
-        assert!(near(sb.center().0, 1280.0 - 0.9, 0.01));
+        assert!(near(sb.x + sb.w / 2.0, 1280.0 - 0.9, 0.01));
     }
 
     #[test]

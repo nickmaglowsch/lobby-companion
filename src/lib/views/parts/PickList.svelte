@@ -1,6 +1,6 @@
 <script lang="ts">
   // Sugestões de pick compactas. Clicar só mostra o build na janela (não muda nada no cliente).
-  import { championIcon, pct, LANES, type PickPart, type PickSuggestion } from "$lib/api";
+  import { championIcon, pct, laneName, type PickPart, type PickSuggestion } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
   import { signed } from "./fmt";
@@ -11,7 +11,7 @@
   const list = $derived((advice?.suggestions ?? []).slice(0, max));
   const partText = (p: PickPart) =>
     t(p.kind === "counter" ? "pickList.partCounter" : "pickList.partSynergy", {
-      delta: signed(p.delta), name: app.champName(p.championId), lane: LANES[p.lane] ?? p.lane, wr: pct(p.wr), count: p.n,
+      delta: signed(p.delta), name: app.champName(p.championId), lane: laneName(p.lane), wr: pct(p.wr), count: p.n,
     });
   const why = (s: PickSuggestion) =>
     [
@@ -83,9 +83,6 @@
   .parts.inline { display: flex; gap: 8px; margin: 0; }
   .parts span { display: flex; align-items: center; gap: 3px; justify-content: center; }
   .parts img { width: 14px; height: 14px; border-radius: 2px; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
   p { margin: 0; }
 </style>

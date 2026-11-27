@@ -55,6 +55,4 @@
   img { width: 36px; height: 36px; border: 1px solid var(--gold-dim); border-radius: 4px; background: var(--panel-2); }
   .wr { font-size: 12px; font-variant-numeric: tabular-nums; }
   .pr { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
 </style>

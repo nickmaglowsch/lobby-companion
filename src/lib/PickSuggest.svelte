@@ -2,9 +2,8 @@
   // Cartão "Sugestão de pick": só sugestão (texto e ícones). Clicar mostra o build do campeão
   // na janela (`lookup`), sem mudar nada no cliente: a janela só importa sozinha o build do
   // campeão que você mesmo escolheu ou declarou (`may_apply`).
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import {
-    championIcon, pct, pts, LANES,
+    api, championIcon, pct, pts, laneName,
     type Assets, type PickAdvice, type PickPart, type SynergyAdvice,
   } from "./api";
   import Synergy from "./Synergy.svelte";
@@ -24,7 +23,7 @@
   const partText = (p: PickPart) =>
     t(p.kind === "counter" ? "pickSuggest.partCounter" : "pickSuggest.partSynergy", {
       name: name(p.championId),
-      lane: LANES[p.lane] ?? p.lane,
+      lane: laneName(p.lane),
     });
   // Depois de travar, a lista fica recolhida (o que importa passa a ser a sinergia).
   let open = $state(false);
@@ -42,7 +41,7 @@
   </div>
   {#if advice?.lane}
     <div class="muted small">
-      {LANES[advice.lane] ?? advice.lane} · {advice.pool === "tier" ? t("pickSuggest.poolTier") : t("pickSuggest.poolMastery")}
+      {laneName(advice.lane)} · {advice.pool === "tier" ? t("pickSuggest.poolTier") : t("pickSuggest.poolMastery")}
       {#if advice.enemies.length || advice.allies.length}
         · {t("pickSuggest.against")}
         {#each advice.enemies as id (id)}<img class="mini" src={championIcon(id)} alt={name(id)} title={name(id)} />{/each}
@@ -78,7 +77,7 @@
   {#if showList && advice?.suggestions.length}
     <p class="muted small">
       {pickExplain(advice.metric)}
-      {#if advice.pageUrl}<button class="link small" onclick={() => openUrl(advice!.pageUrl!)}>{t("pickSuggest.tierListLink")}</button>{/if}
+      {#if advice.pageUrl}<button class="link small" onclick={() => api.openUrl(advice!.pageUrl!)}>{t("pickSuggest.tierListLink")}</button>{/if}
     </p>
   {/if}
   {#if synergy}<Synergy {synergy} {assets} />{/if}
@@ -88,7 +87,6 @@
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
   .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   h2 { margin: 0 0 6px; font-size: 14px; color: var(--gold); }
-  .muted { color: var(--muted); }
   .small { font-size: 12px; }
   p { margin: 6px 0 0; }
   .mini { width: 18px; height: 18px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--gold-dim); }
@@ -99,7 +97,5 @@
   .body { display: grid; gap: 1px; }
   .total { font-size: 12px; font-variant-numeric: tabular-nums; }
   .part { font-variant-numeric: tabular-nums; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
   button.link { border: none; background: none; color: var(--gold); cursor: pointer; padding: 0 4px; font: inherit; }
 </style>

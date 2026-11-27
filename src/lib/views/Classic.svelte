@@ -1,8 +1,7 @@
 <script lang="ts">
   // Layout "Clássico": a coluna completa com rolagem (a interface original).
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import {
-    api, championIcon, icon, pct, LANES, PHASES, firstBack, situationalItems, type BanPick, type RuneChoice,
+    api, championIcon, icon, pct, LANE_IDS, laneName, phaseName, type BanPick, type RuneChoice,
   } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import Runes from "$lib/Runes.svelte";
@@ -62,7 +61,7 @@
   <header>
     <span class="dot" class:on={snap?.connected}></span>
     <span class="status">
-      {#if !snap?.connected}{t("common.clientClosedLong")}{:else}{PHASES[snap.phase] ?? snap.phase}{/if}
+      {#if !snap?.connected}{t("common.clientClosedLong")}{:else}{phaseName(snap.phase)}{/if}
     </span>
     <form class="search" onsubmit={(e) => { e.preventDefault(); pickChampion(); }}>
       <input list="champs" placeholder={t("vClassic.searchPlaceholder")} aria-label={t("vClassic.searchPlaceholder")} bind:value={search} disabled={!assets} />
@@ -112,7 +111,7 @@
               {#each p.reasons as r (r.allyChampionId + r.lane)}
                 <div class="reason muted small">
                   <img class="mini" src={championIcon(r.allyChampionId)} alt={champName(r.allyChampionId)} />
-                  {t("vClassic.banReason", { champ: champName(r.allyChampionId), wr: pct(r.wr), lane: LANES[r.lane] ?? r.lane, base: pct(r.baseWr), count: r.n })}
+                  {t("vClassic.banReason", { champ: champName(r.allyChampionId), wr: pct(r.wr), lane: laneName(r.lane), base: pct(r.baseWr), count: r.n })}
                 </div>
               {/each}
             </div>
@@ -122,14 +121,14 @@
 
       <h3 class="ban-group">{t("views.byTeam")}</h3>
       {#if bans.byTier}
-        <div class="based muted small">{bans.lane ? t("vClassic.noneDeclaredLane", { lane: LANES[bans.lane] ?? bans.lane }) : t("vClassic.noneDeclared")}</div>
+        <div class="based muted small">{bans.lane ? t("vClassic.noneDeclaredLane", { lane: laneName(bans.lane) }) : t("vClassic.noneDeclared")}</div>
       {/if}
       {#if bans.basedOn.length}
         <div class="based muted small">
           {snap.inChampSelect ? t("vClassic.yourTeam") : t("vClassic.for")}
           {#each bans.basedOn as a (a.championId)}
             <img class="mini" class:me={a.me} src={championIcon(a.championId)} alt={champName(a.championId)}
-              title="{champName(a.championId)}{a.lane ? ` (${LANES[a.lane] ?? a.lane})` : ''}{a.me ? ` · ${t('common.you')}` : ''}" />
+              title="{champName(a.championId)}{a.lane ? ` (${laneName(a.lane)})` : ''}{a.me ? ` · ${t('common.you')}` : ''}" />
           {/each}
         </div>
       {/if}
@@ -138,7 +137,7 @@
 
       <h3 class="ban-group">
         {#if bans.laneFor}{t("vClassic.vsYourPickColon")} <img class="mini me" src={championIcon(bans.laneFor.championId)} alt={champName(bans.laneFor.championId)} />
-        {champName(bans.laneFor.championId)}{bans.laneFor.lane ? ` (${LANES[bans.laneFor.lane] ?? bans.laneFor.lane})` : ""}{:else}{t("views.vsYourPick")}{/if}
+        {champName(bans.laneFor.championId)}{bans.laneFor.lane ? ` (${laneName(bans.laneFor.lane)})` : ""}{:else}{t("views.vsYourPick")}{/if}
       </h3>
       {#if bans.lanePicks.length}
         <div class="based muted small">{t("vClassic.laneOpponentsHint")}</div>
@@ -147,7 +146,7 @@
       {#if bans.laneNote}<p class="muted small">{bans.laneNote}</p>{/if}
       {#if bans.picks.length && bans.byTier}
         <p class="muted small">{banExplain(bans.metric, true)}
-          {#if bans.pageUrl}<button class="link" onclick={() => openUrl(bans.pageUrl!)}>{t("vClassic.tierListLink")}</button>{/if}
+          {#if bans.pageUrl}<button class="link" onclick={() => api.openUrl(bans.pageUrl!)}>{t("vClassic.tierListLink")}</button>{/if}
         </p>
       {:else if bans.picks.length || bans.lanePicks.length}
         <p class="muted small">{banExplain(bans.metric, false)}</p>
@@ -163,7 +162,7 @@
     <section class="hero">
       <img class="champ" src={championIcon(snap.championId)} alt={champ?.name} />
       <div>
-        <h1>{champ?.name ?? build.slug} <small>{LANES[build.lane] ?? build.lane} · {build.patch}</small></h1>
+        <h1>{champ?.name ?? build.slug} <small>{laneName(build.lane)} · {build.patch}</small></h1>
         <div class="stats">
           <span>WR <b>{pct(build.wr)}</b></span>
           <span>PR {pct(build.pr)}</span>
@@ -172,8 +171,8 @@
           <span class="muted">{t("common.games", { count: build.n })}</span>
         </div>
         <div class="lanes">
-          {#each build.lanes.filter(([, p]) => p >= 1) as [lane, p] (lane)}
-            <button class:active={lane === build.lane} onclick={() => changeLane(lane)}>{LANES[lane] ?? lane} {Math.round(p)}%</button>
+          {#each app.lanes as [lane, p] (lane)}
+            <button class:active={lane === build.lane} onclick={() => changeLane(lane)}>{laneName(lane)} {Math.round(p)}%</button>
           {/each}
         </div>
         <Trend trend={build.trend} />
@@ -186,7 +185,7 @@
         {importing ? t("vClassic.importing") : t("vClassic.import")}
       </button>
       {#if snap.pageUrl}
-        <button class="link" onclick={() => openUrl(snap!.pageUrl!)}>{t("views.openLolalytics")}</button>
+        <button class="link" onclick={() => api.openUrl(snap!.pageUrl!)}>{t("views.openLolalytics")}</button>
       {/if}
     </section>
     {#if importError}<p class="msg bad">{importError}</p>{/if}
@@ -217,11 +216,11 @@
       <form class="vs-form" onsubmit={(e) => { e.preventDefault(); const c = findChampion(vsSearch); if (c) chooseVs(c.id); }}>
         <input list="champs" placeholder={t("vClassic.vsPlaceholder")} aria-label={t("vClassic.vsPlaceholder")} bind:value={vsSearch} disabled={!assets} />
         <select value={vsLane ?? ""} onchange={(e) => changeVsLane(e.currentTarget.value)} title={t("vClassic.vsLaneTitle")}>
-          {#each Object.entries(LANES) as [v, l] (v)}<option value={v}>{l}</option>{/each}
+          {#each LANE_IDS as v (v)}<option value={v}>{laneName(v)}</option>{/each}
         </select>
       </form>
       {#if build.vs}
-        {@const [vsBefore, vsAfter] = around(t("vClassic.vsLine", { lane: LANES[build.vs.lane] ?? build.vs.lane }), "champ")}
+        {@const [vsBefore, vsAfter] = around(t("vClassic.vsLine", { lane: laneName(build.vs.lane) }), "champ")}
         <p class="vs-line">
           <img class="mini" src={championIcon(build.vs.championId)} alt={champName(build.vs.championId)} />
           {vsBefore}<b>{champName(build.vs.championId)}</b>{vsAfter}
@@ -291,13 +290,13 @@
           </div>
         </div>
       {/each}
-      <CoreBuild {build} {assets} {minGames} />
-      <ItemRow label={t("common.firstBack")} items={firstBack(build, assets, minGames)} from={build.earlyItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
+      <CoreBuild {build} />
+      <ItemRow label={t("common.firstBack")} items={app.firstBackItems} from={build.earlyItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
       <ItemRow label={t("common.boots")} items={build.boots} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {#each build.slots as slot, i (i)}
         <ItemRow label={t("common.itemN", { n: i + 1 })} items={slot} {assets} avgWr={build.wr} {minGames} highlight={defHighlight} />
       {/each}
-      <ItemRow label={t("common.situationalShort")} items={situationalItems(build, assets, minGames, app.metric)} from={build.winningItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
+      <ItemRow label={t("common.situationalShort")} items={app.situational} from={build.winningItems ?? []} slot={false} {assets} avgWr={build.wr} {minGames} />
       <p class="muted small">{itemLegend(app.metric, minGames)}</p>
     </section>
   {/if}
@@ -316,19 +315,12 @@
   .dot.on { background: var(--good); }
   .status { white-space: nowrap; }
   .search { margin-inline-start: auto; }
-  input, select { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 4px; padding: 4px 6px; font: inherit; }
   .search input { width: 160px; }
-  button { background: var(--panel); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--gold); }
-  button:disabled { opacity: 0.5; cursor: default; }
   button.active { border-color: var(--gold); color: var(--gold); }
-  button.primary { background: #1e282d; border-color: var(--gold); color: var(--gold); font-weight: 600; }
-  button.link { border: none; background: none; color: var(--gold); }
   .msg { margin: 0; padding: 6px 8px; border-radius: 4px; background: var(--panel); }
   .msg.bad { color: var(--bad); }
   .msg.warn { color: var(--warn); }
   .empty { padding: 24px 8px; text-align: center; }
-  .muted { color: var(--muted); }
   .small { font-size: 12px; }
   .hero { display: flex; gap: 12px; align-items: center; }
   .champ { width: 64px; height: 64px; border: 2px solid var(--gold); border-radius: 6px; }
@@ -369,6 +361,7 @@
   .ban-group:first-of-type { margin-top: 0; }
   button.ban { font: inherit; color: inherit; text-align: start; background: none; border: none; border-top: 1px solid var(--line); border-radius: 0; padding: 5px 0; width: 100%; }
   .ban.act { cursor: pointer; }
+  button.ban:hover { border-color: var(--gold); }
   .ban.act:hover .ban-icon { box-shadow: 0 0 0 2px var(--bad); }
   .turn { color: var(--gold); margin: 0 0 6px; }
   .ban { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px solid var(--line); }
@@ -381,6 +374,4 @@
   .vs-form { display: flex; gap: 6px; }
   .vs-form input { flex: 1; min-width: 0; }
   .vs-line { margin: 8px 0 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
 </style>

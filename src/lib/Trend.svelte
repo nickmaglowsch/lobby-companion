@@ -53,7 +53,4 @@
   polyline { fill: none; stroke-linejoin: round; stroke-linecap: round; }
   .raw { stroke: var(--muted); stroke-width: 1; opacity: 0.5; }
   .smooth { stroke: var(--gold); stroke-width: 1.6; }
-  .muted { color: var(--muted); }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
 </style>

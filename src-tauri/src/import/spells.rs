@@ -16,15 +16,16 @@ pub fn arrange(rec: (i64, i64), cur: (i64, i64), flash_slot: u8) -> (i64, i64) {
     if r.contains(&cur.1) && cur.1 != out[0] {
         out[1] = cur.1;
     }
-    let mut rest: Vec<i64> = r.iter().copied().filter(|x| !out.contains(x)).collect();
-    if out == [0, 0] && rest.contains(&FLASH) {
-        let flash_idx = if flash_slot == 2 { 1 } else { 0 };
-        out[flash_idx] = FLASH;
-        rest.retain(|x| *x != FLASH);
+    if out == [0, 0] && r.contains(&FLASH) {
+        out[usize::from(flash_slot == 2)] = FLASH;
     }
-    for slot in out.iter_mut() {
+    let rest: Vec<i64> = r.into_iter().filter(|x| !out.contains(x)).collect();
+    let mut rest = rest.into_iter();
+    // Recomendação repetida ("4_4"): a tecla que sobra fica como está (antes, `remove(0)`
+    // numa lista vazia derrubava o app).
+    for (slot, keep) in out.iter_mut().zip([cur.0, cur.1]) {
         if *slot == 0 {
-            *slot = rest.remove(0);
+            *slot = rest.next().unwrap_or(keep);
         }
     }
     (out[0], out[1])
@@ -57,5 +58,8 @@ mod tests {
         assert_eq!(arrange((6, 11), (3, 7), 1), (6, 11));
         // já igual
         assert_eq!(arrange((4, 11), (11, 4), 1), (11, 4));
+        // recomendação repetida não derruba o app
+        assert_eq!(arrange((4, 4), (4, 7), 1), (4, 7));
+        assert_eq!(arrange((4, 4), (3, 7), 2), (3, 4));
     }
 }

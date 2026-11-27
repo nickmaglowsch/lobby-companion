@@ -40,9 +40,17 @@ pub struct OwnPage {
 pub fn clean_name(name: &str) -> Option<String> {
     let name = name.trim();
     let name = name.strip_prefix("LC:").unwrap_or(name);
-    let joined = name.split_whitespace().collect::<Vec<_>>().join(" ");
-    let short: String = joined.chars().take(MAX_NAME).collect();
-    let short = short.trim().to_string();
+    let mut short = String::with_capacity(name.len().min(MAX_NAME * 4));
+    for word in name.split_whitespace() {
+        if !short.is_empty() {
+            short.push(' ');
+        }
+        short.push_str(word);
+    }
+    if let Some((end, _)) = short.char_indices().nth(MAX_NAME) {
+        short.truncate(end);
+    }
+    short.truncate(short.trim_end().len());
     (!short.is_empty()).then_some(short)
 }
 
@@ -200,23 +208,24 @@ impl OwnPages {
 
     pub fn from_value(v: &Value) -> Self {
         if v.get("champions").is_some() {
-            return serde_json::from_value(v.clone()).unwrap_or_default();
+            return Self::deserialize(v).unwrap_or_default();
         }
-        let Ok(old) = serde_json::from_value::<BTreeMap<i64, BTreeMap<String, V1Page>>>(
-            v.get("pages").cloned().unwrap_or(Value::Null),
+        let Ok(old) = BTreeMap::<i64, BTreeMap<String, V1Page>>::deserialize(
+            v.get("pages").unwrap_or(&Value::Null),
         ) else {
             return Self::default();
         };
         let mut out = Self::default();
+        let lang = crate::i18n::Lang::current();
         for (champion, lanes) in old {
             let mut c = ChampionPages::default();
             for (i, (lane, p)) in lanes.into_iter().enumerate() {
                 let id = i as u32 + 1;
-                let label = champselect::lane_label(crate::i18n::Lang::current(), &lane);
+                let label = champselect::lane_label(lang, &lane);
                 c.pages.push(OwnPage {
                     id,
                     name: if label.is_empty() {
-                        crate::t!("own.defaultName", n = id)
+                        lang.tf("own.defaultName", &[("n", &id)])
                     } else {
                         label
                     },
@@ -237,14 +246,8 @@ impl OwnPages {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
         let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
-        // Grava ao lado e troca: um fechamento no meio não deixa o arquivo pela metade.
-        let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, json)?;
-        std::fs::rename(&tmp, path)
+        crate::assets::write_atomic(path, &json)
     }
 
     pub fn get(&self, champion_id: i64, id: u32) -> Option<&OwnPage> {

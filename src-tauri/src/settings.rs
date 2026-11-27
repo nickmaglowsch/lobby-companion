@@ -125,18 +125,25 @@ impl Settings {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        std::fs::write(path, serde_json::to_vec_pretty(self).unwrap_or_default())
+        crate::assets::write_atomic(path, &serde_json::to_vec_pretty(self).unwrap_or_default())
     }
 
     /// Tamanho da janela para o layout: (largura, altura, largura mínima, altura mínima).
     /// Os layouts novos cabem numa tela só; o clássico é uma coluna com rolagem.
     pub fn window_size(&self) -> (f64, f64, f64, f64) {
-        match self.layout.as_str() {
-            "classic" => (480.0, 780.0, 380.0, 480.0),
-            _ => (720.0, 600.0, 700.0, 580.0),
+        Self::window_size_for(self.is_classic())
+    }
+
+    /// Layout "classic" (coluna com rolagem): o único com outro tamanho de janela.
+    pub fn is_classic(&self) -> bool {
+        self.layout == "classic"
+    }
+
+    pub const fn window_size_for(classic: bool) -> (f64, f64, f64, f64) {
+        if classic {
+            (480.0, 780.0, 380.0, 480.0)
+        } else {
+            (720.0, 600.0, 700.0, 580.0)
         }
     }
 

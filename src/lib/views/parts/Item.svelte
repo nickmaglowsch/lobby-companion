@@ -29,6 +29,4 @@
   .it.low { opacity: 0.45; }
   img { width: var(--s); height: var(--s); border-radius: 4px; border: 1px solid var(--gold-dim); background: var(--panel-2); }
   .def img { border-color: var(--good); box-shadow: 0 0 0 1px var(--good); }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
 </style>

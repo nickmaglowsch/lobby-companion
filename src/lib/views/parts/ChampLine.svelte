@@ -1,35 +1,34 @@
 <script lang="ts">
   // Campeão em tela numa linha: retrato, nome, lane (troca de lane no menu) e WR/rank.
-  import { championIcon, pct, LANES } from "$lib/api";
+  import { championIcon, pct, laneName } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
 
-  let { size = 26, stats = "short" }: { size?: number; stats?: "short" | "long" } = $props();
   const b = $derived(app.build);
-  const lanes = $derived(b ? b.lanes.filter(([, p]) => p >= 1) : []);
+  const lanes = $derived(app.lanes);
 </script>
 
 {#if b && app.snap}
   <span class="cl">
-    <img src={championIcon(app.snap.championId)} alt="" style="width: {size}px; height: {size}px" />
+    <img src={championIcon(app.snap.championId)} alt="" />
     <span class="nm">{app.champ?.name ?? b.slug}</span>
     {#if lanes.length > 1}
       <select class="lane" value={b.lane} onchange={(e) => app.changeLane(e.currentTarget.value)} title={t("champLine.changeLane")}>
-        {#each lanes as [lane, p] (lane)}<option value={lane}>{t("champLine.laneOption", { lane: LANES[lane] ?? lane, p: Math.round(p) })}</option>{/each}
+        {#each lanes as [lane, p] (lane)}<option value={lane}>{t("champLine.laneOption", { lane: laneName(lane), p: Math.round(p) })}</option>{/each}
       </select>
     {:else}
-      <span class="chip">{LANES[b.lane] ?? b.lane}</span>
+      <span class="chip">{laneName(b.lane)}</span>
     {/if}
     <span class="muted">
       WR <b class="txt">{pct(b.wr)}</b>{#if b.rank} · #{b.rank}/{b.rankTotal}{/if}
-      {#if stats === "long"} · PR {pct(b.pr)} · BR {pct(b.br)} · {t("common.games", { count: b.n })}{/if} · {b.patch}
+      · {b.patch}
     </span>
   </span>
 {/if}
 
 <style>
   .cl { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; }
-  img { border: 1px solid var(--gold); border-radius: 4px; }
+  img { width: 26px; height: 26px; border: 1px solid var(--gold); border-radius: 4px; }
   .nm { font-weight: 600; white-space: nowrap; }
   .chip { font-size: 11px; padding: 1px 6px; border: 1px solid var(--gold-dim); border-radius: 10px; color: var(--gold); }
   .lane { font-size: 11px; padding: 1px 4px; color: var(--gold); }

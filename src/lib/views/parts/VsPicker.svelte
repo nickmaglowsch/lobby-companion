@@ -1,6 +1,6 @@
 <script lang="ts">
   // Confronto: atalhos dos inimigos visíveis (+ busca e lane no modo completo) e o resumo do WR contra ele.
-  import { championIcon, pct, LANES } from "$lib/api";
+  import { championIcon, pct, LANE_IDS, laneName } from "$lib/api";
   import { app } from "$lib/app.svelte";
   import { t } from "$lib/i18n/index.svelte";
 
@@ -27,12 +27,12 @@
       <input list={id} placeholder={t("vsPicker.otherChampion")} bind:value={text} disabled={!app.assets} />
       <datalist {id}>{#each app.champions as c (c.id)}<option value={c.name}></option>{/each}</datalist>
       <select value={app.vsLane ?? ""} onchange={(e) => app.changeVsLane(e.currentTarget.value)} title={t("vsPicker.laneTip")}>
-        {#each Object.entries(LANES) as [v, l] (v)}<option value={v}>{l}</option>{/each}
+        {#each LANE_IDS as v (v)}<option value={v}>{laneName(v)}</option>{/each}
       </select>
     </form>
   {/if}
   {#if b?.vs}
-    {@const head = t("vsPicker.vsHead", { lane: LANES[b.vs.lane] ?? b.vs.lane }).split("{name}")}
+    {@const head = t("vsPicker.vsHead", { lane: laneName(b.vs.lane) }).split("{name}")}
     <!-- O nome fica em negrito: o texto traduzido é cortado no "{name}". -->
     <p class="line">
       <span>{head[0]}<b>{app.champName(b.vs.championId)}</b>{head.slice(1).join("")}</span>
@@ -56,9 +56,6 @@
   form { display: flex; gap: 6px; }
   form input { flex: 1; min-width: 0; }
   .line { margin: 0; font-size: 12px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
-  .muted { color: var(--muted); }
   .small { font-size: 11px; }
   .link { font-size: 11px; padding: 0 4px; }
 </style>

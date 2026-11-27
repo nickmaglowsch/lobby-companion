@@ -11,10 +11,12 @@ use crate::assets::Assets;
 use crate::i18n::Lang;
 use crate::lcu::Lcu;
 use crate::lola::model::Build;
+use futures_util::future::join_all;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::LazyLock;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,45 +36,37 @@ pub fn parse_damage_type(champion: &Value) -> Option<DamageType> {
     }
 }
 
-/// O tipo de dano não muda durante a sessão do app: guardamos o que já foi lido.
+/// O tipo de dano não muda durante a sessão do app: guardamos o que já foi lido. Trava assíncrona
+/// segurada durante a busca: duas chamadas ao mesmo tempo (a janela pede a cada mudança do draft)
+/// não buscam o mesmo campeão duas vezes; a segunda espera e acha tudo no cache.
 static CACHE: LazyLock<Mutex<HashMap<i64, DamageType>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Tipo de dano de cada campeão (só GET; no máximo os 10 da seleção, os do cache não repetem).
 pub async fn damage_types(lcu: Option<&Lcu>, ids: &[i64]) -> HashMap<i64, DamageType> {
-    let ids: Vec<i64> = ids
-        .iter()
-        .copied()
-        .filter(|id| (1..=9999).contains(id))
-        .take(10)
-        .collect();
-    let missing: Vec<i64> = {
-        let cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let ids = || {
         ids.iter()
             .copied()
-            .filter(|id| !cache.contains_key(id))
-            .collect()
+            .filter(|id| (1..=9999).contains(id))
+            .take(10)
     };
+    let mut cache = CACHE.lock().await;
     if let Some(lcu) = lcu {
-        for id in missing {
-            let path = format!("/lol-game-data/assets/v1/champions/{id}.json");
-            if let Some(t) = lcu
-                .get(&path)
-                .await
-                .ok()
-                .as_ref()
-                .and_then(parse_damage_type)
-            {
-                CACHE
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(id, t);
-            }
-        }
+        // Os que faltam ao mesmo tempo: a trava fica no máximo o tempo de uma requisição.
+        let fetched = join_all(
+            ids()
+                .filter(|id| !cache.contains_key(id))
+                .map(|id| async move {
+                    let path = format!("/lol-game-data/assets/v1/champions/{id}.json");
+                    let t = lcu.get(&path).await.ok();
+                    (id, t.as_ref().and_then(parse_damage_type))
+                }),
+        )
+        .await;
+        cache.extend(fetched.into_iter().filter_map(|(id, t)| Some((id, t?))));
     }
-    let cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    ids.iter()
-        .filter_map(|id| cache.get(id).map(|t| (*id, *t)))
+    ids()
+        .filter_map(|id| cache.get(&id).map(|t| (id, *t)))
         .collect()
 }
 

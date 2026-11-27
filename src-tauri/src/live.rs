@@ -6,7 +6,6 @@
 //! de outros jogadores. Por isso tudo aqui passa por listas de campos permitidos: o que não está
 //! na lista é descartado (no diagnóstico só aparece o nome do campo, nunca o valor).
 
-use serde::Serialize;
 use serde_json::{Map, Value};
 use std::time::Duration;
 
@@ -45,76 +44,79 @@ const EVENT_FIELDS: &[&str] = &[
     "KillStreak",
 ];
 
-fn keep(v: &Value, allowed: &[&str]) -> Value {
-    let Some(obj) = v.as_object() else {
-        return Value::Null;
-    };
-    let out: Map<String, Value> = obj
-        .iter()
-        .filter(|(k, _)| allowed.contains(&k.as_str()))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    Value::Object(out)
+/// Só os campos permitidos do objeto (sem cópia: o resto é descartado).
+fn keep(v: Value, allowed: &[&str]) -> Value {
+    match v {
+        Value::Object(mut obj) => {
+            obj.retain(|k, _| allowed.contains(&k.as_str()));
+            Value::Object(obj)
+        }
+        _ => Value::Null,
+    }
 }
 
-fn field_names(v: &Value) -> Vec<String> {
+/// Tira de `v` o valor no caminho `ptr`, sem copiar.
+fn take(v: &mut Value, ptr: &str) -> Option<Value> {
+    v.pointer_mut(ptr).map(Value::take)
+}
+
+fn field_names(v: &Value) -> Vec<&str> {
     v.as_object()
-        .map(|o| o.keys().cloned().collect())
+        .map(|o| o.keys().map(String::as_str).collect())
         .unwrap_or_default()
 }
 
-/// Versão da resposta de `allgamedata` sem nada que identifique jogadores.
-pub fn sanitize(all: &Value) -> Value {
-    let players: Vec<Value> = all
-        .get("allPlayers")
-        .and_then(Value::as_array)
-        .map(|ps| {
-            ps.iter()
-                .map(|p| {
-                    let mut q = keep(p, PLAYER_FIELDS);
-                    if let Some(items) = p.get("items").and_then(Value::as_array) {
-                        q["items"] = items.iter().map(|i| keep(i, ITEM_FIELDS)).collect();
-                    }
-                    q
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let events: Vec<Value> = all
-        .pointer("/events/Events")
-        .and_then(Value::as_array)
-        .map(|es| es.iter().map(|e| keep(e, EVENT_FIELDS)).collect())
-        .unwrap_or_default();
-    let mut active = all
-        .get("activePlayer")
-        .map(|a| keep(a, ACTIVE_FIELDS))
-        .unwrap_or(Value::Null);
+/// Versão da resposta de `allgamedata` sem nada que identifique jogadores. Consome a resposta:
+/// os campos permitidos mudam de lugar sem cópia e o resto é descartado.
+pub fn sanitize(mut all: Value) -> Value {
+    let players: Vec<Value> = match take(&mut all, "/allPlayers") {
+        Some(Value::Array(ps)) => ps
+            .into_iter()
+            .map(|mut p| {
+                let items = take(&mut p, "/items");
+                let mut q = keep(p, PLAYER_FIELDS);
+                if let (Some(Value::Array(items)), Some(obj)) = (items, q.as_object_mut()) {
+                    obj.insert(
+                        "items".into(),
+                        items.into_iter().map(|i| keep(i, ITEM_FIELDS)).collect(),
+                    );
+                }
+                q
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let events: Vec<Value> = match take(&mut all, "/events/Events") {
+        Some(Value::Array(es)) => es.into_iter().map(|e| keep(e, EVENT_FIELDS)).collect(),
+        _ => Vec::new(),
+    };
+    let mut active = take(&mut all, "/activePlayer").unwrap_or(Value::Null);
+    let stats = take(&mut active, "/championStats");
+    let abilities = take(&mut active, "/abilities");
+    let mut active = keep(active, ACTIVE_FIELDS);
     if let Some(obj) = active.as_object_mut() {
-        if let Some(stats) = all.pointer("/activePlayer/championStats") {
-            obj.insert("championStats".into(), stats.clone());
+        if let Some(stats) = stats {
+            obj.insert("championStats".into(), stats);
         }
         // Só o `id` de cada habilidade ("ChogathQ"): é do campeão, não do jogador. Serve para
         // achar você na lista quando o app não viu a seleção (aberto no meio da partida).
-        if let Some(abilities) = all
-            .pointer("/activePlayer/abilities")
-            .and_then(Value::as_object)
-        {
+        if let Some(Value::Object(abilities)) = abilities {
             let ids: Map<String, Value> = abilities
-                .iter()
-                .map(|(slot, a)| (slot.clone(), keep(a, &["id"])))
+                .into_iter()
+                .map(|(slot, a)| (slot, keep(a, &["id"])))
                 .collect();
             obj.insert("abilities".into(), Value::Object(ids));
         }
     }
     serde_json::json!({
-        "gameData": all.get("gameData").cloned().unwrap_or(Value::Null),
+        "gameData": take(&mut all, "/gameData").unwrap_or(Value::Null),
         "activePlayer": active,
         "allPlayers": players,
         "events": events,
     })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Team {
     /// Azul (time 100, embaixo à esquerda).
     Order,
@@ -122,7 +124,7 @@ pub enum Team {
     Chaos,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Player {
     /// Alias do campeão (`rawChampionName` sem o prefixo, ex. "Chogath"); comparar sem caixa.
     pub alias: String,
@@ -132,10 +134,9 @@ pub struct Player {
     /// `(itemID, count)`.
     pub items: Vec<(i64, u32)>,
     pub cs: u32,
-    pub level: u32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Event {
     pub name: String,
     pub time: f64,
@@ -144,47 +145,47 @@ pub struct Event {
 }
 
 /// O que o overlay usa da partida (já sem nomes de jogadores).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Game {
     pub time: f64,
     pub map: i64,
     /// Ouro na sua mochila.
     pub gold: f64,
-    pub level: u32,
     /// Ids das suas habilidades ("ChogathQ", "ChogathPassive").
     pub ability_ids: Vec<String>,
     pub players: Vec<Player>,
     pub events: Vec<Event>,
 }
 
+fn str_of<'a>(v: &'a Value, k: &str) -> &'a str {
+    v.get(k).and_then(Value::as_str).unwrap_or("")
+}
+
 fn alias_of(p: &Value) -> String {
-    let raw = p
-        .get("rawChampionName")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    match raw.rsplit_once("displayname_") {
-        Some((_, a)) if !a.is_empty() => a.to_string(),
-        _ => p
-            .get("championName")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string(),
+    match str_of(p, "rawChampionName").rsplit_once("displayname_") {
+        Some((_, a)) if !a.is_empty() => a,
+        _ => str_of(p, "championName"),
     }
+    .to_string()
+}
+
+fn u32_of(v: Option<&Value>) -> u32 {
+    v.and_then(Value::as_u64)
+        .and_then(|x| u32::try_from(x).ok())
+        .unwrap_or(0)
+}
+
+/// Lista dentro da resposta já limpa (vazia se não veio).
+fn array(v: &Value) -> &[Value] {
+    v.as_array().map_or(&[], Vec::as_slice)
 }
 
 /// Lê a resposta de `allgamedata` (passa por `sanitize` antes: nada de nomes).
-pub fn parse(all: &Value) -> Option<Game> {
+pub fn parse(all: Value) -> Option<Game> {
     let s = sanitize(all);
     let time = s.pointer("/gameData/gameTime").and_then(Value::as_f64)?;
-    let u32_of = |v: Option<&Value>| {
-        v.and_then(Value::as_u64)
-            .and_then(|x| u32::try_from(x).ok())
-            .unwrap_or(0)
-    };
-    let players = s["allPlayers"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let players = array(&s["allPlayers"])
+        .iter()
         .filter_map(|p| {
             let team = match p.get("team").and_then(Value::as_str)? {
                 "ORDER" => Team::Order,
@@ -194,39 +195,26 @@ pub fn parse(all: &Value) -> Option<Game> {
             Some(Player {
                 alias: alias_of(p),
                 team,
-                position: p
-                    .get("position")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_ascii_uppercase(),
-                items: p["items"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
+                position: str_of(p, "position").to_ascii_uppercase(),
+                items: array(&p["items"])
+                    .iter()
                     .filter_map(|i| {
                         let id = i.get("itemID").and_then(Value::as_i64)?;
                         Some((id, u32_of(i.get("count")).max(1)))
                     })
                     .collect(),
                 cs: u32_of(p.pointer("/scores/creepScore")),
-                level: u32_of(p.get("level")),
             })
         })
         .collect();
-    let events = s["events"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let events = array(&s["events"])
+        .iter()
         .filter_map(|e| {
-            let name = e.get("EventName").and_then(Value::as_str)?.to_string();
-            let target = e
-                .get(name.as_str())
-                .and_then(Value::as_str)
-                .map(String::from);
+            let name = e.get("EventName").and_then(Value::as_str)?;
             Some(Event {
                 time: e.get("EventTime").and_then(Value::as_f64).unwrap_or(0.0),
-                target,
-                name,
+                target: e.get(name).and_then(Value::as_str).map(String::from),
+                name: name.to_string(),
             })
         })
         .collect();
@@ -240,13 +228,12 @@ pub fn parse(all: &Value) -> Option<Game> {
             .pointer("/activePlayer/currentGold")
             .and_then(Value::as_f64)
             .unwrap_or(0.0),
-        level: u32_of(s.pointer("/activePlayer/level")),
         ability_ids: s
             .pointer("/activePlayer/abilities")
             .and_then(Value::as_object)
             .map(|a| {
                 a.values()
-                    .filter_map(|v| v.get("id").and_then(Value::as_str))
+                    .map(|v| str_of(v, "id"))
                     .filter(|id| !id.is_empty())
                     .map(String::from)
                     .collect()
@@ -258,12 +245,15 @@ pub fn parse(all: &Value) -> Option<Game> {
 }
 
 /// Cliente da API da partida (certificado autoassinado aceito: só 127.0.0.1).
-pub fn client() -> Option<reqwest::Client> {
+fn builder(timeout: Duration) -> reqwest::Result<reqwest::Client> {
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(2))
+        .timeout(timeout)
         .build()
-        .ok()
+}
+
+pub fn client() -> Option<reqwest::Client> {
+    builder(Duration::from_secs(2)).ok()
 }
 
 /// `allgamedata` (só GET). `None` fora da partida ou na tela de carregamento.
@@ -277,12 +267,7 @@ pub async fn fetch(http: &reqwest::Client) -> Option<Value> {
 
 /// `cargo run -- --live`: formato da API durante uma partida, sem nomes de jogadores.
 pub async fn diag() {
-    let http = match reqwest::Client::builder()
-        // Só 127.0.0.1: o certificado do jogo é autoassinado.
-        .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(5))
-        .build()
-    {
+    let http = match builder(Duration::from_secs(5)) {
         Ok(h) => h,
         Err(e) => {
             println!("erro: {e}");
@@ -328,7 +313,7 @@ pub async fn diag() {
             println!("  {l}");
         }
     }
-    match serde_json::to_string_pretty(&sanitize(&all)) {
+    match serde_json::to_string_pretty(&sanitize(all)) {
         Ok(s) => println!("{s}"),
         Err(e) => println!("erro: {e}"),
     }
@@ -369,7 +354,7 @@ mod tests {
             ]},
             "gameData": {"gameMode": "CLASSIC", "gameTime": 341.2, "mapNumber": 11}
         });
-        let s = sanitize(&all);
+        let s = sanitize(all.clone());
         let text = s.to_string();
         for name in ["Fulano", "Ciclano", "Beltrano", "BR1"] {
             assert!(!text.contains(name), "vazou {name}: {text}");
@@ -388,7 +373,7 @@ mod tests {
         assert_eq!(s["events"][1]["InhibKilled"], json!("Barracks_T2_L1"));
         assert!(s["events"][0].get("KillerName").is_none());
         assert_eq!(s["gameData"]["gameTime"], json!(341.2));
-        let g = parse(&all).unwrap();
+        let g = parse(all).unwrap();
         assert_eq!(g.time, 341.2);
         assert_eq!(g.map, 11);
         assert_eq!(g.gold, 671.5);
@@ -409,6 +394,6 @@ mod tests {
         assert_eq!(g.events[1].target.as_deref(), Some("Barracks_T2_L1"));
         assert_eq!(g.events[0].target, None);
         // Fora da partida (sem tempo de jogo): nada.
-        assert!(parse(&json!({})).is_none());
+        assert!(parse(json!({})).is_none());
     }
 }

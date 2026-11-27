@@ -8,18 +8,23 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest, http::HeaderValue};
 use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 
-pub const TOPIC_PHASE: &str = "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase";
-pub const TOPIC_SESSION: &str = "OnJsonApiEvent_lol-champ-select_v1_session";
+const TOPIC_PHASE: &str = "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase";
+const TOPIC_SESSION: &str = "OnJsonApiEvent_lol-champ-select_v1_session";
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum LcuEvent {
     Phase(String),
     /// `None` = a sessão acabou (seleção encerrada ou alguém desistiu).
     ChampSelect(Option<Value>),
 }
 
-/// Conecta e repassa eventos até o socket fechar (cliente fechou/reiniciou).
-pub async fn run(creds: Credentials, tx: mpsc::Sender<LcuEvent>) -> Result<(), String> {
+/// Conecta e assina os tópicos. Devolve a tarefa que repassa os eventos até o socket fechar
+/// (cliente fechou/reiniciou). Assinar **antes** de ler o estado inicial (GET) evita perder uma
+/// troca de fase entre a leitura e a assinatura.
+pub async fn subscribe(
+    creds: &Credentials,
+    tx: mpsc::Sender<LcuEvent>,
+) -> Result<impl Future<Output = ()> + Send + 'static, String> {
     let mut req = format!("wss://127.0.0.1:{}/", creds.port)
         .into_client_request()
         .map_err(|e| e.to_string())?;
@@ -40,47 +45,42 @@ pub async fn run(creds: Credentials, tx: mpsc::Sender<LcuEvent>) -> Result<(), S
             .await
             .map_err(|e| e.to_string())?;
     }
-    while let Some(msg) = ws.next().await {
-        match msg.map_err(|e| e.to_string())? {
-            Message::Text(t) => {
-                if let Some(ev) = parse_event(t.as_str())
-                    && tx.send(ev).await.is_err()
-                {
-                    break;
+    Ok(async move {
+        while let Some(Ok(msg)) = ws.next().await {
+            match msg {
+                Message::Text(t) => {
+                    if let Some(ev) = parse_event(t.as_str())
+                        && tx.send(ev).await.is_err()
+                    {
+                        break;
+                    }
                 }
+                Message::Close(_) => break,
+                _ => {}
             }
-            Message::Close(_) => break,
-            _ => {}
         }
-    }
-    Ok(())
+    })
 }
 
 /// `[8, topic, {uri, eventType, data}]` → evento interno.
 pub fn parse_event(text: &str) -> Option<LcuEvent> {
-    let v: Value = serde_json::from_str(text).ok()?;
-    let arr = v.as_array()?;
+    let mut v: Value = serde_json::from_str(text).ok()?;
+    let arr = v.as_array_mut()?;
     if arr.first()?.as_i64()? != 8 {
         return None;
     }
-    let payload = arr.get(2)?;
-    let uri = payload.get("uri")?.as_str()?;
-    let event_type = payload
-        .get("eventType")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    let data = payload.get("data").cloned().unwrap_or(Value::Null);
-    match uri {
-        "/lol-gameflow/v1/gameflow-phase" => {
-            Some(LcuEvent::Phase(data.as_str().unwrap_or("None").to_string()))
-        }
-        "/lol-champ-select/v1/session" => {
-            if event_type == "Delete" || data.is_null() {
-                Some(LcuEvent::ChampSelect(None))
-            } else {
-                Some(LcuEvent::ChampSelect(Some(data)))
-            }
-        }
+    let payload = arr.get_mut(2)?;
+    // A sessão chega a cada segundo: tira o `data` do JSON em vez de copiar.
+    let data = payload.get_mut("data").map_or(Value::Null, Value::take);
+    let delete = payload.get("eventType").and_then(Value::as_str) == Some("Delete");
+    match payload.get("uri")?.as_str()? {
+        "/lol-gameflow/v1/gameflow-phase" => Some(LcuEvent::Phase(match data {
+            Value::String(s) => s,
+            _ => "None".into(),
+        })),
+        "/lol-champ-select/v1/session" => Some(LcuEvent::ChampSelect(
+            (!delete && !data.is_null()).then_some(data),
+        )),
         _ => None,
     }
 }

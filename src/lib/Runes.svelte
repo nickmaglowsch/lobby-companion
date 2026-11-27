@@ -1,13 +1,11 @@
 <script lang="ts">
-  import { icon, pct, type Assets, type RuneSet } from "./api";
+  import { icon, pct, runeTrees, type Assets, type RuneSet } from "./api";
   import { t } from "./i18n/index.svelte";
 
   let { set, assets }: { set: RuneSet; assets: Assets | null } = $props();
 
   const perk = (id: number) => assets?.perks[id];
-  const styleOf = (id: number) => assets?.styles.find((s) => s.perks.includes(id));
-  const primary = $derived(styleOf(set.primary[0]));
-  const secondary = $derived(assets?.styles.find((s) => s.id !== primary?.id && set.secondary.every((p) => s.perks.includes(p))));
+  const [primary, secondary] = $derived(runeTrees(assets?.styles, set));
 </script>
 
 <div class="runes">

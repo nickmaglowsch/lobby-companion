@@ -4,7 +4,8 @@ use crate::lcu::{Lcu, LcuError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Champion {
@@ -57,6 +58,28 @@ pub struct Assets {
     /// Fileiras dos fragmentos (ataque, flexível, defesa), iguais em todas as árvores.
     #[serde(rename = "shardSlots")]
     pub shard_slots: Vec<Vec<i64>>,
+}
+
+/// Grava num temporário ao lado e troca pelo nome final: quem lê (outra tarefa, ou o app na
+/// próxima abertura) nunca vê o arquivo pela metade, e duas gravações do mesmo arquivo ao mesmo
+/// tempo não se misturam (cada uma tem o seu temporário; vale a última troca).
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    static SEQ: AtomicU32 = AtomicU32::new(0);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(format!(
+        ".{}-{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    let tmp = PathBuf::from(tmp);
+    let r = std::fs::write(&tmp, bytes).and_then(|()| std::fs::rename(&tmp, path));
+    if r.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    r
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -164,8 +187,7 @@ impl Assets {
         let style_list = styles
             .get("styles")
             .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+            .map_or(&[][..], Vec::as_slice);
         let shard_slots = style_list
             .iter()
             .map(|st| rows(st, true))
@@ -195,13 +217,16 @@ impl Assets {
         }
     }
 
+    /// Os cinco arquivos ao mesmo tempo (só GET local).
     pub async fn load(lcu: &Lcu) -> Result<Self, LcuError> {
-        let base = "/lol-game-data/assets/v1";
-        let champs = lcu.get(&format!("{base}/champion-summary.json")).await?;
-        let items = lcu.get(&format!("{base}/items.json")).await?;
-        let perks = lcu.get(&format!("{base}/perks.json")).await?;
-        let styles = lcu.get(&format!("{base}/perkstyles.json")).await?;
-        let spells = lcu.get(&format!("{base}/summoner-spells.json")).await?;
+        let (champs, items, perks, styles, spells) = futures_util::future::try_join5(
+            lcu.get("/lol-game-data/assets/v1/champion-summary.json"),
+            lcu.get("/lol-game-data/assets/v1/items.json"),
+            lcu.get("/lol-game-data/assets/v1/perks.json"),
+            lcu.get("/lol-game-data/assets/v1/perkstyles.json"),
+            lcu.get("/lol-game-data/assets/v1/summoner-spells.json"),
+        )
+        .await?;
         Ok(Self::from_values(&champs, &items, &perks, &styles, &spells))
     }
 
@@ -240,24 +265,20 @@ impl Assets {
     }
 
     pub fn save_cached(&self, path: &Path) -> std::io::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        let tmp = path.with_extension("json.tmp");
-        std::fs::write(
-            &tmp,
-            serde_json::to_vec(self).map_err(std::io::Error::other)?,
-        )?;
-        std::fs::rename(&tmp, path)
+        write_atomic(
+            path,
+            &serde_json::to_vec(self).map_err(std::io::Error::other)?,
+        )
     }
 
     /// Ícones das runas e das árvores (os que o editor de página precisa sem o cliente).
     pub fn rune_icons(&self) -> Vec<String> {
         self.perks
             .values()
-            .map(|p| p.icon.clone())
-            .chain(self.styles.iter().map(|s| s.icon.clone()))
+            .map(|p| &p.icon)
+            .chain(self.styles.iter().map(|s| &s.icon))
             .filter(|i| !i.is_empty())
+            .cloned()
             .collect()
     }
 
@@ -353,6 +374,30 @@ mod tests {
             Assets::load_cached(&path).is_none(),
             "cópia vazia não serve"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn atomic_writes_never_mix_and_leave_no_temp_files() {
+        let dir = std::env::temp_dir().join(format!("lc-atomic-{}", std::process::id()));
+        let path = dir.join("icons").join("x.png");
+        // Várias gravações do mesmo arquivo ao mesmo tempo: no fim, uma delas inteira.
+        let threads: Vec<_> = (0..8u8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || write_atomic(&path, &[i; 4096]))
+            })
+            .collect();
+        for t in threads {
+            // No Windows, trocar enquanto outra troca acontece pode falhar: o arquivo continua
+            // inteiro (de outra gravação) e o temporário sai.
+            let _ = t.join().unwrap();
+        }
+        let got = std::fs::read(&path).unwrap();
+        assert_eq!(got.len(), 4096);
+        assert!(got.iter().all(|b| *b == got[0]));
+        let left = std::fs::read_dir(path.parent().unwrap()).unwrap().count();
+        assert_eq!(left, 1, "sobrou arquivo temporário");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -92,8 +92,5 @@
   .acts button.link { border: none; background: none; color: var(--gold); padding: 0; font-size: 11px; cursor: pointer; }
   .acts button.link:disabled { opacity: 0.5; cursor: default; }
   .acts button.bad, .bad { color: var(--bad); }
-  .up { color: var(--good); }
-  .down { color: var(--bad); }
-  .muted { color: var(--muted); }
   .nw { white-space: nowrap; }
 </style>
