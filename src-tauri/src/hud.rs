@@ -9,8 +9,9 @@
 //! no canto e o placar no centro. Conferido num print 1920×1080 (erro de 1 a 3 px).
 //!
 //! Minimapa e placar ignoram a escala da interface (`IgnoreGlobalScale`). O minimapa tem a própria
-//! escala (`MinimapScale` no `game.cfg`, 1.0 = 100 %, pode passar de 1) e cresce a partir do canto
-//! em que está preso.
+//! escala e cresce a partir do canto em que está preso: tamanho = base × (3 + `MinimapScale`) / 4
+//! (`minimap_factor`; medido em 2026-11-27 em 2560×1600 com 0, 2,97 = slider no máximo e 3,375:
+//! 282, 559 e 599 px de mapa, até 1,5 % acima; 1,0 dá o tamanho base do print de 1920×1080).
 
 use serde::Serialize;
 use std::fmt::Write;
@@ -62,7 +63,8 @@ const SCOREBOARD_DIVIDER_X: f64 = 777.0 + 45.0 / 2.0;
 /// Configuração do HUD que muda a posição do que o overlay usa.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HudConfig {
-    /// 1.0 = 100 %.
+    /// `MinimapScale` do `game.cfg` como está no arquivo (0 = slider no mínimo, ~3 = no máximo);
+    /// o tamanho sai de `minimap_factor`.
     pub minimap_scale: f64,
     pub minimap_left: bool,
 }
@@ -95,6 +97,16 @@ fn place(e: Elem, w: f64, h: f64, extra: f64) -> Rect {
     }
 }
 
+/// Quanto o minimapa cresce em relação ao tamanho base do layout: `MinimapScale` 0 = 0,75×,
+/// 1 = 1×, 3 = 1,5×. Valor estranho no arquivo (negativo, não numérico) = tamanho base.
+pub fn minimap_factor(scale: f64) -> f64 {
+    if scale.is_finite() && scale >= 0.0 {
+        (3.0 + scale) / 4.0
+    } else {
+        1.0
+    }
+}
+
 /// Área do mapa no minimapa (sem a moldura).
 pub fn minimap(w: f64, h: f64, cfg: &HudConfig) -> Rect {
     let e = if cfg.minimap_left {
@@ -102,12 +114,7 @@ pub fn minimap(w: f64, h: f64, cfg: &HudConfig) -> Rect {
     } else {
         MINIMAP_RIGHT
     };
-    let scale = if cfg.minimap_scale.is_finite() && cfg.minimap_scale > 0.0 {
-        cfg.minimap_scale
-    } else {
-        1.0
-    };
-    place(e, w, h, scale)
+    place(e, w, h, minimap_factor(cfg.minimap_scale))
 }
 
 /// Fundo do placar do Tab.
@@ -297,13 +304,13 @@ mod tests {
         };
         let r = minimap(1920.0, 1080.0, &left);
         assert!(near(r.x, 13.0 * 0.9, 1e-9) && near(r.w, 285.0 * 0.9, 1e-9));
-        // Escala 1,5: o canto preso não sai do lugar.
+        // Escala maior: o canto preso não sai do lugar.
         let base = minimap(1920.0, 1080.0, &HudConfig::default());
         let big = minimap(
             1920.0,
             1080.0,
             &HudConfig {
-                minimap_scale: 1.5,
+                minimap_scale: 3.0,
                 minimap_left: false,
             },
         );
@@ -313,12 +320,35 @@ mod tests {
             (1920.0 - (base.x + base.w)) * 1.5,
             1e-9
         ));
-        // Valor inválido no arquivo vira 100 %.
+        // Valor estranho no arquivo: tamanho base.
         let bad = HudConfig {
-            minimap_scale: 0.0,
+            minimap_scale: f64::NAN,
             minimap_left: false,
         };
         assert_eq!(minimap(1920.0, 1080.0, &bad), base);
+    }
+
+    #[test]
+    fn minimap_scale_matches_measured_sizes() {
+        // Prints de 2026-11-27, 2560×1600, minimapa à esquerda: (MinimapScale, x e lado do mapa).
+        for (scale, x, side) in [
+            (0.0, 13.0, 282.0),
+            (2.97, 27.0, 559.0),
+            (3.375, 28.0, 599.0),
+        ] {
+            let r = minimap(
+                2560.0,
+                1600.0,
+                &HudConfig {
+                    minimap_scale: scale,
+                    minimap_left: true,
+                },
+            );
+            assert!(near(r.w, side, side * 0.02), "{scale}: {r:?}");
+            assert!(near(r.x, x, 3.0), "{scale}: {r:?}");
+            // Preso embaixo: o fundo fica a poucos pixels da borda da tela.
+            assert!(1600.0 - (r.y + r.h) < 35.0, "{scale}: {r:?}");
+        }
     }
 
     #[test]

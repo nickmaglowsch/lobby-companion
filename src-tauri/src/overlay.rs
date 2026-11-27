@@ -161,8 +161,27 @@ pub struct Frame {
     pub settings: OverlaySettings,
 }
 
-/// "Barracks_T1_L1" → (time, rota: L = topo, C = meio, R = robô).
+/// Inibidor do evento → (time, rota: L = topo, C = meio, R = robô). Dois formatos:
+/// - o atual, conferido em partidas em 2026-11-27: "Inhib_TChaos_L1_P1_1931666598_0" (time por
+///   extenso; rota numerada de baixo para cima: `L0` = robô, `L1` = meio, `L2` = topo; o resto
+///   é a posição na rota e um id fixo da estrutura);
+/// - o antigo, das referências da comunidade: "Barracks_T1_L1" (T1 = azul, letra da rota).
 pub(crate) fn parse_barracks(s: &str) -> Option<(Team, char)> {
+    if let Some(rest) = s.strip_prefix("Inhib_T") {
+        let mut parts = rest.split('_');
+        let team = match parts.next()? {
+            "Order" => Team::Order,
+            "Chaos" => Team::Chaos,
+            _ => return None,
+        };
+        let lane = match parts.next()? {
+            "L0" => 'R',
+            "L1" => 'C',
+            "L2" => 'L',
+            _ => return None,
+        };
+        return Some((team, lane));
+    }
     let rest = s.strip_prefix("Barracks_T")?;
     let mut c = rest.chars();
     let team = match c.next()? {
@@ -916,6 +935,7 @@ async fn follow_game(
     let cfg = read_game_cfg(cfg_path.as_deref());
     let mut hud_cfg = cfg.hud;
     let (mut last_state, mut last_mode) = (String::new(), String::new());
+    let mut last_state_frame = String::new();
     eprintln!("[overlay] partida: laço começou");
     note(&mut last_mode, &window_mode_note(&cfg));
     let mut ticks: u32 = 0;
@@ -1015,6 +1035,18 @@ async fn follow_game(
                 &mut lock(&st.history),
             )
         };
+        note(
+            &mut last_state_frame,
+            &format!(
+                "quadro: inibidores {:?}, próximo item {:?}",
+                frame
+                    .inhibitors
+                    .iter()
+                    .map(|t| (t.ally, t.x.round(), t.y.round()))
+                    .collect::<Vec<_>>(),
+                frame.next_item.as_ref().map(|n| n.id)
+            ),
+        );
         frame.edit = edit;
         frame.visible = rect.foreground || edit;
         frame.tab = st.tab.load(Ordering::Relaxed) || edit;
@@ -1298,6 +1330,26 @@ mod tests {
         let later = Game { time: 1800.0, ..g };
         assert!(inhib_timers(&later, Team::Order, &mm).is_empty());
         assert_eq!(parse_barracks("Barracks_T1_R1"), Some((Team::Order, 'R')));
+        // Formato atual (partida de 2026-11-27).
+        assert_eq!(
+            parse_barracks("Inhib_TChaos_L1_P1_1931666598_0"),
+            Some((Team::Chaos, 'C'))
+        );
+        assert_eq!(
+            parse_barracks("Inhib_TOrder_L1_P1_1_0"),
+            Some((Team::Order, 'C'))
+        );
+        // L0 = robô (as torres da direita do minimapa sumiram), então L2 = topo.
+        assert_eq!(
+            parse_barracks("Inhib_TChaos_L0_P1_2116220407_0"),
+            Some((Team::Chaos, 'R'))
+        );
+        assert_eq!(
+            parse_barracks("Inhib_TOrder_L2_P1_1_0"),
+            Some((Team::Order, 'L'))
+        );
+        assert_eq!(parse_barracks("Inhib_TNeutral_L1_P1_1_0"), None);
+        assert_eq!(parse_barracks("Turret_TChaos_L1_P3_2254202041_0"), None);
         assert_eq!(parse_barracks("Turret_T1_L_03_A"), None);
     }
 

@@ -68,6 +68,11 @@ pub async fn record(out: Option<PathBuf>) {
                     .pointer("/gameData/gameTime")
                     .and_then(Value::as_f64)
                     .unwrap_or(0.0);
+                // O tempo voltou: outra partida começou sem a API sumir (uma gravação por partida).
+                if time + 1.0 < last_time {
+                    println!("partida nova: gravação encerrada em {}", path.display());
+                    return;
+                }
                 let events = events_of(&s);
                 if time - last_time < STEP && events.len() == last_events {
                     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -122,7 +127,7 @@ pub async fn record(out: Option<PathBuf>) {
     }
 }
 
-/// Lado e rota de "Barracks_T1_L1" por extenso (ou o aviso de formato desconhecido).
+/// Lado e rota do inibidor por extenso (ou o aviso de formato desconhecido).
 fn describe_barracks(s: &str) -> String {
     match overlay::parse_barracks(s) {
         Some((team, lane)) => {
@@ -274,6 +279,10 @@ mod tests {
             "inibidor vermelho do meio"
         );
         assert!(describe_barracks("Barracks_T200_C1").starts_with("formato desconhecido"));
+        assert_eq!(
+            describe_barracks("Inhib_TChaos_L1_P1_1931666598_0"),
+            "inibidor vermelho do meio"
+        );
         let mm = hud::minimap(1920.0, 1080.0, &HudConfig::default());
         assert_eq!(overlay::inhib_timers(&g, Team::Order, &mm).len(), 1);
     }
