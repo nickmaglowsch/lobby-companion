@@ -10,13 +10,14 @@ pub mod ws;
 
 use base64::Engine;
 use reqwest::Method;
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Debug)]
 pub enum LcuError {
-    NotRunning,
     Forbidden {
         method: String,
         path: String,
@@ -34,7 +35,6 @@ pub enum LcuError {
 impl std::fmt::Display for LcuError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
-            Self::NotRunning => crate::t!("lcu.notFound"),
             Self::Forbidden { method, path } => {
                 crate::t!("lcu.forbidden", method = method, path = path)
             }
@@ -64,8 +64,8 @@ impl From<reqwest::Error> for LcuError {
     }
 }
 
-/// Porta e senha da API local. A senha só sai daqui dentro do header Authorization.
-#[derive(Clone)]
+/// Porta e senha da API local. A senha só sai daqui dentro do header Authorization (e não é
+/// copiada: nem `Clone` tem).
 pub struct Credentials {
     pub port: u16,
     token: String,
@@ -151,7 +151,7 @@ pub fn game_cfg_path() -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-pub fn install_path_from_product_settings(text: &str) -> Option<String> {
+fn install_path_from_product_settings(text: &str) -> Option<String> {
     text.lines().find_map(|line| {
         let line = line.trim();
         let rest = line.strip_prefix("product_install_full_path:")?;
@@ -191,12 +191,13 @@ pub fn write_allowed(method: &str, path: &str) -> bool {
     })
 }
 
+/// Barato de clonar: o `reqwest::Client` já é um `Arc`, e o resto é contado por referência.
 #[derive(Clone)]
 pub struct Lcu {
     http: reqwest::Client,
-    base: String,
-    auth: String,
-    pub port: u16,
+    base: Arc<str>,
+    /// `Basic …` pronto, marcado como sensível (não aparece em `Debug`).
+    auth: HeaderValue,
 }
 
 impl Lcu {
@@ -206,11 +207,14 @@ impl Lcu {
             .danger_accept_invalid_certs(true)
             .timeout(Duration::from_secs(10))
             .build()?;
+        // Base64 e o prefixo são sempre ASCII visível: o header é válido.
+        let mut auth = HeaderValue::from_str(&creds.basic_auth())
+            .unwrap_or_else(|_| HeaderValue::from_static(""));
+        auth.set_sensitive(true);
         Ok(Self {
             http,
-            base: format!("https://127.0.0.1:{}", creds.port),
-            auth: creds.basic_auth(),
-            port: creds.port,
+            base: format!("https://127.0.0.1:{}", creds.port).into(),
+            auth,
         })
     }
 
@@ -228,9 +232,9 @@ impl Lcu {
         }
         let mut req = self
             .http
-            .request(method.clone(), format!("{}{}", self.base, path))
-            .header(reqwest::header::AUTHORIZATION, &self.auth)
-            .header(reqwest::header::ACCEPT, "application/json");
+            .request(method.clone(), format!("{}{path}", self.base))
+            .header(AUTHORIZATION, self.auth.clone())
+            .header(ACCEPT, "application/json");
         if let Some(b) = body {
             req = req.json(b);
         }
@@ -291,7 +295,7 @@ impl Lcu {
         let resp = self.send(Method::GET, path, None).await?;
         let ct = resp
             .headers()
-            .get(reqwest::header::CONTENT_TYPE)
+            .get(CONTENT_TYPE)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("application/octet-stream")
             .to_string();

@@ -30,21 +30,16 @@ pub fn page_body(name: &str, set: &RuneSet, assets: &Assets) -> Result<Value, St
     let sub = assets
         .secondary_style(&set.secondary, primary)
         .ok_or_else(|| crate::t!("runes.unknownSecondary"))?;
-    Ok(body(name, primary, sub, set.selected_perk_ids()))
+    Ok(body(name, primary, sub, &set.selected_perk_ids()))
 }
 
 /// A página própria do jogador (`own_runes`): as árvores vêm salvas junto, sem deduzir.
 pub fn own_page_body(name: &str, page: &OwnPage, assets: &Assets) -> Result<Value, String> {
     page.check(assets)?;
-    Ok(body(
-        name,
-        page.primary_style,
-        page.sub_style,
-        page.perks.clone(),
-    ))
+    Ok(body(name, page.primary_style, page.sub_style, &page.perks))
 }
 
-fn body(name: &str, primary: i64, sub: i64, perks: Vec<i64>) -> Value {
+fn body(name: &str, primary: i64, sub: i64, perks: &[i64]) -> Value {
     json!({
         "name": name,
         "primaryStyleId": primary,
@@ -74,7 +69,7 @@ fn is_ours(p: &Value) -> bool {
 }
 
 pub fn plan(pages: &Value, inventory: &Value, replace_current: bool) -> Plan {
-    let list = pages.as_array().cloned().unwrap_or_default();
+    let list = pages.as_array().map_or(&[][..], Vec::as_slice);
     if let Some(id) = list
         .iter()
         .find(|p| is_ours(p))
@@ -164,7 +159,7 @@ pub async fn apply(lcu: &Lcu, body: &Value, replace_current: bool) -> Result<Str
     if let Some(id) = created.get("id").and_then(Value::as_i64) {
         let _ = lcu.put("/lol-perks/v1/currentpage", &json!(id)).await;
     }
-    Ok(msg.to_string())
+    Ok(msg)
 }
 
 #[cfg(test)]

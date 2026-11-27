@@ -61,20 +61,22 @@ fn item(id: i64, count: u32) -> Value {
     json!({"id": id.to_string(), "count": count})
 }
 
+/// Bloco da loja: título e itens.
+fn block(title: String, items: Vec<Value>) -> Value {
+    json!({
+        "type": title,
+        "hideIfSummonerSpell": "",
+        "showIfSummonerSpell": "",
+        "items": items,
+    })
+}
+
 /// Até 3 itens mais jogados com amostra mínima (se nenhum alcança, o mais jogado).
-fn pick_items(list: &[ItemStat], assets: &Assets, min_games: u64) -> Vec<ItemStat> {
-    let known: Vec<&ItemStat> = list
-        .iter()
-        .filter(|i| assets.items.contains_key(&i.id))
-        .collect();
-    let mut out: Vec<ItemStat> = known
-        .iter()
-        .filter(|i| i.n >= min_games)
-        .take(3)
-        .map(|i| (*i).clone())
-        .collect();
+fn pick_items<'a>(list: &'a [ItemStat], assets: &Assets, min_games: u64) -> Vec<&'a ItemStat> {
+    let known = || list.iter().filter(|i| assets.items.contains_key(&i.id));
+    let mut out: Vec<&ItemStat> = known().filter(|i| i.n >= min_games).take(3).collect();
     if out.is_empty() {
-        out.extend(known.first().map(|i| (*i).clone()));
+        out.extend(known().next());
     }
     out
 }
@@ -137,7 +139,7 @@ pub fn build_path(build: &Build, assets: &Assets, min_games: u64) -> Vec<i64> {
 
 /// Primeira volta: os itens de `earlyItem` mais comprados com amostra mínima, sem consumíveis,
 /// berloques e o que já está nos inícios. Mesma regra na janela (`firstBack` em `api.ts`).
-pub fn first_back(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemStat> {
+pub fn first_back<'a>(build: &'a Build, assets: &Assets, min_games: u64) -> Vec<&'a ItemStat> {
     let starts: Vec<i64> = build
         .start_sets
         .iter()
@@ -149,7 +151,6 @@ pub fn first_back(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemSta
         .iter()
         .filter(|i| i.n >= min_games && !starts.contains(&i.id) && is_build_item(assets, i.id))
         .take(EXTRA_ITEMS)
-        .cloned()
         .collect()
 }
 
@@ -160,12 +161,12 @@ pub fn first_back(build: &Build, assets: &Assets, min_games: u64) -> Vec<ItemSta
 ///   só os positivos.
 ///
 /// Mesma regra na janela (`situationalItems` em `api.ts`).
-pub fn situational(
-    build: &Build,
+pub fn situational<'a>(
+    build: &'a Build,
     assets: &Assets,
     min_games: u64,
     metric: Metric,
-) -> Vec<ItemStat> {
+) -> Vec<&'a ItemStat> {
     let mut usual: Vec<i64> = build
         .slots
         .iter()
@@ -186,7 +187,6 @@ pub fn situational(
             .filter(|i| i.n >= min_games)
             .filter(open)
             .take(EXTRA_ITEMS)
-            .cloned()
             .collect(),
         Metric::Wpa => {
             let score = item_wpa(&build.winning_items, build.wr, false);
@@ -198,7 +198,8 @@ pub fn situational(
                 .filter(|i| s(i) > 0.0)
                 .collect();
             c.sort_by(|a, b| s(b).total_cmp(&s(a)).then(a.id.cmp(&b.id)));
-            c.into_iter().take(EXTRA_ITEMS).cloned().collect()
+            c.truncate(EXTRA_ITEMS);
+            c
         }
     }
 }
@@ -207,7 +208,7 @@ pub fn situational(
 fn wr_block(
     lang: Lang,
     label: &str,
-    items: &[ItemStat],
+    items: &[&ItemStat],
     scores: &HashMap<i64, f64>,
     metric: Metric,
 ) -> Option<Value> {
@@ -218,12 +219,10 @@ fn wr_block(
         .iter()
         .map(|i| (i.wr, scores.get(&i.id).copied().unwrap_or(0.0)))
         .collect();
-    Some(json!({
-        "type": format!("{label} · {}", tag(lang, metric, &values)),
-        "hideIfSummonerSpell": "",
-        "showIfSummonerSpell": "",
-        "items": items.iter().map(|i| item(i.id, 1)).collect::<Vec<_>>(),
-    }))
+    Some(block(
+        format!("{label} · {}", tag(lang, metric, &values)),
+        items.iter().map(|i| item(i.id, 1)).collect(),
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -239,12 +238,27 @@ pub fn build_item_set(
 ) -> Value {
     let mut blocks: Vec<Value> = Vec::new();
     let champ = build.wr;
+    let use_wpa = metric == Metric::Wpa;
+    // Em WR o título não usa o WPA: nada a calcular.
+    let combos = |list: &[Combo]| {
+        if use_wpa {
+            combo_wpa(list, champ)
+        } else {
+            vec![0.0; list.len()]
+        }
+    };
+    let items = |list: &[ItemStat], one_per_game: bool| {
+        if use_wpa {
+            item_wpa(list, champ, one_per_game)
+        } else {
+            HashMap::new()
+        }
+    };
     // Inícios: o mais jogado e uma alternativa.
-    let start_wpa = combo_wpa(&build.start_sets, champ);
     for (i, (start, wpa)) in build
         .start_sets
         .iter()
-        .zip(start_wpa)
+        .zip(combos(&build.start_sets))
         .filter(|(s, _)| s.n >= 1)
         .take(2)
         .enumerate()
@@ -267,12 +281,10 @@ pub fn build_item_set(
         } else {
             "itemset.startAlt"
         });
-        blocks.push(json!({
-            "type": format!("{label} · {}", tag(lang, metric, &[(start.wr, wpa)])),
-            "hideIfSummonerSpell": "",
-            "showIfSummonerSpell": "",
-            "items": counts.iter().map(|(id, c)| item(*id, *c)).collect::<Vec<_>>(),
-        }));
+        blocks.push(block(
+            format!("{label} · {}", tag(lang, metric, &[(start.wr, wpa)])),
+            counts.iter().map(|(id, c)| item(*id, *c)).collect(),
+        ));
     }
     // Núcleo logo depois dos inícios: é o que a maioria compra primeiro.
     if let Some((core, ids)) = core_set(build, assets, min_games) {
@@ -280,14 +292,16 @@ pub fn build_item_set(
             .core
             .iter()
             .position(|c| c.ids == core.ids)
-            .and_then(|k| combo_wpa(&build.core, champ).get(k).copied())
+            .and_then(|k| combos(&build.core).get(k).copied())
             .unwrap_or(0.0);
-        blocks.push(json!({
-            "type": format!("{} · {}", lang.t("itemset.core"), tag(lang, metric, &[(core.wr, wpa)])),
-            "hideIfSummonerSpell": "",
-            "showIfSummonerSpell": "",
-            "items": ids.iter().map(|id| item(*id, 1)).collect::<Vec<_>>(),
-        }));
+        blocks.push(block(
+            format!(
+                "{} · {}",
+                lang.t("itemset.core"),
+                tag(lang, metric, &[(core.wr, wpa)])
+            ),
+            ids.iter().map(|id| item(*id, 1)).collect(),
+        ));
     }
     // Primeira volta e situacionais: vários por partida, contra o WR do campeão; botas e
     // posições: contra o item típico da posição.
@@ -295,14 +309,14 @@ pub fn build_item_set(
         lang,
         &lang.t("itemset.firstBack"),
         &first_back(build, assets, min_games),
-        &item_wpa(&build.early_items, champ, false),
+        &items(&build.early_items, false),
         metric,
     ));
     blocks.extend(wr_block(
         lang,
         &lang.t("itemset.boots"),
         &pick_items(&build.boots, assets, min_games),
-        &item_wpa(&build.boots, champ, true),
+        &items(&build.boots, true),
         metric,
     ));
     for (i, slot) in build.slots.iter().enumerate() {
@@ -310,7 +324,7 @@ pub fn build_item_set(
             lang,
             &lang.tf("itemset.itemN", &[("n", &(i + 1))]),
             &pick_items(slot, assets, min_games),
-            &item_wpa(slot, champ, true),
+            &items(slot, true),
             metric,
         ));
     }
@@ -318,7 +332,7 @@ pub fn build_item_set(
         lang,
         &lang.t("itemset.situational"),
         &situational(build, assets, min_games, metric),
-        &item_wpa(&build.winning_items, champ, false),
+        &items(&build.winning_items, false),
         metric,
     ));
     let cons: Vec<Value> = CONSUMABLES
@@ -327,7 +341,7 @@ pub fn build_item_set(
         .map(|id| item(*id, 1))
         .collect();
     if !cons.is_empty() {
-        blocks.push(json!({"type": lang.t("itemset.consumables"), "hideIfSummonerSpell": "", "showIfSummonerSpell": "", "items": cons}));
+        blocks.push(block(lang.t("itemset.consumables"), cons));
     }
     let patch = if build.patch.is_empty() {
         String::new()
